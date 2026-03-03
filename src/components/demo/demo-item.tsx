@@ -1,4 +1,5 @@
-import { Check, Undo2, ExternalLink } from "lucide-react";
+import type { Ref } from "react";
+import { Check, Undo2, ExternalLink, GripVertical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -12,6 +13,8 @@ interface DemoItemProps {
   onSelect: () => void;
   onApprove: () => void;
   onUnapprove: () => void;
+  sortableRef?: Ref<HTMLElement>;
+  isDragSource?: boolean;
 }
 
 export function DemoItem({
@@ -21,6 +24,8 @@ export function DemoItem({
   onSelect,
   onApprove,
   onUnapprove,
+  sortableRef,
+  isDragSource,
 }: DemoItemProps) {
   if (isApproved && !isActive) {
     return (
@@ -44,16 +49,23 @@ export function DemoItem({
 
   return (
     <Card
-      className={`cursor-pointer transition-all ${isActive ? "ring-2 ring-ring" : "hover:bg-accent/50"}`}
-      onClick={!isActive ? onSelect : undefined}
+      ref={sortableRef as Ref<HTMLDivElement>}
+      className={`transition-all ${isActive ? "ring-2 ring-ring" : "hover:bg-accent/50"} ${isDragSource ? "opacity-50" : ""}`}
     >
       <CardHeader className="p-3 pb-0">
         <div className="flex items-center gap-2">
+          <GripVertical
+            className="h-4 w-4 text-muted-foreground shrink-0 cursor-grab active:cursor-grabbing"
+            aria-label="Drag to reorder"
+          />
           <Badge variant="outline" className="text-xs shrink-0">
             {item.type}
           </Badge>
           <span className="text-sm text-muted-foreground">#{item.id}</span>
-          <span className="text-sm font-medium truncate flex-1">
+          <span
+            className="text-sm font-medium truncate flex-1 cursor-pointer"
+            onClick={!isActive ? onSelect : undefined}
+          >
             {item.title}
           </span>
           <a

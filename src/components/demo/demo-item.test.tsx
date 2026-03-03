@@ -34,12 +34,13 @@ describe("DemoItem", () => {
     onUnapprove: vi.fn(),
   };
 
-  it("renders collapsed state with type, id, and title", () => {
+  it("renders collapsed state with type, id, title, and drag handle", () => {
     renderWithProviders(<DemoItem {...defaultProps} />);
 
     expect(screen.getByText("User Story")).toBeInTheDocument();
     expect(screen.getByText("#42")).toBeInTheDocument();
     expect(screen.getByText("Add login page")).toBeInTheDocument();
+    expect(screen.getByLabelText("Drag to reorder")).toBeInTheDocument();
     // Description should not be visible when collapsed
     expect(screen.queryByText("Description")).not.toBeInTheDocument();
   });

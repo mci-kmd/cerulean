@@ -16,3 +16,9 @@ export interface DemoChecklistItem {
   checked: boolean;
   order: number;
 }
+
+export interface DemoOrderItem {
+  id: string;
+  workItemId: number;
+  position: number;
+}

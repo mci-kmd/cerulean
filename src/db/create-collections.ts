@@ -4,7 +4,7 @@ import {
   localOnlyCollectionOptions,
 } from "@tanstack/db";
 import type { AdoSettings, BoardColumn, ColumnAssignment } from "@/types/board";
-import type { DemoChecklistItem } from "@/types/demo";
+import type { DemoChecklistItem, DemoOrderItem } from "@/types/demo";
 
 // TanStack DB beta has complex generic types; use pragmatic typing
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -15,6 +15,7 @@ export interface BoardCollections {
   columns: AppCollection;
   assignments: AppCollection;
   demoChecklist: AppCollection;
+  demoOrder: AppCollection;
 }
 
 function createSettingsCollection(inMemory: boolean) {
@@ -81,11 +82,28 @@ function createDemoChecklistCollection(inMemory: boolean) {
   );
 }
 
+function createDemoOrderCollection(inMemory: boolean) {
+  if (inMemory) {
+    return createCollection(
+      localOnlyCollectionOptions<DemoOrderItem, string>({
+        getKey: (item: DemoOrderItem) => item.id,
+      }),
+    );
+  }
+  return createCollection(
+    localStorageCollectionOptions<DemoOrderItem, string>({
+      getKey: (item: DemoOrderItem) => item.id,
+      storageKey: "cerulean-demo-order",
+    }),
+  );
+}
+
 export function createBoardCollections(inMemory = false): BoardCollections {
   return {
     settings: createSettingsCollection(inMemory),
     columns: createColumnsCollection(inMemory),
     assignments: createAssignmentsCollection(inMemory),
     demoChecklist: createDemoChecklistCollection(inMemory),
+    demoOrder: createDemoOrderCollection(inMemory),
   };
 }
