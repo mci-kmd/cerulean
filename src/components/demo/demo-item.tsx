@@ -1,8 +1,6 @@
 import { useState, type Ref } from "react";
 import { Check, Undo2, ExternalLink, GripVertical, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { DemoChecklist } from "./demo-checklist";
 import { getTypeStyle, getTypeIcon } from "@/lib/work-item-types";
 import type { DemoWorkItem } from "@/types/demo";
@@ -73,7 +71,7 @@ export function DemoItem({
   if (isApproved && !isActive) {
     return (
       <div
-        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
         onClick={onSelect}
         role="button"
         aria-label={`Approved: ${item.title}`}
@@ -89,54 +87,56 @@ export function DemoItem({
   }
 
   return (
-    <Card
+    <div
       ref={sortableRef as Ref<HTMLDivElement>}
-      className={`transition-all border-l-[3px] ${style.border} ${isActive ? "ring-2 ring-primary/30" : "hover:shadow-md hover:-translate-y-px"} ${isDragSource ? "opacity-50 scale-[0.97]" : ""}`}
+      className={`rounded-lg border text-card-foreground transition-all ${style.border} ${
+        isActive
+          ? "border-l-[4px] shadow-lg ring-2 ring-primary/50 bg-primary/5"
+          : "border-l-[3px] bg-card hover:shadow-sm hover:-translate-y-px"
+      } ${isDragSource ? "opacity-50 scale-[0.97]" : ""}`}
     >
-      <CardHeader className="p-3 pb-0">
-        <div className="flex items-center gap-2">
-          <GripVertical
-            className="h-4 w-4 text-muted-foreground/40 shrink-0 cursor-grab active:cursor-grabbing"
-            aria-label="Drag to reorder"
-          />
-          <TypeIcon className={`h-3.5 w-3.5 shrink-0 ${style.text}`} />
-          <span className="text-[11px] text-muted-foreground font-mono">#{item.id}</span>
-          <span
-            className="text-sm font-medium truncate flex-1 cursor-pointer"
-            onClick={!isActive ? onSelect : undefined}
-          >
-            {item.title}
-          </span>
-          <a
-            href={item.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="text-muted-foreground/50 hover:text-foreground transition-colors"
-            aria-label="Open in ADO"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-          </a>
-        </div>
-      </CardHeader>
+      <div className="flex items-center gap-2 px-3 py-2">
+        <GripVertical
+          className="h-4 w-4 text-muted-foreground/40 shrink-0 cursor-grab active:cursor-grabbing"
+          aria-label="Drag to reorder"
+        />
+        <TypeIcon className={`h-3.5 w-3.5 shrink-0 ${style.text}`} />
+        <span className="text-[11px] text-muted-foreground font-mono shrink-0">#{item.id}</span>
+        <span
+          className={`text-sm font-medium min-w-0 flex-1 ${isActive ? "" : "cursor-pointer"}`}
+          onClick={!isActive ? onSelect : undefined}
+        >
+          {item.title}
+        </span>
+        <a
+          href={item.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="text-muted-foreground/50 hover:text-foreground transition-colors shrink-0"
+          aria-label="Open in ADO"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+        </a>
+      </div>
 
       <div
         className="grid transition-[grid-template-rows] duration-200 ease-out"
         style={{ gridTemplateRows: isActive ? "1fr" : "0fr" }}
       >
         <div className="overflow-hidden">
-          <CardContent className="p-3 pt-3 space-y-4">
+          <div className="px-3 pb-3 space-y-3">
             {item.description && (
               <CollapsibleSection label="Description" html={item.description} />
             )}
 
-            {item.description && item.acceptanceCriteria && <Separator />}
-
             {item.acceptanceCriteria && (
-              <CollapsibleSection label="Acceptance Criteria" html={item.acceptanceCriteria} defaultOpen />
+              <CollapsibleSection
+                label="Acceptance Criteria"
+                html={item.acceptanceCriteria}
+                defaultOpen
+              />
             )}
-
-            <Separator />
 
             <DemoChecklist workItemId={item.id} />
 
@@ -167,9 +167,9 @@ export function DemoItem({
                 </Button>
               )}
             </div>
-          </CardContent>
+          </div>
         </div>
       </div>
-    </Card>
+    </div>
   );
 }

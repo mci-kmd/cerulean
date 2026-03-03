@@ -129,7 +129,7 @@ export function DemoView({
   return (
     <div className="max-w-3xl mx-auto p-4 space-y-4">
       {unapproved.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <div className="flex items-center gap-2 px-1">
             <Clock className="h-3.5 w-3.5 text-muted-foreground" />
             <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -159,7 +159,7 @@ export function DemoView({
       )}
 
       {approved.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {unapproved.length > 0 && <Separator />}
           <div className="flex items-center gap-2 px-1">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
