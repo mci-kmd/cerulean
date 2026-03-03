@@ -12,6 +12,8 @@ export interface AdoWorkItemFields {
     uniqueName: string;
   };
   "System.Rev": number;
+  "System.Description"?: string;
+  "Microsoft.VSTS.Common.AcceptanceCriteria"?: string;
   [key: string]: unknown;
 }
 

@@ -102,6 +102,8 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             <h3 className="text-sm font-medium mb-3">Source</h3>
             <SourceStateInput
               sourceState={draft.sourceState}
+              approvalState={draft.approvalState}
+              closedState={draft.closedState}
               pollInterval={draft.pollInterval}
               onChange={handleFieldChange}
             />

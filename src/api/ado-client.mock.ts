@@ -22,6 +22,17 @@ export class MockAdoClient implements AdoClient {
     return this.workItems.filter((w) => ids.includes(w.id));
   }
 
+  async updateWorkItemState(
+    id: number,
+    state: string,
+  ): Promise<import("@/types/ado").AdoWorkItem> {
+    this.callLog.push({ method: "updateWorkItemState", args: [id, state] });
+    if (this.shouldFail) throw new Error("Mock update error");
+    const item = this.workItems.find((w) => w.id === id);
+    if (!item) throw new Error(`Work item ${id} not found`);
+    return { ...item, fields: { ...item.fields, "System.State": state } };
+  }
+
   async testConnection(): Promise<boolean> {
     this.callLog.push({ method: "testConnection", args: [] });
     return !this.shouldFail;

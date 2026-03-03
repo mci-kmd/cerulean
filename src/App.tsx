@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/header";
 import { Board } from "@/components/board/board";
 import { BoardSkeleton } from "@/components/board/board-skeleton";
 import { EmptyState } from "@/components/board/empty-state";
+import { DemoView } from "@/components/demo/demo-view";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { useBoardCollections } from "@/db/provider";
 import { useBoard, useSettings, useColumns, useAssignments } from "@/hooks/use-board";
@@ -18,6 +19,7 @@ export function App() {
   const columns = useColumns();
   const assignments = useAssignments();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
 
   const client: AdoClient | null = useMemo(() => {
     if (!settings?.pat || !settings?.org || !settings?.project) return null;
@@ -49,6 +51,7 @@ export function App() {
   const boardData = useBoard(workItems);
   const hasSettings = !!(settings?.pat && settings?.org && settings?.project);
   const hasColumns = columns.length > 0;
+  const showDemoButton = !!settings?.approvalState;
 
   if (!hasSettings || !hasColumns) {
     return (
@@ -74,8 +77,19 @@ export function App() {
           onRefresh={() => refetch()}
           isRefreshing={isLoading}
           lastUpdated={dataUpdatedAt}
+          demoMode={demoMode}
+          onToggleDemo={() => setDemoMode((d) => !d)}
+          showDemoButton={showDemoButton}
         />
-        {isLoading && workItems.length === 0 ? (
+        {demoMode && client ? (
+          <DemoView
+            client={client}
+            approvalState={settings.approvalState}
+            closedState={settings.closedState}
+            org={settings.org}
+            project={settings.project}
+          />
+        ) : isLoading && workItems.length === 0 ? (
           <BoardSkeleton columnCount={columns.length} />
         ) : (
           <Board data={boardData} />

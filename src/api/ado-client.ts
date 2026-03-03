@@ -3,6 +3,7 @@ import type { WiqlResponse, AdoBatchResponse, AdoWorkItem } from "@/types/ado";
 export interface AdoClient {
   queryWorkItems(wiql: string): Promise<WiqlResponse>;
   batchGetWorkItems(ids: number[], fields?: string[]): Promise<AdoWorkItem[]>;
+  updateWorkItemState(id: number, state: string): Promise<AdoWorkItem>;
   testConnection(): Promise<boolean>;
 }
 
@@ -23,16 +24,27 @@ const DETAIL_FIELDS = [
   "System.Rev",
 ];
 
+export const DEMO_DETAIL_FIELDS = [
+  ...DETAIL_FIELDS,
+  "System.Description",
+  "Microsoft.VSTS.Common.AcceptanceCriteria",
+];
+
 export class HttpAdoClient implements AdoClient {
   private baseUrl: string;
-  private headers: HeadersInit;
+  private authHeader: string;
 
   constructor(config: AdoClientConfig) {
     this.baseUrl = `https://dev.azure.com/${config.org}/${config.project}`;
-    this.headers = {
-      "Content-Type": "application/json",
-      Authorization: `Basic ${btoa(":" + config.pat)}`,
-    };
+    this.authHeader = `Basic ${btoa(":" + config.pat)}`;
+  }
+
+  private jsonHeaders(): HeadersInit {
+    return { "Content-Type": "application/json", Authorization: this.authHeader };
+  }
+
+  private patchHeaders(): HeadersInit {
+    return { "Content-Type": "application/json-patch+json", Authorization: this.authHeader };
   }
 
   async queryWorkItems(wiql: string): Promise<WiqlResponse> {
@@ -40,7 +52,7 @@ export class HttpAdoClient implements AdoClient {
       `${this.baseUrl}/_apis/wit/wiql?api-version=7.1`,
       {
         method: "POST",
-        headers: this.headers,
+        headers: this.jsonHeaders(),
         body: JSON.stringify({ query: wiql }),
       },
     );
@@ -64,7 +76,7 @@ export class HttpAdoClient implements AdoClient {
       });
       const res = await fetch(
         `${this.baseUrl}/_apis/wit/workitems?${params}`,
-        { headers: this.headers },
+        { headers: this.jsonHeaders() },
       );
       if (!res.ok) throw new Error(`Batch fetch failed: ${res.status}`);
       const data: AdoBatchResponse = await res.json();
@@ -73,12 +85,27 @@ export class HttpAdoClient implements AdoClient {
     return results;
   }
 
+  async updateWorkItemState(id: number, state: string): Promise<AdoWorkItem> {
+    const res = await fetch(
+      `${this.baseUrl}/_apis/wit/workitems/${id}?api-version=7.1`,
+      {
+        method: "PATCH",
+        headers: this.patchHeaders(),
+        body: JSON.stringify([
+          { op: "replace", path: "/fields/System.State", value: state },
+        ]),
+      },
+    );
+    if (!res.ok) throw new Error(`Update work item state failed: ${res.status}`);
+    return res.json();
+  }
+
   async testConnection(): Promise<boolean> {
     const res = await fetch(
       `${this.baseUrl}/_apis/wit/wiql?api-version=7.1`,
       {
         method: "POST",
-        headers: this.headers,
+        headers: this.jsonHeaders(),
         body: JSON.stringify({
           query: "SELECT [System.Id] FROM WorkItems WHERE [System.Id] = -1",
         }),

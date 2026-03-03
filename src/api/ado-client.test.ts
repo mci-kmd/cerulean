@@ -108,4 +108,38 @@ describe("HttpAdoClient", () => {
     const ok = await client.testConnection();
     expect(ok).toBe(false);
   });
+
+  it("updates work item state with PATCH and json-patch content type", async () => {
+    let capturedContentType = "";
+    let capturedBody: unknown = null;
+    server.use(
+      http.patch(`${BASE}/_apis/wit/workitems/42`, async ({ request }) => {
+        capturedContentType = request.headers.get("content-type") ?? "";
+        capturedBody = await request.json();
+        return HttpResponse.json({
+          id: 42,
+          rev: 2,
+          fields: { "System.Id": 42, "System.State": "Closed" },
+          url: `${BASE}/_apis/wit/workItems/42`,
+        });
+      }),
+    );
+
+    const result = await client.updateWorkItemState(42, "Closed");
+    expect(capturedContentType).toBe("application/json-patch+json");
+    expect(capturedBody).toEqual([
+      { op: "replace", path: "/fields/System.State", value: "Closed" },
+    ]);
+    expect(result.id).toBe(42);
+  });
+
+  it("throws on failed state update", async () => {
+    server.use(
+      http.patch(`${BASE}/_apis/wit/workitems/42`, () => {
+        return new HttpResponse(null, { status: 400 });
+      }),
+    );
+
+    await expect(client.updateWorkItemState(42, "Bad")).rejects.toThrow("400");
+  });
 });

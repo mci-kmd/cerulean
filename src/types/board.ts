@@ -5,6 +5,8 @@ export interface AdoSettings {
   project: string;
   team: string;
   sourceState: string;
+  approvalState: string;
+  closedState: string;
   pollInterval: number;
 }
 
@@ -15,6 +17,8 @@ export const DEFAULT_SETTINGS: AdoSettings = {
   project: "",
   team: "",
   sourceState: "Active",
+  approvalState: "",
+  closedState: "",
   pollInterval: 30,
 };
 

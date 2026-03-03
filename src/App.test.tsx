@@ -106,4 +106,106 @@ describe("App integration", () => {
       expect(screen.getByLabelText("Personal Access Token")).toBeInTheDocument();
     });
   });
+
+  it("shows demo button when approvalState is configured", async () => {
+    server.use(
+      http.post(`${BASE}/_apis/wit/wiql`, () => {
+        return HttpResponse.json({ workItems: [] });
+      }),
+    );
+
+    const { collections } = renderWithProviders(<App />);
+
+    collections.settings.insert({
+      id: "settings",
+      pat: "test-pat",
+      org: "test-org",
+      project: "test-project",
+      team: "",
+      sourceState: "Active",
+      approvalState: "Resolved",
+      closedState: "Closed",
+      pollInterval: 60,
+    } as any);
+    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 } as any);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Demo mode")).toBeInTheDocument();
+    });
+  });
+
+  it("hides demo button when approvalState is empty", async () => {
+    server.use(
+      http.post(`${BASE}/_apis/wit/wiql`, () => {
+        return HttpResponse.json({ workItems: [] });
+      }),
+    );
+
+    const { collections } = renderWithProviders(<App />);
+
+    collections.settings.insert({
+      id: "settings",
+      pat: "test-pat",
+      org: "test-org",
+      project: "test-project",
+      team: "",
+      sourceState: "Active",
+      approvalState: "",
+      closedState: "",
+      pollInterval: 60,
+    } as any);
+    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 } as any);
+
+    await waitFor(() => {
+      expect(screen.getByText("To Do")).toBeInTheDocument();
+    });
+
+    expect(screen.queryByLabelText("Demo mode")).not.toBeInTheDocument();
+  });
+
+  it("toggles demo mode view on button click", async () => {
+    const user = userEvent.setup();
+
+    server.use(
+      http.post(`${BASE}/_apis/wit/wiql`, () => {
+        return HttpResponse.json({ workItems: [] });
+      }),
+    );
+
+    const { collections } = renderWithProviders(<App />);
+
+    collections.settings.insert({
+      id: "settings",
+      pat: "test-pat",
+      org: "test-org",
+      project: "test-project",
+      team: "",
+      sourceState: "Active",
+      approvalState: "Resolved",
+      closedState: "Closed",
+      pollInterval: 60,
+    } as any);
+    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 } as any);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Demo mode")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByLabelText("Demo mode"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/No items in "Resolved" state/),
+      ).toBeInTheDocument();
+    });
+
+    // Click again to exit
+    await user.click(screen.getByLabelText("Demo mode"));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/No items in "Resolved" state/),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Settings, RefreshCw } from "lucide-react";
+import { Settings, RefreshCw, Presentation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -12,9 +12,19 @@ interface HeaderProps {
   onRefresh?: () => void;
   isRefreshing?: boolean;
   lastUpdated?: number;
+  demoMode?: boolean;
+  onToggleDemo?: () => void;
+  showDemoButton?: boolean;
 }
 
-export function Header({ onRefresh, isRefreshing, lastUpdated }: HeaderProps) {
+export function Header({
+  onRefresh,
+  isRefreshing,
+  lastUpdated,
+  demoMode,
+  onToggleDemo,
+  showDemoButton,
+}: HeaderProps) {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const formatTime = (ts?: number) => {
@@ -50,6 +60,25 @@ export function Header({ onRefresh, isRefreshing, lastUpdated }: HeaderProps) {
             </TooltipTrigger>
             <TooltipContent>Refresh</TooltipContent>
           </Tooltip>
+
+          {showDemoButton && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={demoMode ? "default" : "ghost"}
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onToggleDemo}
+                  aria-label="Demo mode"
+                >
+                  <Presentation className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {demoMode ? "Exit Demo" : "Demo Mode"}
+              </TooltipContent>
+            </Tooltip>
+          )}
 
           <Tooltip>
             <TooltipTrigger asChild>
