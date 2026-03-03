@@ -1,0 +1,61 @@
+import { describe, it, expect } from "vitest";
+import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { renderWithProviders } from "@/test/helpers/render";
+import { SettingsDialog } from "./settings-dialog";
+
+describe("SettingsDialog", () => {
+  it("renders when open", () => {
+    renderWithProviders(
+      <SettingsDialog open={true} onOpenChange={() => {}} />,
+    );
+
+    expect(screen.getByText("Settings")).toBeInTheDocument();
+    expect(screen.getByLabelText("Personal Access Token")).toBeInTheDocument();
+    expect(screen.getByLabelText("Organization")).toBeInTheDocument();
+    expect(screen.getByLabelText("Project")).toBeInTheDocument();
+  });
+
+  it("shows connection, source, and columns sections", () => {
+    renderWithProviders(
+      <SettingsDialog open={true} onOpenChange={() => {}} />,
+    );
+
+    expect(screen.getByText("Connection")).toBeInTheDocument();
+    expect(screen.getByText("Source")).toBeInTheDocument();
+    expect(screen.getByText("Board Columns")).toBeInTheDocument();
+  });
+
+  it("calls onOpenChange when cancel is clicked", async () => {
+    const user = userEvent.setup();
+    let closed = false;
+    renderWithProviders(
+      <SettingsDialog open={true} onOpenChange={(v) => { closed = !v; }} />,
+    );
+
+    await user.click(screen.getByText("Cancel"));
+    expect(closed).toBe(true);
+  });
+
+  it("saves settings to collection", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderWithProviders(
+      <SettingsDialog open={true} onOpenChange={() => {}} />,
+    );
+
+    const patInput = screen.getByLabelText("Personal Access Token");
+    const orgInput = screen.getByLabelText("Organization");
+    const projInput = screen.getByLabelText("Project");
+
+    await user.type(patInput, "my-pat");
+    await user.type(orgInput, "my-org");
+    await user.type(projInput, "my-proj");
+
+    await user.click(screen.getByText("Save"));
+
+    const settings = collections.settings.get("settings");
+    expect(settings).toBeTruthy();
+    expect(settings?.pat).toBe("my-pat");
+    expect(settings?.org).toBe("my-org");
+  });
+});

@@ -1,0 +1,42 @@
+export interface AdoSettings {
+  id: string;
+  pat: string;
+  org: string;
+  project: string;
+  team: string;
+  sourceState: string;
+  pollInterval: number;
+}
+
+export const DEFAULT_SETTINGS: AdoSettings = {
+  id: "settings",
+  pat: "",
+  org: "",
+  project: "",
+  team: "",
+  sourceState: "Active",
+  pollInterval: 30,
+};
+
+export interface BoardColumn {
+  id: string;
+  name: string;
+  order: number;
+}
+
+export interface ColumnAssignment {
+  id: string;
+  workItemId: number;
+  columnId: string;
+  position: number;
+}
+
+export interface WorkItem {
+  id: number;
+  title: string;
+  type: string;
+  state: string;
+  assignedTo?: string;
+  rev: number;
+  url: string;
+}

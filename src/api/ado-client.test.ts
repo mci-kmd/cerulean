@@ -1,0 +1,111 @@
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import { HttpAdoClient } from "./ado-client";
+import { server } from "@/test/msw/server";
+import { http, HttpResponse } from "msw";
+
+const BASE = "https://dev.azure.com/test-org/test-project";
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+
+describe("HttpAdoClient", () => {
+  const client = new HttpAdoClient({
+    pat: "test-pat",
+    org: "test-org",
+    project: "test-project",
+  });
+
+  it("sends auth header on WIQL query", async () => {
+    let capturedAuth = "";
+    server.use(
+      http.post(`${BASE}/_apis/wit/wiql`, ({ request }) => {
+        capturedAuth = request.headers.get("authorization") ?? "";
+        return HttpResponse.json({ workItems: [] });
+      }),
+    );
+
+    await client.queryWorkItems("SELECT [System.Id] FROM WorkItems");
+    expect(capturedAuth).toBe(`Basic ${btoa(":test-pat")}`);
+  });
+
+  it("returns work items from WIQL", async () => {
+    server.use(
+      http.post(`${BASE}/_apis/wit/wiql`, () => {
+        return HttpResponse.json({
+          workItems: [{ id: 1, url: "http://test" }],
+        });
+      }),
+    );
+
+    const result = await client.queryWorkItems("SELECT ...");
+    expect(result.workItems).toHaveLength(1);
+    expect(result.workItems[0].id).toBe(1);
+  });
+
+  it("throws on failed WIQL query", async () => {
+    server.use(
+      http.post(`${BASE}/_apis/wit/wiql`, () => {
+        return new HttpResponse(null, { status: 401 });
+      }),
+    );
+
+    await expect(client.queryWorkItems("SELECT ...")).rejects.toThrow("401");
+  });
+
+  it("batch fetches work items", async () => {
+    server.use(
+      http.get(`${BASE}/_apis/wit/workitems`, ({ request }) => {
+        const url = new URL(request.url);
+        const ids = url.searchParams.get("ids")?.split(",").map(Number) ?? [];
+        return HttpResponse.json({
+          count: ids.length,
+          value: ids.map((id) => ({
+            id,
+            rev: 1,
+            fields: {
+              "System.Id": id,
+              "System.Title": `Item ${id}`,
+              "System.WorkItemType": "Task",
+              "System.State": "Active",
+              "System.Rev": 1,
+            },
+            url: `${BASE}/_apis/wit/workItems/${id}`,
+          })),
+        });
+      }),
+    );
+
+    const items = await client.batchGetWorkItems([1, 2]);
+    expect(items).toHaveLength(2);
+    expect(items[0].id).toBe(1);
+    expect(items[1].id).toBe(2);
+  });
+
+  it("returns empty array for empty ids", async () => {
+    const items = await client.batchGetWorkItems([]);
+    expect(items).toEqual([]);
+  });
+
+  it("tests connection successfully", async () => {
+    server.use(
+      http.post(`${BASE}/_apis/wit/wiql`, () => {
+        return HttpResponse.json({ workItems: [] });
+      }),
+    );
+
+    const ok = await client.testConnection();
+    expect(ok).toBe(true);
+  });
+
+  it("tests connection failure", async () => {
+    server.use(
+      http.post(`${BASE}/_apis/wit/wiql`, () => {
+        return new HttpResponse(null, { status: 403 });
+      }),
+    );
+
+    const ok = await client.testConnection();
+    expect(ok).toBe(false);
+  });
+});
