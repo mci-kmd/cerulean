@@ -111,6 +111,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               sourceState={draft.sourceState}
               approvalState={draft.approvalState}
               closedState={draft.closedState}
+              candidateState={draft.candidateState}
+              areaPath={draft.areaPath}
+              workItemTypes={draft.workItemTypes}
               pollInterval={draft.pollInterval}
               onChange={handleFieldChange}
             />

@@ -1,9 +1,22 @@
 import type { WiqlResponse, AdoBatchResponse, AdoWorkItem } from "@/types/ado";
 
+export class WorkItemAlreadyAssignedError extends Error {
+  constructor(
+    public workItemId: number,
+    public assignee: string,
+  ) {
+    super(
+      `Work item ${workItemId} is already assigned to ${assignee}`,
+    );
+    this.name = "WorkItemAlreadyAssignedError";
+  }
+}
+
 export interface AdoClient {
   queryWorkItems(wiql: string): Promise<WiqlResponse>;
   batchGetWorkItems(ids: number[], fields?: string[]): Promise<AdoWorkItem[]>;
   updateWorkItemState(id: number, state: string): Promise<AdoWorkItem>;
+  startWorkItem(id: number, targetState: string): Promise<AdoWorkItem>;
   testConnection(): Promise<boolean>;
 }
 
@@ -32,10 +45,13 @@ export const DEMO_DETAIL_FIELDS = [
 ];
 
 export class HttpAdoClient implements AdoClient {
+  private org: string;
   private baseUrl: string;
   private authHeader: string;
+  private cachedEmail: string | null = null;
 
   constructor(config: AdoClientConfig) {
+    this.org = config.org;
     this.baseUrl = `https://dev.azure.com/${config.org}/${config.project}`;
     this.authHeader = `Basic ${btoa(":" + config.pat)}`;
   }
@@ -98,6 +114,45 @@ export class HttpAdoClient implements AdoClient {
       },
     );
     if (!res.ok) throw new Error(`Update work item state failed: ${res.status}`);
+    return res.json();
+  }
+
+  private async getMyEmail(): Promise<string> {
+    if (this.cachedEmail) return this.cachedEmail;
+    const res = await fetch(
+      `https://dev.azure.com/${this.org}/_apis/connectiondata?api-version=7.1-preview`,
+      { headers: { Authorization: this.authHeader } },
+    );
+    if (!res.ok) throw new Error(`Connection data fetch failed: ${res.status}`);
+    const data = await res.json();
+    this.cachedEmail = data.authenticatedUser.properties.Account
+      .$value as string;
+    return this.cachedEmail;
+  }
+
+  async startWorkItem(id: number, targetState: string): Promise<AdoWorkItem> {
+    const email = await this.getMyEmail();
+
+    const [current] = await this.batchGetWorkItems([id]);
+    if (current) {
+      const assignee = current.fields["System.AssignedTo"];
+      if (assignee && assignee.uniqueName !== email) {
+        throw new WorkItemAlreadyAssignedError(id, assignee.displayName);
+      }
+    }
+
+    const res = await fetch(
+      `${this.baseUrl}/_apis/wit/workitems/${id}?api-version=7.1`,
+      {
+        method: "PATCH",
+        headers: this.patchHeaders(),
+        body: JSON.stringify([
+          { op: "replace", path: "/fields/System.State", value: targetState },
+          { op: "replace", path: "/fields/System.AssignedTo", value: email },
+        ]),
+      },
+    );
+    if (!res.ok) throw new Error(`Start work item failed: ${res.status}`);
     return res.json();
   }
 

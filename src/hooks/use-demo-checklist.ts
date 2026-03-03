@@ -40,7 +40,9 @@ export function useDemoChecklist(workItemId: number) {
 
   const removeItem = useCallback(
     (id: string) => {
-      demoChecklist.delete([id]);
+      if (demoChecklist.get(id)) {
+        demoChecklist.delete([id]);
+      }
     },
     [demoChecklist],
   );

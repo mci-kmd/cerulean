@@ -6,9 +6,10 @@ import type { BoardData } from "@/hooks/use-board";
 
 interface BoardProps {
   data: BoardData;
+  bottomOffset?: number;
 }
 
-export function Board({ data }: BoardProps) {
+export function Board({ data, bottomOffset = 0 }: BoardProps) {
   const { assignments: assignmentsCol } = useBoardCollections();
   const { columns, columnItems } = data;
 
@@ -59,7 +60,10 @@ export function Board({ data }: BoardProps) {
 
   return (
     <DragDropProvider onDragEnd={handleDragEnd}>
-      <div className="flex gap-4 p-4 overflow-x-auto h-[calc(100vh-49px)] bg-background">
+      <div
+        className="flex gap-4 p-4 overflow-x-auto bg-background"
+        style={{ height: `calc(100vh - 49px - ${bottomOffset}px)` }}
+      >
         {columns.map((col) => (
           <BoardColumn
             key={col.id}

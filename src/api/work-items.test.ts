@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mapAdoWorkItem, fetchWorkItemsInitial, fetchWorkItemsDelta } from "./work-items";
+import { mapAdoWorkItem, fetchWorkItemsInitial, fetchWorkItemsDelta, fetchCandidateWorkItems } from "./work-items";
 import { MockAdoClient } from "./ado-client.mock";
 import { createAdoWorkItem } from "@/test/fixtures/work-items";
 
@@ -113,5 +113,39 @@ describe("fetchWorkItemsDelta", () => {
     // Item 1 should be updated
     const updated = result.workItems.find((w) => w.id === 1);
     expect(updated?.title).toBe("Updated");
+  });
+});
+
+describe("fetchCandidateWorkItems", () => {
+  it("returns mapped items", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = {
+      workItems: [{ id: 10, url: "" }, { id: 11, url: "" }],
+    };
+    client.workItems = [
+      createAdoWorkItem({ id: 10, fields: { "System.Id": 10, "System.Title": "Candidate A", "System.WorkItemType": "Bug", "System.State": "New", "System.Rev": 1 } }),
+      createAdoWorkItem({ id: 11, fields: { "System.Id": 11, "System.Title": "Candidate B", "System.WorkItemType": "Task", "System.State": "New", "System.Rev": 1 } }),
+    ];
+
+    const items = await fetchCandidateWorkItems(client, "New", "org", "proj");
+    expect(items).toHaveLength(2);
+    expect(items[0].title).toBe("Candidate A");
+    expect(items[1].title).toBe("Candidate B");
+  });
+
+  it("caps at 50 results", async () => {
+    const client = new MockAdoClient();
+    const ids = Array.from({ length: 60 }, (_, i) => i + 1);
+    client.wiqlResult = { workItems: ids.map((id) => ({ id, url: "" })) };
+    client.workItems = ids.map((id) => createAdoWorkItem({ id }));
+
+    const items = await fetchCandidateWorkItems(client, "New", "org", "proj");
+    expect(items).toHaveLength(50);
+  });
+
+  it("returns empty for no results", async () => {
+    const client = new MockAdoClient();
+    const items = await fetchCandidateWorkItems(client, "New", "org", "proj");
+    expect(items).toHaveLength(0);
   });
 });

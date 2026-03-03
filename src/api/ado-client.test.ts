@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
-import { HttpAdoClient } from "./ado-client";
+import { HttpAdoClient, WorkItemAlreadyAssignedError } from "./ado-client";
 import { server } from "@/test/msw/server";
 import { http, HttpResponse } from "msw";
 
@@ -141,5 +141,95 @@ describe("HttpAdoClient", () => {
     );
 
     await expect(client.updateWorkItemState(42, "Bad")).rejects.toThrow("400");
+  });
+
+  describe("startWorkItem", () => {
+    it("sends PATCH with state + assignedTo ops", async () => {
+      let capturedBody: unknown = null;
+      let capturedContentType = "";
+      server.use(
+        http.get("https://dev.azure.com/test-org/_apis/connectiondata*", () => {
+          return HttpResponse.json({
+            authenticatedUser: {
+              properties: { Account: { $value: "user@test.com" } },
+            },
+          });
+        }),
+        http.get(`${BASE}/_apis/wit/workitems`, () => {
+          return HttpResponse.json({
+            count: 1,
+            value: [{ id: 99, rev: 1, fields: { "System.Id": 99, "System.State": "New", "System.Rev": 1 }, url: `${BASE}/_apis/wit/workItems/99` }],
+          });
+        }),
+        http.patch(`${BASE}/_apis/wit/workitems/99`, async ({ request }) => {
+          capturedContentType = request.headers.get("content-type") ?? "";
+          capturedBody = await request.json();
+          return HttpResponse.json({
+            id: 99,
+            rev: 2,
+            fields: { "System.Id": 99, "System.State": "Active" },
+            url: `${BASE}/_apis/wit/workItems/99`,
+          });
+        }),
+      );
+
+      const result = await client.startWorkItem(99, "Active");
+      expect(capturedContentType).toBe("application/json-patch+json");
+      expect(capturedBody).toEqual([
+        { op: "replace", path: "/fields/System.State", value: "Active" },
+        { op: "replace", path: "/fields/System.AssignedTo", value: "user@test.com" },
+      ]);
+      expect(result.id).toBe(99);
+    });
+
+    it("throws on failure", async () => {
+      server.use(
+        http.get("https://dev.azure.com/test-org/_apis/connectiondata*", () => {
+          return HttpResponse.json({
+            authenticatedUser: {
+              properties: { Account: { $value: "user@test.com" } },
+            },
+          });
+        }),
+        http.get(`${BASE}/_apis/wit/workitems`, () => {
+          return HttpResponse.json({
+            count: 1,
+            value: [{ id: 99, rev: 1, fields: { "System.Id": 99, "System.State": "New", "System.Rev": 1 }, url: `${BASE}/_apis/wit/workItems/99` }],
+          });
+        }),
+        http.patch(`${BASE}/_apis/wit/workitems/99`, () => {
+          return new HttpResponse(null, { status: 400 });
+        }),
+      );
+
+      await expect(client.startWorkItem(99, "Active")).rejects.toThrow("400");
+    });
+
+    it("throws WorkItemAlreadyAssignedError when assigned to someone else", async () => {
+      server.use(
+        http.get("https://dev.azure.com/test-org/_apis/connectiondata*", () => {
+          return HttpResponse.json({
+            authenticatedUser: {
+              properties: { Account: { $value: "user@test.com" } },
+            },
+          });
+        }),
+        http.get(`${BASE}/_apis/wit/workitems`, () => {
+          return HttpResponse.json({
+            count: 1,
+            value: [{
+              id: 99, rev: 1,
+              fields: {
+                "System.Id": 99, "System.State": "New", "System.Rev": 1,
+                "System.AssignedTo": { displayName: "Someone Else", uniqueName: "other@test.com" },
+              },
+              url: `${BASE}/_apis/wit/workItems/99`,
+            }],
+          });
+        }),
+      );
+
+      await expect(client.startWorkItem(99, "Active")).rejects.toThrow(WorkItemAlreadyAssignedError);
+    });
   });
 });

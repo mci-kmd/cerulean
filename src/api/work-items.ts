@@ -1,7 +1,7 @@
 import type { AdoClient } from "./ado-client";
 import type { AdoWorkItem } from "@/types/ado";
 import type { WorkItem } from "@/types/board";
-import { buildWiqlQuery } from "./wiql";
+import { buildWiqlQuery, buildCandidateWiqlQuery } from "./wiql";
 import { detectChanges } from "@/logic/detect-changes";
 
 export function mapAdoWorkItem(item: AdoWorkItem, org: string, project: string): WorkItem {
@@ -28,8 +28,10 @@ export async function fetchWorkItemsInitial(
   sourceState: string,
   org: string,
   project: string,
+  areaPath?: string,
+  workItemTypes?: string,
 ): Promise<FetchResult> {
-  const wiql = buildWiqlQuery(sourceState);
+  const wiql = buildWiqlQuery(sourceState, areaPath, workItemTypes);
   const wiqlResult = await client.queryWorkItems(wiql);
   const ids = wiqlResult.workItems.map((w) => w.id);
 
@@ -51,8 +53,10 @@ export async function fetchWorkItemsDelta(
   project: string,
   cachedRevMap: Map<number, { rev: number }>,
   cachedItems: WorkItem[],
+  areaPath?: string,
+  workItemTypes?: string,
 ): Promise<FetchResult> {
-  const wiql = buildWiqlQuery(sourceState);
+  const wiql = buildWiqlQuery(sourceState, areaPath, workItemTypes);
   const wiqlResult = await client.queryWorkItems(wiql);
   const freshIds = wiqlResult.workItems.map((w) => w.id);
 
@@ -91,4 +95,24 @@ export async function fetchWorkItemsDelta(
   const revMap = new Map(workItems.map((w) => [w.id, { rev: w.rev }]));
 
   return { workItems, revMap };
+}
+
+const CANDIDATE_CAP = 50;
+
+export async function fetchCandidateWorkItems(
+  client: AdoClient,
+  candidateState: string,
+  org: string,
+  project: string,
+  areaPath?: string,
+  workItemTypes?: string,
+): Promise<WorkItem[]> {
+  const wiql = buildCandidateWiqlQuery(candidateState, areaPath, workItemTypes);
+  const wiqlResult = await client.queryWorkItems(wiql);
+  const ids = wiqlResult.workItems.slice(0, CANDIDATE_CAP).map((w) => w.id);
+
+  if (ids.length === 0) return [];
+
+  const adoItems = await client.batchGetWorkItems(ids);
+  return adoItems.map((i) => mapAdoWorkItem(i, org, project));
 }

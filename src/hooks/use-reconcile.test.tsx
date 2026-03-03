@@ -70,6 +70,25 @@ describe("useReconcile", () => {
     // but the real scenario: workItems=[] should cause removal if assignments exist
   });
 
+  it("does not throw when deleting already-removed assignments", async () => {
+    const columns = createDefaultColumns();
+    const assignment = createAssignment({
+      id: "gone-1",
+      workItemId: 999,
+      columnId: "col-todo",
+    });
+    // Assignment exists in the list but NOT in the collection (already deleted)
+    renderHook(
+      () => useReconcile([], [assignment as any], columns, collections),
+      { wrapper },
+    );
+
+    // Should not throw CollectionOperationError
+    await waitFor(() => {
+      expect(collections.assignments.toArray.length).toBe(0);
+    });
+  });
+
   it("does nothing when columns are empty", () => {
     const workItems = [createWorkItem({ id: 1 })];
 

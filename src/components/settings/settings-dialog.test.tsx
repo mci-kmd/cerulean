@@ -58,4 +58,26 @@ describe("SettingsDialog", () => {
     expect(settings?.pat).toBe("my-pat");
     expect(settings?.org).toBe("my-org");
   });
+
+  it("renders area path input", () => {
+    renderWithProviders(
+      <SettingsDialog open={true} onOpenChange={() => {}} />,
+    );
+
+    expect(screen.getByLabelText("Area Path")).toBeInTheDocument();
+  });
+
+  it("saves area path to collection", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderWithProviders(
+      <SettingsDialog open={true} onOpenChange={() => {}} />,
+    );
+
+    const areaInput = screen.getByLabelText("Area Path");
+    await user.type(areaInput, "MyProject\\MyTeam");
+    await user.click(screen.getByText("Save"));
+
+    const settings = collections.settings.get("settings");
+    expect(settings?.areaPath).toBe("MyProject\\MyTeam");
+  });
 });

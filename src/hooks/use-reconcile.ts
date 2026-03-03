@@ -22,7 +22,10 @@ export function useReconcile(
     }
 
     if (removed.length > 0) {
-      collections.assignments.delete(removed);
+      const existing = removed.filter((id) => collections.assignments.get(id));
+      if (existing.length > 0) {
+        collections.assignments.delete(existing);
+      }
     }
   }, [workItems, assignments, columns, collections]);
 }

@@ -7,6 +7,9 @@ export interface AdoSettings {
   sourceState: string;
   approvalState: string;
   closedState: string;
+  candidateState: string;
+  areaPath: string;
+  workItemTypes: string;
   pollInterval: number;
 }
 
@@ -19,6 +22,9 @@ export const DEFAULT_SETTINGS: AdoSettings = {
   sourceState: "Active",
   approvalState: "",
   closedState: "",
+  candidateState: "",
+  areaPath: "",
+  workItemTypes: "",
   pollInterval: 30,
 };
 

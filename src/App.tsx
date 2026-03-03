@@ -11,6 +11,7 @@ import { useBoardCollections } from "@/db/provider";
 import { useBoard, useSettings, useColumns, useAssignments } from "@/hooks/use-board";
 import { useWorkItems } from "@/hooks/use-work-items";
 import { useReconcile } from "@/hooks/use-reconcile";
+import { CandidateTray } from "@/components/candidates/candidate-tray";
 import { createAdoClient, type AdoClient } from "@/api/ado-client";
 
 export function App() {
@@ -20,6 +21,7 @@ export function App() {
   const assignments = useAssignments();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+  const [trayExpanded, setTrayExpanded] = useState(false);
 
   const client: AdoClient | null = (() => {
     if (!settings?.pat || !settings?.org || !settings?.project) return null;
@@ -37,6 +39,8 @@ export function App() {
       settings?.org ?? "",
       settings?.project ?? "",
       settings?.pollInterval ?? 30,
+      settings?.areaPath,
+      settings?.workItemTypes,
     );
 
   useReconcile(workItems, assignments, columns, collections);
@@ -52,6 +56,8 @@ export function App() {
   const hasSettings = !!(settings?.pat && settings?.org && settings?.project);
   const hasColumns = columns.length > 0;
   const showDemoButton = !!settings?.approvalState;
+  const showCandidateTray = !demoMode && !!client && !!settings?.candidateState;
+  const trayHeight = showCandidateTray ? (trayExpanded ? 220 : 40) : 0;
 
   if (!hasSettings || !hasColumns) {
     return (
@@ -94,7 +100,19 @@ export function App() {
         ) : isLoading && workItems.length === 0 ? (
           <BoardSkeleton columnCount={columns.length} />
         ) : (
-          <Board data={boardData} />
+          <Board data={boardData} bottomOffset={trayHeight} />
+        )}
+        {showCandidateTray && (
+          <CandidateTray
+            client={client!}
+            candidateState={settings!.candidateState}
+            sourceState={settings!.sourceState}
+            org={settings!.org}
+            project={settings!.project}
+            areaPath={settings!.areaPath}
+            workItemTypes={settings!.workItemTypes}
+            onExpandChange={setTrayExpanded}
+          />
         )}
         <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
         <Toaster />

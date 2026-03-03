@@ -92,6 +92,17 @@ describe("useDemoChecklist", () => {
     });
   });
 
+  it("does not throw when removing an already-deleted item", async () => {
+    const { result } = renderHook(() => useDemoChecklist(42), { wrapper });
+
+    // Remove a non-existent ID — should be a no-op
+    act(() => {
+      result.current.removeItem("non-existent-id");
+    });
+
+    expect(result.current.items).toHaveLength(0);
+  });
+
   it("filters items by workItemId", async () => {
     const { result: hook42 } = renderHook(() => useDemoChecklist(42), {
       wrapper,

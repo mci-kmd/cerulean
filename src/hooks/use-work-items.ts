@@ -10,6 +10,8 @@ export function useWorkItems(
   org: string,
   project: string,
   pollInterval: number,
+  areaPath?: string,
+  workItemTypes?: string,
 ) {
   const revMapRef = useRef<Map<number, { rev: number }>>(new Map());
   const cachedItemsRef = useRef<WorkItem[]>([]);
@@ -20,7 +22,7 @@ export function useWorkItems(
 
     let result: FetchResult;
     if (!initializedRef.current) {
-      result = await fetchWorkItemsInitial(client, sourceState, org, project);
+      result = await fetchWorkItemsInitial(client, sourceState, org, project, areaPath, workItemTypes);
       initializedRef.current = true;
     } else {
       result = await fetchWorkItemsDelta(
@@ -30,16 +32,18 @@ export function useWorkItems(
         project,
         revMapRef.current,
         cachedItemsRef.current,
+        areaPath,
+        workItemTypes,
       );
     }
 
     revMapRef.current = result.revMap;
     cachedItemsRef.current = result.workItems;
     return result;
-  }, [client, sourceState, org, project]);
+  }, [client, sourceState, org, project, areaPath, workItemTypes]);
 
   const query = useQuery({
-    queryKey: ["work-items", org, project, sourceState],
+    queryKey: ["work-items", org, project, sourceState, areaPath, workItemTypes],
     queryFn: fetchFn,
     enabled: !!client && !!sourceState,
     refetchInterval: pollInterval * 1000,
