@@ -14,6 +14,7 @@ export interface AdoWorkItemFields {
   "System.Rev": number;
   "System.Description"?: string;
   "Microsoft.VSTS.Common.AcceptanceCriteria"?: string;
+  "Microsoft.VSTS.TCM.ReproSteps"?: string;
   [key: string]: unknown;
 }
 

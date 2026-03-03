@@ -6,6 +6,7 @@ export interface DemoWorkItem {
   url: string;
   description: string;
   acceptanceCriteria: string;
+  reproSteps: string;
 }
 
 export interface DemoChecklistItem {

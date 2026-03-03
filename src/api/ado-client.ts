@@ -28,6 +28,7 @@ export const DEMO_DETAIL_FIELDS = [
   ...DETAIL_FIELDS,
   "System.Description",
   "Microsoft.VSTS.Common.AcceptanceCriteria",
+  "Microsoft.VSTS.TCM.ReproSteps",
 ];
 
 export class HttpAdoClient implements AdoClient {

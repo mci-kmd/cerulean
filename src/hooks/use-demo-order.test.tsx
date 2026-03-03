@@ -26,6 +26,7 @@ function makeItem(id: number, title = `Item ${id}`): DemoWorkItem {
     url: `https://example.com/${id}`,
     description: "",
     acceptanceCriteria: "",
+    reproSteps: "",
   };
 }
 

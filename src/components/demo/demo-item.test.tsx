@@ -20,6 +20,18 @@ const mockItem: DemoWorkItem = {
   url: "https://dev.azure.com/org/proj/_workitems/edit/42",
   description: "<p>Login page description</p>",
   acceptanceCriteria: "<p>Must have username field</p>",
+  reproSteps: "",
+};
+
+const mockBug: DemoWorkItem = {
+  id: 99,
+  title: "Crash on save",
+  type: "Bug",
+  state: "Resolved",
+  url: "https://dev.azure.com/org/proj/_workitems/edit/99",
+  description: "",
+  acceptanceCriteria: "<p>No crash</p>",
+  reproSteps: "<p>1. Click save 2. App crashes</p>",
 };
 
 describe("DemoItem", () => {
@@ -36,7 +48,7 @@ describe("DemoItem", () => {
   it("renders collapsed state with id, title, and drag handle", () => {
     renderWithProviders(<DemoItem {...defaultProps} />);
 
-    expect(screen.getByText("#42")).toBeInTheDocument();
+    expect(screen.getByLabelText("Copy ID 42")).toBeInTheDocument();
     expect(screen.getByText("Add login page")).toBeInTheDocument();
     expect(screen.getByLabelText("Drag to reorder")).toBeInTheDocument();
     // Content section should be collapsed (grid-template-rows: 0fr)
@@ -123,5 +135,38 @@ describe("DemoItem", () => {
     expect(screen.getByText("Unapprove")).toBeInTheDocument();
     await user.click(screen.getByText("Unapprove"));
     expect(onUnapprove).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows Repro Steps instead of Description for bugs", async () => {
+    renderWithProviders(
+      <DemoItem {...defaultProps} item={mockBug} isActive={true} />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /repro steps/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /description/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders Repro Steps collapsed by default for bugs", () => {
+    renderWithProviders(
+      <DemoItem {...defaultProps} item={mockBug} isActive={true} />,
+    );
+
+    const reproBtn = screen.getByRole("button", { name: /repro steps/i });
+    expect(reproBtn).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("expands Repro Steps on click for bugs", async () => {
+    renderWithProviders(
+      <DemoItem {...defaultProps} item={mockBug} isActive={true} />,
+    );
+
+    const reproBtn = screen.getByRole("button", { name: /repro steps/i });
+    await user.click(reproBtn);
+    expect(reproBtn).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("1. Click save 2. App crashes")).toBeInTheDocument();
   });
 });

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/react/sortable";
 import { useBoardCollections } from "@/db/provider";
+import { CopyableId } from "@/components/copyable-id";
 import { getTypeStyle, getTypeIcon } from "@/lib/work-item-types";
 import type { WorkItem } from "@/types/board";
 
@@ -51,9 +52,7 @@ export function BoardCard({
       <div className="flex items-center gap-1.5 mb-1.5">
         <TypeIcon className={`h-3.5 w-3.5 shrink-0 ${style.text}`} />
         <span className="flex-1" />
-        <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
-          #{workItem.id}
-        </span>
+        <CopyableId id={workItem.id} className="text-[10px]" />
       </div>
       <a
         href={workItem.url}

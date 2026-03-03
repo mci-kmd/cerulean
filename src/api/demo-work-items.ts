@@ -20,6 +20,7 @@ export function mapAdoDemoWorkItem(
     description: (f["System.Description"] as string) ?? "",
     acceptanceCriteria:
       (f["Microsoft.VSTS.Common.AcceptanceCriteria"] as string) ?? "",
+    reproSteps: (f["Microsoft.VSTS.TCM.ReproSteps"] as string) ?? "",
   };
 }
 

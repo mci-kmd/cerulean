@@ -111,7 +111,7 @@ describe("DemoView", () => {
           "System.WorkItemType": "Bug",
           "System.State": "Resolved",
           "System.Rev": 1,
-          "System.Description": "<p>Bug details</p>",
+          "Microsoft.VSTS.TCM.ReproSteps": "<p>Bug repro</p>",
         },
       }),
     ]);
@@ -125,8 +125,8 @@ describe("DemoView", () => {
     await user.click(screen.getByText("Clickable Item"));
 
     await waitFor(() => {
-      expect(screen.getByText("Description")).toBeInTheDocument();
-      expect(screen.getByText("Bug details")).toBeInTheDocument();
+      expect(screen.getByText("Repro Steps")).toBeInTheDocument();
+      expect(screen.getByText("Bug repro")).toBeInTheDocument();
     });
   });
 });

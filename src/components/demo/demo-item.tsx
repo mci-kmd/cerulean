@@ -1,6 +1,7 @@
 import { useState, type Ref } from "react";
 import { Check, Undo2, ExternalLink, GripVertical, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CopyableId } from "@/components/copyable-id";
 import { DemoChecklist } from "./demo-checklist";
 import { getTypeStyle, getTypeIcon } from "@/lib/work-item-types";
 import type { DemoWorkItem } from "@/types/demo";
@@ -78,7 +79,7 @@ export function DemoItem({
       >
         <Check className="h-4 w-4 text-emerald-500 shrink-0" />
         <TypeIcon className={`h-3.5 w-3.5 shrink-0 ${style.text}`} />
-        <span className="text-[11px] text-muted-foreground font-mono">#{item.id}</span>
+        <CopyableId id={item.id} className="text-[11px]" />
         <span className="text-sm line-through text-muted-foreground truncate">
           {item.title}
         </span>
@@ -101,7 +102,7 @@ export function DemoItem({
           aria-label="Drag to reorder"
         />
         <TypeIcon className={`h-3.5 w-3.5 shrink-0 ${style.text}`} />
-        <span className="text-[11px] text-muted-foreground font-mono shrink-0">#{item.id}</span>
+        <CopyableId id={item.id} className="text-[11px]" />
         <span
           className={`text-sm font-medium min-w-0 flex-1 ${isActive ? "" : "cursor-pointer"}`}
           onClick={!isActive ? onSelect : undefined}
@@ -126,9 +127,13 @@ export function DemoItem({
       >
         <div className="overflow-hidden">
           <div className="px-3 pb-3 space-y-3">
-            {item.description && (
-              <CollapsibleSection label="Description" html={item.description} />
-            )}
+            {item.type === "Bug"
+              ? item.reproSteps && (
+                  <CollapsibleSection label="Repro Steps" html={item.reproSteps} />
+                )
+              : item.description && (
+                  <CollapsibleSection label="Description" html={item.description} />
+                )}
 
             {item.acceptanceCriteria && (
               <CollapsibleSection

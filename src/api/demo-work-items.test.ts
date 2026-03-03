@@ -48,7 +48,7 @@ describe("fetchDemoWorkItems", () => {
 });
 
 describe("mapAdoDemoWorkItem", () => {
-  it("maps description and acceptance criteria", () => {
+  it("maps description, acceptance criteria, and repro steps", () => {
     const ado = createAdoWorkItem({
       id: 5,
       fields: {
@@ -59,12 +59,14 @@ describe("mapAdoDemoWorkItem", () => {
         "System.Rev": 1,
         "System.Description": "<b>bold</b>",
         "Microsoft.VSTS.Common.AcceptanceCriteria": "<ul><li>done</li></ul>",
+        "Microsoft.VSTS.TCM.ReproSteps": "<p>Step 1</p>",
       },
     });
 
     const result = mapAdoDemoWorkItem(ado, "org", "proj");
     expect(result.description).toBe("<b>bold</b>");
     expect(result.acceptanceCriteria).toBe("<ul><li>done</li></ul>");
+    expect(result.reproSteps).toBe("<p>Step 1</p>");
     expect(result.type).toBe("Bug");
   });
 
@@ -73,5 +75,6 @@ describe("mapAdoDemoWorkItem", () => {
     const result = mapAdoDemoWorkItem(ado, "org", "proj");
     expect(result.description).toBe("");
     expect(result.acceptanceCriteria).toBe("");
+    expect(result.reproSteps).toBe("");
   });
 });
