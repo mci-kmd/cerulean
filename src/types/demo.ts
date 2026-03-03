@@ -3,7 +3,6 @@ export interface DemoWorkItem {
   title: string;
   type: string;
   state: string;
-  assignedTo?: string;
   url: string;
   description: string;
   acceptanceCriteria: string;

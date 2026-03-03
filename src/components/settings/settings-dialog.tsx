@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link, Filter, Columns3 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -41,7 +42,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   };
 
   const handleSave = async () => {
-    // Upsert settings
     const existing = collections.settings.get("settings");
     if (existing) {
       collections.settings.update("settings", (d: any) => {
@@ -51,13 +51,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       collections.settings.insert({ ...draft, id: "settings" } as any);
     }
 
-    // Sync columns: remove deleted, update existing, add new
     const currentIds = new Set(currentColumns.map((c) => c.id));
     const draftIds = new Set(draftColumns.map((c) => c.id));
 
     const toRemove = currentColumns.filter((c) => !draftIds.has(c.id));
     for (const col of toRemove) {
-      collections.columns.delete(col.id);
+      if (collections.columns.get(col.id)) {
+        collections.columns.delete(col.id);
+      }
     }
 
     for (const col of draftColumns) {
@@ -76,9 +77,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Settings</DialogTitle>
+          <DialogTitle className="font-heading">Settings</DialogTitle>
           <DialogDescription>
             Configure your Azure DevOps connection and board layout.
           </DialogDescription>
@@ -86,7 +87,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
         <div className="space-y-6 py-4">
           <div>
-            <h3 className="text-sm font-medium mb-3">Connection</h3>
+            <div className="flex items-center gap-2 mb-3">
+              <Link className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-medium">Connection</h3>
+            </div>
             <ConnectionForm
               pat={draft.pat}
               org={draft.org}
@@ -99,7 +103,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           <Separator />
 
           <div>
-            <h3 className="text-sm font-medium mb-3">Source</h3>
+            <div className="flex items-center gap-2 mb-3">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-medium">Source</h3>
+            </div>
             <SourceStateInput
               sourceState={draft.sourceState}
               approvalState={draft.approvalState}
@@ -112,7 +119,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           <Separator />
 
           <div>
-            <h3 className="text-sm font-medium mb-3">Board Columns</h3>
+            <div className="flex items-center gap-2 mb-3">
+              <Columns3 className="h-4 w-4 text-muted-foreground" />
+              <h3 className="text-sm font-medium">Board Columns</h3>
+            </div>
             <ColumnsEditor
               columns={draftColumns}
               onAdd={(col) => setDraftColumns((c) => [...c, col])}
@@ -132,7 +142,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={handleSave}>Save</Button>
+          <Button onClick={handleSave} className="bg-primary text-primary-foreground hover:bg-primary/90">
+            Save
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

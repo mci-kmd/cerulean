@@ -11,7 +11,6 @@ export function mapAdoWorkItem(item: AdoWorkItem, org: string, project: string):
     title: f["System.Title"],
     type: f["System.WorkItemType"],
     state: f["System.State"],
-    assignedTo: f["System.AssignedTo"]?.displayName,
     rev: f["System.Rev"],
     url:
       item._links?.html?.href ??

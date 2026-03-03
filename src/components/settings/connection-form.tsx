@@ -59,20 +59,34 @@ export function ConnectionForm({
           placeholder="my-team"
         />
       </div>
-      <Button
-        variant="outline"
-        size="sm"
-        disabled={!pat || !org || !project || testConn.isPending}
-        onClick={() => testConn.mutate({ pat, org, project })}
-      >
-        {testConn.isPending
-          ? "Testing..."
-          : testConn.isSuccess
-            ? "Connected!"
-            : testConn.isError
-              ? "Failed - Retry"
-              : "Test Connection"}
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!pat || !org || !project || testConn.isPending}
+          onClick={() => testConn.mutate({ pat, org, project })}
+        >
+          {testConn.isPending
+            ? "Testing..."
+            : testConn.isSuccess
+              ? "Connected!"
+              : testConn.isError
+                ? "Failed - Retry"
+                : "Test Connection"}
+        </Button>
+        {testConn.isSuccess && (
+          <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+            <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            Connected
+          </span>
+        )}
+        {testConn.isError && (
+          <span className="inline-flex items-center gap-1 text-xs text-red-600">
+            <span className="h-2 w-2 rounded-full bg-red-400" />
+            Failed
+          </span>
+        )}
+      </div>
     </div>
   );
 }

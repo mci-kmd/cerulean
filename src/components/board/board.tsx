@@ -28,13 +28,11 @@ export function Board({ data }: BoardProps) {
       );
       if (!sourceAssignment) return;
 
-      // Get items in target column sorted by position
       const targetItems = columnItems.get(targetGroup) ?? [];
       const targetAssignments = targetItems
         .map((t) => t.assignment)
         .filter((a) => a.id !== sourceId);
 
-      // Calculate new position
       let newPosition: number;
       if (targetIndex !== undefined && targetIndex < targetAssignments.length) {
         const atIndex = targetAssignments[targetIndex];
@@ -61,7 +59,7 @@ export function Board({ data }: BoardProps) {
 
   return (
     <DragDropProvider onDragEnd={handleDragEnd}>
-      <div className="flex gap-4 p-4 overflow-x-auto h-[calc(100vh-49px)]">
+      <div className="flex gap-4 p-4 overflow-x-auto h-[calc(100vh-49px)] bg-background">
         {columns.map((col) => (
           <BoardColumn
             key={col.id}

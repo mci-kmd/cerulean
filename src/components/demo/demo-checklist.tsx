@@ -23,13 +23,14 @@ export function DemoChecklist({ workItemId }: DemoChecklistProps) {
 
   return (
     <div className="space-y-2">
-      <h4 className="text-sm font-medium">Checklist</h4>
+      <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Checklist</h4>
       {items.map((item) => (
         <div key={item.id} className="flex items-center gap-2 group">
           <Checkbox
             checked={item.checked}
             onCheckedChange={() => toggleItem(item.id)}
             aria-label={item.text}
+            className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
           />
           <span
             className={`text-sm flex-1 ${item.checked ? "line-through text-muted-foreground" : ""}`}
@@ -39,7 +40,7 @@ export function DemoChecklist({ workItemId }: DemoChecklistProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 opacity-0 group-hover:opacity-100"
+            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={() => removeItem(item.id)}
             aria-label={`Remove ${item.text}`}
           >

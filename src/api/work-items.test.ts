@@ -12,10 +12,6 @@ describe("mapAdoWorkItem", () => {
         "System.Title": "Fix the bug",
         "System.WorkItemType": "Bug",
         "System.State": "Active",
-        "System.AssignedTo": {
-          displayName: "Alice",
-          uniqueName: "alice@test.com",
-        },
         "System.Rev": 3,
       },
     });
@@ -25,7 +21,6 @@ describe("mapAdoWorkItem", () => {
     expect(wi.title).toBe("Fix the bug");
     expect(wi.type).toBe("Bug");
     expect(wi.state).toBe("Active");
-    expect(wi.assignedTo).toBe("Alice");
     expect(wi.rev).toBe(3);
   });
 

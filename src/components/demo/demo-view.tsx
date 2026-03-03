@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, CheckCircle2, Clock } from "lucide-react";
 import { DragDropProvider } from "@dnd-kit/react";
 import { DemoItem } from "./demo-item";
 import { SortableDemoItem } from "./sortable-demo-item";
@@ -102,7 +102,7 @@ export function DemoView({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
   }
@@ -118,7 +118,7 @@ export function DemoView({
   if (items.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground">
-        No items in "{approvalState}" state
+        No items in &quot;{approvalState}&quot; state
       </div>
     );
   }
@@ -127,39 +127,68 @@ export function DemoView({
   const approved = sortedItems.filter((i) => approvedIds.has(i.id));
 
   return (
-    <div className="max-w-3xl mx-auto p-4 space-y-2">
-      <DragDropProvider onDragEnd={handleDragEnd}>
-        {unapproved.map((item, index) => (
-          <SortableDemoItem
-            key={item.id}
-            item={item}
-            index={index}
-            isActive={activeId === item.id}
-            isApproved={false}
-            onSelect={() =>
-              setActiveId(activeId === item.id ? null : item.id)
-            }
-            onApprove={() => handleApprove(item.id)}
-            onUnapprove={() => {}}
-          />
-        ))}
-      </DragDropProvider>
-      {approved.length > 0 && unapproved.length > 0 && (
-        <div className="border-t pt-2 mt-4" />
+    <div className="max-w-3xl mx-auto p-4 space-y-4">
+      {unapproved.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 px-1">
+            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Pending Review
+            </h3>
+            <span className="text-xs font-medium px-1.5 py-0.5 rounded-md bg-primary/10 text-primary">
+              {unapproved.length}
+            </span>
+          </div>
+          <DragDropProvider onDragEnd={handleDragEnd}>
+            {unapproved.map((item, index) => (
+              <SortableDemoItem
+                key={item.id}
+                item={item}
+                index={index}
+                isActive={activeId === item.id}
+                isApproved={false}
+                onSelect={() =>
+                  setActiveId(activeId === item.id ? null : item.id)
+                }
+                onApprove={() => handleApprove(item.id)}
+                onUnapprove={() => {}}
+              />
+            ))}
+          </DragDropProvider>
+        </div>
       )}
-      {approved.map((item) => (
-        <DemoItem
-          key={item.id}
-          item={item}
-          isActive={activeId === item.id}
-          isApproved={true}
-          onSelect={() =>
-            setActiveId(activeId === item.id ? null : item.id)
-          }
-          onApprove={() => {}}
-          onUnapprove={() => handleUnapprove(item.id)}
-        />
-      ))}
+
+      {approved.length > 0 && (
+        <div className="space-y-2">
+          {unapproved.length > 0 && <Separator />}
+          <div className="flex items-center gap-2 px-1">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Approved
+            </h3>
+            <span className="text-xs font-medium px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600">
+              {approved.length}
+            </span>
+          </div>
+          {approved.map((item) => (
+            <DemoItem
+              key={item.id}
+              item={item}
+              isActive={activeId === item.id}
+              isApproved={true}
+              onSelect={() =>
+                setActiveId(activeId === item.id ? null : item.id)
+              }
+              onApprove={() => {}}
+              onUnapprove={() => handleUnapprove(item.id)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
+}
+
+function Separator() {
+  return <div className="border-t my-2" />;
 }

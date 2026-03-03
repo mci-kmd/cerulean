@@ -35,7 +35,6 @@ export function createWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
     title: `Work Item ${id}`,
     type: "User Story",
     state: "Active",
-    assignedTo: "Test User",
     rev: 1,
     url: `https://dev.azure.com/test-org/test-project/_workitems/edit/${id}`,
     ...overrides,

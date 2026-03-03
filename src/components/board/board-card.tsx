@@ -1,16 +1,8 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/react/sortable";
-import { Badge } from "@/components/ui/badge";
 import { useBoardCollections } from "@/db/provider";
+import { getTypeStyle, getTypeIcon } from "@/lib/work-item-types";
 import type { WorkItem } from "@/types/board";
-
-const TYPE_COLORS: Record<string, string> = {
-  Bug: "bg-red-100 text-red-800 border-red-200",
-  "User Story": "bg-blue-100 text-blue-800 border-blue-200",
-  Task: "bg-yellow-100 text-yellow-800 border-yellow-200",
-  Feature: "bg-purple-100 text-purple-800 border-purple-200",
-  Epic: "bg-orange-100 text-orange-800 border-orange-200",
-};
 
 interface BoardCardProps {
   workItem: WorkItem;
@@ -46,21 +38,20 @@ export function BoardCard({
     }
   };
 
-  const typeColor =
-    TYPE_COLORS[workItem.type] ?? "bg-gray-100 text-gray-800 border-gray-200";
+  const style = getTypeStyle(workItem.type);
+  const TypeIcon = getTypeIcon(workItem.type);
 
   return (
     <div
       ref={ref}
-      className={`rounded-md border bg-card p-3 shadow-sm cursor-grab active:cursor-grabbing transition-opacity ${
-        isDragSource ? "opacity-50" : ""
+      className={`rounded-lg border-l-[3px] border border-border bg-card p-3 shadow-sm cursor-grab active:cursor-grabbing transition-all hover:-translate-y-px hover:shadow-md ${style.border} ${
+        isDragSource ? "opacity-50 scale-[0.97]" : ""
       }`}
     >
-      <div className="flex items-start justify-between gap-2 mb-1">
-        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${typeColor}`}>
-          {workItem.type}
-        </Badge>
-        <span className="text-[10px] text-muted-foreground shrink-0">
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <TypeIcon className={`h-3.5 w-3.5 shrink-0 ${style.text}`} />
+        <span className="flex-1" />
+        <span className="text-[10px] text-muted-foreground shrink-0 font-mono">
           #{workItem.id}
         </span>
       </div>
@@ -68,24 +59,26 @@ export function BoardCard({
         href={workItem.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-sm font-medium leading-snug hover:underline"
+        className="block text-sm font-medium leading-snug hover:underline mb-2"
         onClick={(e) => e.stopPropagation()}
       >
         {workItem.title}
       </a>
-      <input
-        type="text"
-        value={value}
-        placeholder="Set status..."
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={save}
-        onKeyDown={(e) => {
-          e.stopPropagation();
-          if (e.key === "Enter") e.currentTarget.blur();
-        }}
-        onPointerDown={(e) => e.stopPropagation()}
-        className="mt-1 w-full text-xs text-muted-foreground bg-transparent border-0 outline-none focus:ring-1 focus:ring-ring rounded px-0.5 placeholder:text-muted-foreground/50"
-      />
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={value}
+          placeholder="Set status..."
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={save}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="flex-1 text-xs text-muted-foreground bg-transparent border-0 outline-none focus:ring-1 focus:ring-ring rounded px-1 py-0.5 placeholder:text-muted-foreground/40"
+        />
+      </div>
     </div>
   );
 }

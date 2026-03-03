@@ -17,7 +17,6 @@ const mockItem: DemoWorkItem = {
   title: "Add login page",
   type: "User Story",
   state: "Resolved",
-  assignedTo: "Test User",
   url: "https://dev.azure.com/org/proj/_workitems/edit/42",
   description: "<p>Login page description</p>",
   acceptanceCriteria: "<p>Must have username field</p>",
@@ -34,15 +33,17 @@ describe("DemoItem", () => {
     onUnapprove: vi.fn(),
   };
 
-  it("renders collapsed state with type, id, title, and drag handle", () => {
+  it("renders collapsed state with id, title, and drag handle", () => {
     renderWithProviders(<DemoItem {...defaultProps} />);
 
-    expect(screen.getByText("User Story")).toBeInTheDocument();
     expect(screen.getByText("#42")).toBeInTheDocument();
     expect(screen.getByText("Add login page")).toBeInTheDocument();
     expect(screen.getByLabelText("Drag to reorder")).toBeInTheDocument();
-    // Description should not be visible when collapsed
-    expect(screen.queryByText("Description")).not.toBeInTheDocument();
+    // Content section should be collapsed (grid-template-rows: 0fr)
+    const descButton = screen.getByRole("button", { name: /description/i });
+    expect(descButton.closest(".overflow-hidden")!.parentElement).toHaveStyle({
+      gridTemplateRows: "0fr",
+    });
   });
 
   it("calls onSelect when collapsed card is clicked", async () => {
@@ -55,16 +56,36 @@ describe("DemoItem", () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 
-  it("renders expanded state with description and acceptance criteria", () => {
+  it("renders expanded state with description collapsed and acceptance criteria open", async () => {
     renderWithProviders(
       <DemoItem {...defaultProps} isActive={true} />,
     );
 
-    expect(screen.getByText("Description")).toBeInTheDocument();
-    expect(screen.getByText("Login page description")).toBeInTheDocument();
-    expect(screen.getByText("Acceptance Criteria")).toBeInTheDocument();
+    const descBtn = screen.getByRole("button", { name: /description/i });
+    const acBtn = screen.getByRole("button", { name: /acceptance criteria/i });
+
+    // Description collapsed by default, acceptance criteria open
+    expect(descBtn).toHaveAttribute("aria-expanded", "false");
+    expect(acBtn).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Must have username field")).toBeInTheDocument();
     expect(screen.getByText("Approve")).toBeInTheDocument();
+
+    // Clicking opens description
+    await user.click(descBtn);
+    expect(descBtn).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Login page description")).toBeInTheDocument();
+  });
+
+  it("collapses section content when toggled closed", async () => {
+    renderWithProviders(
+      <DemoItem {...defaultProps} isActive={true} />,
+    );
+
+    const descBtn = screen.getByRole("button", { name: /description/i });
+    await user.click(descBtn); // open
+    expect(descBtn).toHaveAttribute("aria-expanded", "true");
+    await user.click(descBtn); // close
+    expect(descBtn).toHaveAttribute("aria-expanded", "false");
   });
 
   it("calls onApprove when approve button is clicked", async () => {

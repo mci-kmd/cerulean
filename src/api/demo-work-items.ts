@@ -14,7 +14,6 @@ export function mapAdoDemoWorkItem(
     title: f["System.Title"],
     type: f["System.WorkItemType"],
     state: f["System.State"],
-    assignedTo: f["System.AssignedTo"]?.displayName,
     url:
       item._links?.html?.href ??
       `https://dev.azure.com/${org}/${project}/_workitems/edit/${item.id}`,

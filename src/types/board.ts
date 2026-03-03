@@ -41,7 +41,6 @@ export interface WorkItem {
   title: string;
   type: string;
   state: string;
-  assignedTo?: string;
   rev: number;
   url: string;
 }

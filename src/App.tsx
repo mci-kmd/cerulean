@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster, toast } from "sonner";
 import { Header } from "@/components/layout/header";
@@ -21,14 +21,14 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
 
-  const client: AdoClient | null = useMemo(() => {
+  const client: AdoClient | null = (() => {
     if (!settings?.pat || !settings?.org || !settings?.project) return null;
     return createAdoClient({
       pat: settings.pat,
       org: settings.org,
       project: settings.project,
     });
-  }, [settings?.pat, settings?.org, settings?.project]);
+  })();
 
   const { workItems, isLoading, error, refetch, dataUpdatedAt } =
     useWorkItems(
@@ -57,7 +57,7 @@ export function App() {
     return (
       <TooltipProvider>
         <div className="min-h-screen">
-          <Header />
+          <Header onOpenSettings={() => setSettingsOpen(true)} />
           <EmptyState
             hasSettings={hasSettings}
             hasColumns={hasColumns}
@@ -77,9 +77,11 @@ export function App() {
           onRefresh={() => refetch()}
           isRefreshing={isLoading}
           lastUpdated={dataUpdatedAt}
+          hasError={!!error}
           demoMode={demoMode}
           onToggleDemo={() => setDemoMode((d) => !d)}
           showDemoButton={showDemoButton}
+          onOpenSettings={() => setSettingsOpen(true)}
         />
         {demoMode && client ? (
           <DemoView
@@ -94,6 +96,7 @@ export function App() {
         ) : (
           <Board data={boardData} />
         )}
+        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
         <Toaster />
       </div>
     </TooltipProvider>
