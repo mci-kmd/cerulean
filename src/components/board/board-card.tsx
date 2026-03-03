@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useSortable } from "@dnd-kit/react/sortable";
 import { Badge } from "@/components/ui/badge";
+import { useBoardCollections } from "@/db/provider";
 import type { WorkItem } from "@/types/board";
 
 const TYPE_COLORS: Record<string, string> = {
@@ -13,6 +15,7 @@ const TYPE_COLORS: Record<string, string> = {
 interface BoardCardProps {
   workItem: WorkItem;
   assignmentId: string;
+  statusMessage?: string;
   index: number;
   columnId: string;
 }
@@ -20,6 +23,7 @@ interface BoardCardProps {
 export function BoardCard({
   workItem,
   assignmentId,
+  statusMessage,
   index,
   columnId,
 }: BoardCardProps) {
@@ -29,6 +33,18 @@ export function BoardCard({
     group: columnId,
     data: { workItemId: workItem.id, columnId },
   });
+
+  const { assignments } = useBoardCollections();
+  const [value, setValue] = useState(statusMessage ?? "");
+
+  const save = () => {
+    const trimmed = value.trim();
+    if (trimmed !== (statusMessage ?? "")) {
+      assignments.update(assignmentId, (draft: any) => {
+        draft.statusMessage = trimmed || undefined;
+      });
+    }
+  };
 
   const typeColor =
     TYPE_COLORS[workItem.type] ?? "bg-gray-100 text-gray-800 border-gray-200";
@@ -57,6 +73,19 @@ export function BoardCard({
       >
         {workItem.title}
       </a>
+      <input
+        type="text"
+        value={value}
+        placeholder="Set status..."
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        className="mt-1 w-full text-xs text-muted-foreground bg-transparent border-0 outline-none focus:ring-1 focus:ring-ring rounded px-0.5 placeholder:text-muted-foreground/50"
+      />
     </div>
   );
 }

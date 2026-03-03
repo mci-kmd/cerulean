@@ -1,0 +1,2 @@
+- Always add test coverage to new and edited functionality.
+- Always use bun commands, not npm commands.

@@ -24,6 +24,7 @@ export function BoardColumn({ id, name, items }: BoardColumnProps) {
               key={item.assignment.id}
               workItem={item.workItem}
               assignmentId={item.assignment.id}
+              statusMessage={item.assignment.statusMessage}
               index={index}
               columnId={id}
             />

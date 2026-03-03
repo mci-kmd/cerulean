@@ -29,6 +29,7 @@ export interface ColumnAssignment {
   workItemId: number;
   columnId: string;
   position: number;
+  statusMessage?: string;
 }
 
 export interface WorkItem {
