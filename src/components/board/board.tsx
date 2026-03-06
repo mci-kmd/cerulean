@@ -2,15 +2,17 @@ import { useCallback } from "react";
 import { DragDropProvider } from "@dnd-kit/react";
 import { BoardColumn } from "./board-column";
 import { useBoardCollections } from "@/db/provider";
+import { COMPLETED_COLUMN_ID } from "@/types/board";
 import type { BoardData } from "@/hooks/use-board";
 
 interface BoardProps {
   data: BoardData;
   bottomOffset?: number;
   onAddTask?: (columnId: string) => void;
+  onColumnChange?: (workItemId: number, fromColumnId: string, toColumnId: string) => void;
 }
 
-export function Board({ data, bottomOffset = 0, onAddTask }: BoardProps) {
+export function Board({ data, bottomOffset = 0, onAddTask, onColumnChange }: BoardProps) {
   const { assignments: assignmentsCol } = useBoardCollections();
   const { columns, columnItems } = data;
 
@@ -51,18 +53,24 @@ export function Board({ data, bottomOffset = 0, onAddTask }: BoardProps) {
         newPosition = lastPos + 1;
       }
 
+      const fromColumnId = sourceAssignment.columnId;
+
       assignmentsCol.update(sourceId, (draft: any) => {
         draft.columnId = targetGroup;
         draft.position = newPosition;
       });
+
+      if (fromColumnId !== targetGroup && onColumnChange) {
+        onColumnChange(sourceAssignment.workItemId, fromColumnId, targetGroup);
+      }
     },
-    [data.assignments, columnItems, assignmentsCol],
+    [data.assignments, columnItems, assignmentsCol, onColumnChange],
   );
 
   return (
     <DragDropProvider onDragEnd={handleDragEnd}>
       <div
-        className="flex gap-4 p-4 overflow-x-auto bg-background"
+        className="flex gap-3 p-4 overflow-x-auto bg-background"
         style={{ height: `calc(100vh - 49px - ${bottomOffset}px)` }}
       >
         {columns.map((col) => (
@@ -72,6 +80,7 @@ export function Board({ data, bottomOffset = 0, onAddTask }: BoardProps) {
             name={col.name}
             items={columnItems.get(col.id) ?? []}
             onAddTask={onAddTask}
+            variant={col.id === COMPLETED_COLUMN_ID ? "completed" : "default"}
           />
         ))}
       </div>

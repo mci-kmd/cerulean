@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildWiqlQuery, buildCandidateWiqlQuery } from "./wiql";
+import { buildWiqlQuery, buildCompletedWiqlQuery, buildCandidateWiqlQuery } from "./wiql";
 
 describe("buildWiqlQuery", () => {
   it("builds query with source state", () => {
@@ -59,6 +59,25 @@ describe("buildWiqlQuery", () => {
   it("escapes single quotes in type names", () => {
     const q = buildWiqlQuery("Active", "", "It's a Type");
     expect(q).toContain("'It''s a Type'");
+  });
+});
+
+describe("buildCompletedWiqlQuery", () => {
+  it("filters by approval state and assigned to me", () => {
+    const q = buildCompletedWiqlQuery("Resolved");
+    expect(q).toContain("[System.State] = 'Resolved'");
+    expect(q).toContain("[System.AssignedTo] = @Me");
+    expect(q).not.toContain("ORDER BY");
+  });
+
+  it("adds area path filter", () => {
+    const q = buildCompletedWiqlQuery("Resolved", "Project\\Team");
+    expect(q).toContain("[System.AreaPath] UNDER 'Project\\Team'");
+  });
+
+  it("adds work item type filter", () => {
+    const q = buildCompletedWiqlQuery("Resolved", "", "Bug, Task");
+    expect(q).toContain("[System.WorkItemType] IN ('Bug', 'Task')");
   });
 });
 

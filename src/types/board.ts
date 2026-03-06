@@ -55,4 +55,7 @@ export interface CustomTask {
   id: string;
   workItemId: number;
   title: string;
+  completedAt?: number;
 }
+
+export const COMPLETED_COLUMN_ID = "__completed__";

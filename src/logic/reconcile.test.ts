@@ -72,4 +72,29 @@ describe("reconcile", () => {
     expect(result.added).toHaveLength(1);
     expect(result.added[0].position).toBeGreaterThan(5);
   });
+
+  it("assigns approval-state items to completed column", () => {
+    const items = [
+      createWorkItem({ id: 10, state: "Active" }),
+      createWorkItem({ id: 20, state: "Resolved" }),
+    ];
+    const result = reconcile([], items, columns, "Resolved");
+
+    expect(result.added).toHaveLength(2);
+    const active = result.added.find((a) => a.workItemId === 10);
+    const completed = result.added.find((a) => a.workItemId === 20);
+    expect(active?.columnId).toBe("col-todo");
+    expect(completed?.columnId).toBe("__completed__");
+  });
+
+  it("without approvalState, all items go to first column", () => {
+    const items = [
+      createWorkItem({ id: 10, state: "Active" }),
+      createWorkItem({ id: 20, state: "Resolved" }),
+    ];
+    const result = reconcile([], items, columns);
+
+    expect(result.added).toHaveLength(2);
+    expect(result.added.every((a) => a.columnId === "col-todo")).toBe(true);
+  });
 });

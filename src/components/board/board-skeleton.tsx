@@ -6,7 +6,7 @@ export function BoardSkeleton({ columnCount = 3 }: { columnCount?: number }) {
       {Array.from({ length: columnCount }).map((_, i) => (
         <div
           key={i}
-          className="flex flex-col min-w-[280px] max-w-[320px] bg-muted/30 rounded-lg border-t-2 border-t-border"
+          className="flex flex-col flex-1 min-w-[260px] max-w-[380px] shrink-0 bg-muted/30 rounded-lg border-t-2 border-t-border"
         >
           <div className="flex items-center justify-between px-3 py-2.5">
             <Skeleton className="h-4 w-20" />

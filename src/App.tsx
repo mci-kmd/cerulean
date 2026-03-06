@@ -12,10 +12,13 @@ import { TaskDialog } from "@/components/board/task-dialog";
 import { useBoardCollections } from "@/db/provider";
 import { useBoard, useSettings, useColumns, useAssignments } from "@/hooks/use-board";
 import { useWorkItems } from "@/hooks/use-work-items";
+import { useCompletedWorkItems } from "@/hooks/use-completed-work-items";
+import { useCompleteWorkItem } from "@/hooks/use-complete-work-item";
 import { useReconcile } from "@/hooks/use-reconcile";
 import { useCustomTasks, customTasksToWorkItems } from "@/hooks/use-custom-tasks";
 import { CandidateTray } from "@/components/candidates/candidate-tray";
 import { createAdoClient, type AdoClient } from "@/api/ado-client";
+import { COMPLETED_COLUMN_ID } from "@/types/board";
 
 export function App() {
   const collections = useBoardCollections();
@@ -49,17 +52,37 @@ export function App() {
       settings?.workItemTypes,
     );
 
+  const { workItems: completedAdoItems, isSuccess: completedSuccess } =
+    useCompletedWorkItems(
+      client,
+      settings?.approvalState ?? "",
+      settings?.org ?? "",
+      settings?.project ?? "",
+      settings?.pollInterval ?? 30,
+      settings?.areaPath,
+      settings?.workItemTypes,
+    );
+
+  const completeWorkItem = useCompleteWorkItem(client);
+
   const customWorkItems = useMemo(
-    () => customTasksToWorkItems(customTasks),
-    [customTasks],
+    () => customTasksToWorkItems(customTasks, settings?.approvalState),
+    [customTasks, settings?.approvalState],
   );
 
   const workItems = useMemo(
-    () => [...adoWorkItems, ...customWorkItems],
-    [adoWorkItems, customWorkItems],
+    () => [...adoWorkItems, ...completedAdoItems, ...customWorkItems],
+    [adoWorkItems, completedAdoItems, customWorkItems],
   );
 
-  useReconcile(workItems, assignments, columns, collections, isSuccess);
+  useReconcile(
+    workItems,
+    assignments,
+    columns,
+    collections,
+    isSuccess || completedSuccess,
+    settings?.approvalState,
+  );
 
   if (error) {
     toast.error("Failed to fetch work items", {
@@ -102,6 +125,57 @@ export function App() {
       } as any);
     },
     [taskTargetColumn, collections, boardData.assignments],
+  );
+
+  const handleColumnChange = useCallback(
+    (workItemId: number, fromColumnId: string, toColumnId: string) => {
+      // Find if this is a custom task
+      const isCustom = customTasks.some((t) => t.workItemId === workItemId);
+
+      if (isCustom) {
+        const task = customTasks.find((t) => t.workItemId === workItemId);
+        if (!task) return;
+
+        if (toColumnId === COMPLETED_COLUMN_ID) {
+          collections.customTasks.update(task.id, (draft: any) => {
+            draft.completedAt = Date.now();
+          });
+        } else if (fromColumnId === COMPLETED_COLUMN_ID) {
+          collections.customTasks.update(task.id, (draft: any) => {
+            draft.completedAt = undefined;
+          });
+        }
+        return;
+      }
+
+      // ADO work item state changes
+      if (!settings?.approvalState || !settings?.sourceState) return;
+
+      if (toColumnId === COMPLETED_COLUMN_ID && fromColumnId !== COMPLETED_COLUMN_ID) {
+        completeWorkItem.mutate(
+          { workItemId, targetState: settings.approvalState },
+          {
+            onError: (err) =>
+              toast.error("Failed to update work item state", {
+                description: err.message,
+                id: `complete-error-${workItemId}`,
+              }),
+          },
+        );
+      } else if (fromColumnId === COMPLETED_COLUMN_ID && toColumnId !== COMPLETED_COLUMN_ID) {
+        completeWorkItem.mutate(
+          { workItemId, targetState: settings.sourceState },
+          {
+            onError: (err) =>
+              toast.error("Failed to update work item state", {
+                description: err.message,
+                id: `uncomplete-error-${workItemId}`,
+              }),
+          },
+        );
+      }
+    },
+    [customTasks, collections, settings?.approvalState, settings?.sourceState, completeWorkItem],
   );
 
   if (!hasSettings || !hasColumns) {
@@ -149,6 +223,7 @@ export function App() {
             data={boardData}
             bottomOffset={trayHeight}
             onAddTask={handleAddTask}
+            onColumnChange={handleColumnChange}
           />
         )}
         {showCandidateTray && (

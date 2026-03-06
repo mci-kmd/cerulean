@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { useBoardCollections } from "@/db/provider";
 import type { BoardColumn, ColumnAssignment, WorkItem, AdoSettings } from "@/types/board";
+import { COMPLETED_COLUMN_ID } from "@/types/board";
 
 export function useSettings(): AdoSettings | null {
   const { settings } = useBoardCollections();
@@ -36,8 +37,18 @@ export interface BoardData {
 
 export function useBoard(workItems: WorkItem[]): BoardData {
   const settings = useSettings();
-  const columns = useColumns();
+  const userColumns = useColumns();
   const assignments = useAssignments();
+
+  const columns = useMemo(() => {
+    if (!settings?.approvalState) return userColumns;
+    const completedCol: BoardColumn = {
+      id: COMPLETED_COLUMN_ID,
+      name: "Completed",
+      order: Infinity,
+    };
+    return [...userColumns, completedCol];
+  }, [userColumns, settings?.approvalState]);
 
   const workItemMap = useMemo(
     () => new Map(workItems.map((w) => [w.id, w])),

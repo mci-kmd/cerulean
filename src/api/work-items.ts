@@ -1,7 +1,7 @@
 import type { AdoClient } from "./ado-client";
 import type { AdoWorkItem } from "@/types/ado";
 import type { WorkItem } from "@/types/board";
-import { buildWiqlQuery, buildCandidateWiqlQuery } from "./wiql";
+import { buildWiqlQuery, buildCompletedWiqlQuery, buildCandidateWiqlQuery } from "./wiql";
 import { detectChanges } from "@/logic/detect-changes";
 
 export function mapAdoWorkItem(item: AdoWorkItem, org: string, project: string): WorkItem {
@@ -95,6 +95,24 @@ export async function fetchWorkItemsDelta(
   const revMap = new Map(workItems.map((w) => [w.id, { rev: w.rev }]));
 
   return { workItems, revMap };
+}
+
+export async function fetchCompletedWorkItems(
+  client: AdoClient,
+  approvalState: string,
+  org: string,
+  project: string,
+  areaPath?: string,
+  workItemTypes?: string,
+): Promise<WorkItem[]> {
+  const wiql = buildCompletedWiqlQuery(approvalState, areaPath, workItemTypes);
+  const wiqlResult = await client.queryWorkItems(wiql);
+  const ids = wiqlResult.workItems.map((w) => w.id);
+
+  if (ids.length === 0) return [];
+
+  const adoItems = await client.batchGetWorkItems(ids);
+  return adoItems.map((i) => mapAdoWorkItem(i, org, project));
 }
 
 const CANDIDATE_CAP = 50;

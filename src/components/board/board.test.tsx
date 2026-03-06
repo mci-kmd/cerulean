@@ -3,6 +3,7 @@ import { screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/helpers/render";
 import { Board } from "./board";
 import { createWorkItem } from "@/test/fixtures/work-items";
+import { COMPLETED_COLUMN_ID } from "@/types/board";
 import type { BoardData } from "@/hooks/use-board";
 import type { ColumnAssignment } from "@/types/board";
 
@@ -66,5 +67,31 @@ describe("Board", () => {
     renderWithProviders(<Board data={data} />);
     expect(screen.getByText("Empty Col")).toBeInTheDocument();
     expect(screen.getByText("0")).toBeInTheDocument();
+  });
+
+  it("renders completed column with distinct styling", () => {
+    const w1 = createWorkItem({ id: 3, title: "Done item", state: "Resolved" });
+    const assignment: ColumnAssignment = {
+      id: "a3",
+      workItemId: 3,
+      columnId: COMPLETED_COLUMN_ID,
+      position: 0,
+    };
+
+    const data = createBoardData({
+      columns: [
+        { id: "col-1", name: "To Do", order: 0 },
+        { id: COMPLETED_COLUMN_ID, name: "Completed", order: Infinity },
+      ],
+      assignments: [assignment],
+      columnItems: new Map([
+        ["col-1", []],
+        [COMPLETED_COLUMN_ID, [{ assignment, workItem: w1 }]],
+      ]),
+    });
+
+    renderWithProviders(<Board data={data} />);
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.getByText("Done item")).toBeInTheDocument();
   });
 });

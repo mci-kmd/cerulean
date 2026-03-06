@@ -58,4 +58,57 @@ describe("customTasksToWorkItems", () => {
   it("returns empty array for no tasks", () => {
     expect(customTasksToWorkItems([])).toEqual([]);
   });
+
+  it("sets state to approvalState for completed tasks", () => {
+    const tasks = [
+      { id: "t-1", workItemId: -1000, title: "Task A", completedAt: Date.now() },
+    ];
+    const items = customTasksToWorkItems(tasks, "Resolved");
+    expect(items[0].state).toBe("Resolved");
+  });
+
+  it("uses fallback state for completed tasks without approvalState", () => {
+    const tasks = [
+      { id: "t-1", workItemId: -1000, title: "Task A", completedAt: Date.now() },
+    ];
+    const items = customTasksToWorkItems(tasks);
+    expect(items[0].state).toBe("Completed");
+  });
+});
+
+describe("useCustomTasks 24h filter", () => {
+  it("filters out completed tasks older than 24h", async () => {
+    const { collections } = renderWithProviders(<TaskList />);
+    const old = Date.now() - 25 * 60 * 60 * 1000;
+    collections.customTasks.insert({
+      id: "t-old",
+      workItemId: -1,
+      title: "Old completed",
+      completedAt: old,
+    } as any);
+    collections.customTasks.insert({
+      id: "t-new",
+      workItemId: -2,
+      title: "Recent task",
+    } as any);
+
+    await waitFor(() => {
+      expect(screen.getByText("Recent task")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Old completed")).toBeNull();
+  });
+
+  it("shows completed tasks within 24h", async () => {
+    const { collections } = renderWithProviders(<TaskList />);
+    collections.customTasks.insert({
+      id: "t-recent",
+      workItemId: -3,
+      title: "Just completed",
+      completedAt: Date.now() - 60 * 1000,
+    } as any);
+
+    await waitFor(() => {
+      expect(screen.getByText("Just completed")).toBeInTheDocument();
+    });
+  });
 });
