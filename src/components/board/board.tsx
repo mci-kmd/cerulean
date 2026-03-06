@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { DragDropProvider } from "@dnd-kit/react";
 import { BoardColumn } from "./board-column";
+import { scheduleColumnChange } from "./schedule-column-change";
 import { useBoardCollections } from "@/db/provider";
 import { COMPLETED_COLUMN_ID } from "@/types/board";
 import type { BoardData } from "@/hooks/use-board";
@@ -61,7 +62,12 @@ export function Board({ data, bottomOffset = 0, onAddTask, onColumnChange }: Boa
       });
 
       if (fromColumnId !== targetGroup && onColumnChange) {
-        onColumnChange(sourceAssignment.workItemId, fromColumnId, targetGroup);
+        scheduleColumnChange(
+          onColumnChange,
+          sourceAssignment.workItemId,
+          fromColumnId,
+          targetGroup,
+        );
       }
     },
     [data.assignments, columnItems, assignmentsCol, onColumnChange],

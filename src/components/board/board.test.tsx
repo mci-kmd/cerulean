@@ -1,7 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/helpers/render";
 import { Board } from "./board";
+import { scheduleColumnChange } from "./schedule-column-change";
 import { createWorkItem } from "@/test/fixtures/work-items";
 import { COMPLETED_COLUMN_ID } from "@/types/board";
 import type { BoardData } from "@/hooks/use-board";
@@ -36,6 +37,16 @@ function createBoardData(overrides: Partial<BoardData> = {}): BoardData {
 }
 
 describe("Board", () => {
+  it("defers column change callbacks to a microtask", async () => {
+    const onColumnChange = vi.fn();
+
+    scheduleColumnChange(onColumnChange, 1, "col-1", "col-2");
+    expect(onColumnChange).not.toHaveBeenCalled();
+
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(onColumnChange).toHaveBeenCalledWith(1, "col-1", "col-2");
+  });
+
   it("renders columns with names", () => {
     renderWithProviders(<Board data={createBoardData()} />);
 

@@ -18,6 +18,7 @@ import { useReconcile } from "@/hooks/use-reconcile";
 import { useCustomTasks, customTasksToWorkItems } from "@/hooks/use-custom-tasks";
 import { CandidateTray } from "@/components/candidates/candidate-tray";
 import { createAdoClient, type AdoClient } from "@/api/ado-client";
+import { isReconcileReady } from "@/logic/reconcile-readiness";
 import { COMPLETED_COLUMN_ID } from "@/types/board";
 
 export function App() {
@@ -74,13 +75,18 @@ export function App() {
     () => [...adoWorkItems, ...completedAdoItems, ...customWorkItems],
     [adoWorkItems, completedAdoItems, customWorkItems],
   );
+  const reconcileReady = isReconcileReady(
+    isSuccess,
+    completedSuccess,
+    settings?.approvalState,
+  );
 
   useReconcile(
     workItems,
     assignments,
     columns,
     collections,
-    isSuccess || completedSuccess,
+    reconcileReady,
     settings?.approvalState,
   );
 
