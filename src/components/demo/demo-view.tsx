@@ -128,18 +128,18 @@ export function DemoView({
 
   return (
     <div className="max-w-3xl mx-auto p-4 space-y-4">
-      {unapproved.length > 0 && (
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2 px-1">
-            <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-            <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Pending Review
-            </h3>
-            <span className="text-xs font-medium px-1.5 py-0.5 rounded-md bg-primary/10 text-primary">
-              {unapproved.length}
-            </span>
-          </div>
-          <DragDropProvider onDragEnd={handleDragEnd}>
+      <DragDropProvider onDragEnd={handleDragEnd}>
+        {unapproved.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2 px-1">
+              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+              <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                Pending Review
+              </h3>
+              <span className="text-xs font-medium px-1.5 py-0.5 rounded-md bg-primary/10 text-primary">
+                {unapproved.length}
+              </span>
+            </div>
             {unapproved.map((item, index) => (
               <SortableDemoItem
                 key={item.id}
@@ -154,9 +154,9 @@ export function DemoView({
                 onUnapprove={() => {}}
               />
             ))}
-          </DragDropProvider>
-        </div>
-      )}
+          </div>
+        )}
+      </DragDropProvider>
 
       {approved.length > 0 && (
         <div className="space-y-1.5">

@@ -31,6 +31,11 @@ function setupHandlers(items: ReturnType<typeof createAdoWorkItem>[]) {
     http.get(`${BASE}/_apis/wit/workitems`, () => {
       return HttpResponse.json({ count: items.length, value: items });
     }),
+    http.patch(`${BASE}/_apis/wit/workitems/:id`, ({ params }) => {
+      const id = Number(params.id);
+      const item = items.find((i) => i.id === id);
+      return HttpResponse.json(item ?? { id });
+    }),
   );
 }
 
@@ -127,6 +132,40 @@ describe("DemoView", () => {
     await waitFor(() => {
       expect(screen.getByText("Repro Steps")).toBeInTheDocument();
       expect(screen.getByText("Bug repro")).toBeInTheDocument();
+    });
+  });
+
+  it("closes last pending user story without crashing", async () => {
+    const user = userEvent.setup();
+    setupHandlers([
+      createAdoWorkItem({
+        id: 30,
+        fields: {
+          "System.Id": 30,
+          "System.Title": "Close-safe story",
+          "System.WorkItemType": "User Story",
+          "System.State": "Resolved",
+          "System.Rev": 1,
+          "System.Description": "<p>Desc</p>",
+          "Microsoft.VSTS.Common.AcceptanceCriteria": "<p>AC</p>",
+        },
+      }),
+    ]);
+
+    renderWithProviders(<DemoView {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Close-safe story")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Close-safe story"));
+    await user.click(screen.getByRole("button", { name: "Approve" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("Approved: Close-safe story"),
+      ).toBeInTheDocument();
+      expect(screen.queryByText("Pending Review")).not.toBeInTheDocument();
     });
   });
 });
