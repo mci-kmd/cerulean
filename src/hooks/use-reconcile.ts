@@ -8,8 +8,10 @@ export function useReconcile(
   assignments: ColumnAssignment[],
   columns: BoardColumn[],
   collections: BoardCollections,
+  isReady = true,
 ) {
   useEffect(() => {
+    if (!isReady) return;
     if (workItems.length === 0 && assignments.length === 0) return;
     if (columns.length === 0) return;
 
@@ -27,5 +29,5 @@ export function useReconcile(
         collections.assignments.delete(existing);
       }
     }
-  }, [workItems, assignments, columns, collections]);
+  }, [workItems, assignments, columns, collections, isReady]);
 }

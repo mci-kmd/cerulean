@@ -66,8 +66,28 @@ describe("useReconcile", () => {
       { wrapper },
     );
 
-    // Reconcile should not add when workItems is empty AND assignments exist
-    // but the real scenario: workItems=[] should cause removal if assignments exist
+    await waitFor(() => {
+      expect(collections.assignments.toArray.length).toBe(0);
+    });
+  });
+
+  it("preserves assignments until initial load completes", async () => {
+    const columns = createDefaultColumns();
+    const assignment = createAssignment({
+      id: "persisted-1",
+      workItemId: 999,
+      columnId: "col-todo",
+    });
+    collections.assignments.insert(assignment as any);
+
+    renderHook(
+      () => useReconcile([], [assignment as any], columns, collections, false),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(collections.assignments.toArray.length).toBe(1);
+    });
   });
 
   it("does not throw when deleting already-removed assignments", async () => {

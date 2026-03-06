@@ -38,7 +38,7 @@ export function App() {
     });
   })();
 
-  const { workItems: adoWorkItems, isLoading, error, refetch, dataUpdatedAt } =
+  const { workItems: adoWorkItems, isLoading, isSuccess, error, refetch, dataUpdatedAt } =
     useWorkItems(
       client,
       settings?.sourceState ?? "",
@@ -59,7 +59,7 @@ export function App() {
     [adoWorkItems, customWorkItems],
   );
 
-  useReconcile(workItems, assignments, columns, collections);
+  useReconcile(workItems, assignments, columns, collections, isSuccess);
 
   if (error) {
     toast.error("Failed to fetch work items", {

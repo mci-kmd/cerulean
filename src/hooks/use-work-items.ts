@@ -53,6 +53,7 @@ export function useWorkItems(
   return {
     workItems: query.data?.workItems ?? [],
     isLoading: query.isLoading,
+    isSuccess: query.isSuccess,
     error: query.error,
     refetch: query.refetch,
     dataUpdatedAt: query.dataUpdatedAt,
