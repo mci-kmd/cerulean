@@ -1,3 +1,4 @@
 - Always add test coverage to new and edited functionality.
 - Always use bun commands, not npm commands.
 - Avoid unnecessary memoization in React - we use React Compiler.
+- To push: `source .env.local && git push https://${GH_TOKEN}@github.com/mci-kmd/cerulean.git`. The PAT is in `.env.local`.
