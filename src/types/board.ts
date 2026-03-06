@@ -50,3 +50,9 @@ export interface WorkItem {
   rev: number;
   url: string;
 }
+
+export interface CustomTask {
+  id: string;
+  workItemId: number;
+  title: string;
+}

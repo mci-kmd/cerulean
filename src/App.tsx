@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { nanoid } from "nanoid";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster, toast } from "sonner";
 import { Header } from "@/components/layout/header";
@@ -7,10 +8,12 @@ import { BoardSkeleton } from "@/components/board/board-skeleton";
 import { EmptyState } from "@/components/board/empty-state";
 import { DemoView } from "@/components/demo/demo-view";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
+import { TaskDialog } from "@/components/board/task-dialog";
 import { useBoardCollections } from "@/db/provider";
 import { useBoard, useSettings, useColumns, useAssignments } from "@/hooks/use-board";
 import { useWorkItems } from "@/hooks/use-work-items";
 import { useReconcile } from "@/hooks/use-reconcile";
+import { useCustomTasks, customTasksToWorkItems } from "@/hooks/use-custom-tasks";
 import { CandidateTray } from "@/components/candidates/candidate-tray";
 import { createAdoClient, type AdoClient } from "@/api/ado-client";
 
@@ -19,9 +22,12 @@ export function App() {
   const settings = useSettings();
   const columns = useColumns();
   const assignments = useAssignments();
+  const customTasks = useCustomTasks();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
   const [trayExpanded, setTrayExpanded] = useState(false);
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [taskTargetColumn, setTaskTargetColumn] = useState<string | null>(null);
 
   const client: AdoClient | null = (() => {
     if (!settings?.pat || !settings?.org || !settings?.project) return null;
@@ -32,7 +38,7 @@ export function App() {
     });
   })();
 
-  const { workItems, isLoading, error, refetch, dataUpdatedAt } =
+  const { workItems: adoWorkItems, isLoading, error, refetch, dataUpdatedAt } =
     useWorkItems(
       client,
       settings?.sourceState ?? "",
@@ -42,6 +48,16 @@ export function App() {
       settings?.areaPath,
       settings?.workItemTypes,
     );
+
+  const customWorkItems = useMemo(
+    () => customTasksToWorkItems(customTasks),
+    [customTasks],
+  );
+
+  const workItems = useMemo(
+    () => [...adoWorkItems, ...customWorkItems],
+    [adoWorkItems, customWorkItems],
+  );
 
   useReconcile(workItems, assignments, columns, collections);
 
@@ -58,6 +74,35 @@ export function App() {
   const showDemoButton = !!settings?.approvalState;
   const showCandidateTray = !demoMode && !!client && !!settings?.candidateState;
   const trayHeight = showCandidateTray ? (trayExpanded ? 220 : 40) : 0;
+
+  const handleAddTask = useCallback((columnId: string) => {
+    setTaskTargetColumn(columnId);
+    setTaskDialogOpen(true);
+  }, []);
+
+  const handleCreateTask = useCallback(
+    (title: string) => {
+      if (!taskTargetColumn) return;
+      const workItemId = -Date.now();
+      const taskId = nanoid();
+      const assignmentId = nanoid();
+
+      collections.customTasks.insert({ id: taskId, workItemId, title } as any);
+
+      const colItems = boardData.assignments.filter(
+        (a) => a.columnId === taskTargetColumn,
+      );
+      const maxPos = colItems.reduce((max, a) => Math.max(max, a.position), 0);
+
+      collections.assignments.insert({
+        id: assignmentId,
+        workItemId,
+        columnId: taskTargetColumn,
+        position: maxPos + 1,
+      } as any);
+    },
+    [taskTargetColumn, collections, boardData.assignments],
+  );
 
   if (!hasSettings || !hasColumns) {
     return (
@@ -100,7 +145,11 @@ export function App() {
         ) : isLoading && workItems.length === 0 ? (
           <BoardSkeleton columnCount={columns.length} />
         ) : (
-          <Board data={boardData} bottomOffset={trayHeight} />
+          <Board
+            data={boardData}
+            bottomOffset={trayHeight}
+            onAddTask={handleAddTask}
+          />
         )}
         {showCandidateTray && (
           <CandidateTray
@@ -115,6 +164,12 @@ export function App() {
           />
         )}
         <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+        <TaskDialog
+          open={taskDialogOpen}
+          onOpenChange={setTaskDialogOpen}
+          onSave={handleCreateTask}
+          mode="create"
+        />
         <Toaster />
       </div>
     </TooltipProvider>

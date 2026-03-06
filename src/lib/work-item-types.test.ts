@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { Bug, BookOpen, CircleDot } from "lucide-react";
-import { getTypeStyle, getTypeIcon } from "./work-item-types";
+import { Bug, BookOpen, ClipboardList, CircleDot } from "lucide-react";
+import { getTypeStyle, getTypeIcon, CUSTOM_TASK_TYPE } from "./work-item-types";
 
 describe("getTypeStyle", () => {
   it("returns bug style for Bug type", () => {
@@ -13,6 +13,12 @@ describe("getTypeStyle", () => {
     const style = getTypeStyle("User Story");
     expect(style.border).toContain("primary");
     expect(style.text).toContain("primary");
+  });
+
+  it("returns amber style for Task type", () => {
+    const style = getTypeStyle("Task");
+    expect(style.border).toContain("amber");
+    expect(style.text).toContain("amber");
   });
 
   it("returns fallback style for unknown type", () => {
@@ -35,7 +41,17 @@ describe("getTypeIcon", () => {
     expect(getTypeIcon("User Story")).toBe(BookOpen);
   });
 
+  it("returns ClipboardList icon for Task type", () => {
+    expect(getTypeIcon("Task")).toBe(ClipboardList);
+  });
+
   it("returns CircleDot icon for unknown type", () => {
-    expect(getTypeIcon("Task")).toBe(CircleDot);
+    expect(getTypeIcon("Epic")).toBe(CircleDot);
+  });
+});
+
+describe("CUSTOM_TASK_TYPE", () => {
+  it("equals Task", () => {
+    expect(CUSTOM_TASK_TYPE).toBe("Task");
   });
 });

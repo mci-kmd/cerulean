@@ -3,7 +3,7 @@ import {
   localStorageCollectionOptions,
   localOnlyCollectionOptions,
 } from "@tanstack/db";
-import type { AdoSettings, BoardColumn, ColumnAssignment } from "@/types/board";
+import type { AdoSettings, BoardColumn, ColumnAssignment, CustomTask } from "@/types/board";
 import type { DemoChecklistItem, DemoOrderItem } from "@/types/demo";
 
 // TanStack DB beta has complex generic types; use pragmatic typing
@@ -16,6 +16,7 @@ export interface BoardCollections {
   assignments: AppCollection;
   demoChecklist: AppCollection;
   demoOrder: AppCollection;
+  customTasks: AppCollection;
 }
 
 function createSettingsCollection(inMemory: boolean) {
@@ -98,6 +99,22 @@ function createDemoOrderCollection(inMemory: boolean) {
   );
 }
 
+function createCustomTasksCollection(inMemory: boolean) {
+  if (inMemory) {
+    return createCollection(
+      localOnlyCollectionOptions<CustomTask, string>({
+        getKey: (item: CustomTask) => item.id,
+      }),
+    );
+  }
+  return createCollection(
+    localStorageCollectionOptions<CustomTask, string>({
+      getKey: (item: CustomTask) => item.id,
+      storageKey: "cerulean-custom-tasks",
+    }),
+  );
+}
+
 export function createBoardCollections(inMemory = false): BoardCollections {
   return {
     settings: createSettingsCollection(inMemory),
@@ -105,5 +122,6 @@ export function createBoardCollections(inMemory = false): BoardCollections {
     assignments: createAssignmentsCollection(inMemory),
     demoChecklist: createDemoChecklistCollection(inMemory),
     demoOrder: createDemoOrderCollection(inMemory),
+    customTasks: createCustomTasksCollection(inMemory),
   };
 }

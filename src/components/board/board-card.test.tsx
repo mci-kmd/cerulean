@@ -34,6 +34,52 @@ function renderCard(props: {
   return result;
 }
 
+function renderCustomTaskCard() {
+  const workItem = createWorkItem({
+    id: -1000,
+    title: "Custom Task",
+    type: "Task",
+    url: "",
+  });
+  const assignment = createAssignment({
+    id: "asgn-task",
+    workItemId: -1000,
+  });
+
+  const result = renderWithProviders(
+    <BoardCard
+      workItem={workItem}
+      assignmentId={assignment.id}
+      statusMessage={undefined}
+      index={0}
+      columnId="col-todo"
+    />,
+  );
+
+  result.collections.assignments.insert(assignment as any);
+  result.collections.customTasks.insert({
+    id: "ct-1",
+    workItemId: -1000,
+    title: "Custom Task",
+  } as any);
+
+  return result;
+}
+
+describe("BoardCard custom task", () => {
+  it("does not render copyable ID for custom tasks", () => {
+    renderCustomTaskCard();
+    expect(screen.queryByText(/#-1000/)).toBeNull();
+  });
+
+  it("renders title as button instead of link", () => {
+    renderCustomTaskCard();
+    const titleBtn = screen.getByRole("button", { name: "Custom Task" });
+    expect(titleBtn).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Custom Task" })).toBeNull();
+  });
+});
+
 describe("BoardCard status message", () => {
   it("renders placeholder when no status", () => {
     renderCard({});

@@ -1,4 +1,4 @@
-import { Bug, BookOpen, CircleDot, type LucideIcon } from "lucide-react";
+import { Bug, BookOpen, ClipboardList, CircleDot, type LucideIcon } from "lucide-react";
 
 export interface TypeStyle {
   border: string;
@@ -21,6 +21,13 @@ const USER_STORY_STYLE: TypeStyle = {
   badge: "bg-primary/5 text-primary border-primary/20",
 };
 
+const TASK_STYLE: TypeStyle = {
+  border: "border-l-amber-400",
+  bg: "bg-amber-50",
+  text: "text-amber-600",
+  badge: "bg-amber-50 text-amber-700 border-amber-200",
+};
+
 const FALLBACK_STYLE: TypeStyle = {
   border: "border-l-slate-300",
   bg: "bg-slate-50",
@@ -31,11 +38,13 @@ const FALLBACK_STYLE: TypeStyle = {
 const TYPE_STYLES: Record<string, TypeStyle> = {
   Bug: BUG_STYLE,
   "User Story": USER_STORY_STYLE,
+  Task: TASK_STYLE,
 };
 
 const TYPE_ICONS: Record<string, LucideIcon> = {
   Bug: Bug,
   "User Story": BookOpen,
+  Task: ClipboardList,
 };
 
 export function getTypeStyle(type: string): TypeStyle {
@@ -45,3 +54,5 @@ export function getTypeStyle(type: string): TypeStyle {
 export function getTypeIcon(type: string): LucideIcon {
   return TYPE_ICONS[type] ?? CircleDot;
 }
+
+export const CUSTOM_TASK_TYPE = "Task";

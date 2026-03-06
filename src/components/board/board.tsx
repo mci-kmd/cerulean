@@ -7,9 +7,10 @@ import type { BoardData } from "@/hooks/use-board";
 interface BoardProps {
   data: BoardData;
   bottomOffset?: number;
+  onAddTask?: (columnId: string) => void;
 }
 
-export function Board({ data, bottomOffset = 0 }: BoardProps) {
+export function Board({ data, bottomOffset = 0, onAddTask }: BoardProps) {
   const { assignments: assignmentsCol } = useBoardCollections();
   const { columns, columnItems } = data;
 
@@ -70,6 +71,7 @@ export function Board({ data, bottomOffset = 0 }: BoardProps) {
             id={col.id}
             name={col.name}
             items={columnItems.get(col.id) ?? []}
+            onAddTask={onAddTask}
           />
         ))}
       </div>
