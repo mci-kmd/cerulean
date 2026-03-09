@@ -9,7 +9,10 @@ describe("CandidateCard", () => {
     const item = createWorkItem({ id: 42, title: "Fix login", type: "Bug" });
     render(<CandidateCard workItem={item} onStart={() => {}} isStarting={false} />);
 
-    expect(screen.getByText("Fix login")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "Fix login" });
+    expect(link).toHaveAttribute("href", item.url);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.getByText("#42")).toBeInTheDocument();
   });
 

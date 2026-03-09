@@ -21,9 +21,14 @@ export function CandidateCard({ workItem, onStart, isStarting }: CandidateCardPr
         <TypeIcon className={`h-3.5 w-3.5 shrink-0 ${style.text}`} />
         <span className="text-[10px] text-muted-foreground">#{workItem.id}</span>
       </div>
-      <p className="text-sm font-medium leading-snug line-clamp-2 mb-2">
+      <a
+        href={workItem.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block text-sm font-medium leading-snug line-clamp-2 mb-2 hover:underline"
+      >
         {workItem.title}
-      </p>
+      </a>
       <Button
         size="sm"
         variant="outline"
