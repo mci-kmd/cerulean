@@ -92,6 +92,13 @@ describe("BoardCard status message", () => {
     expect(screen.getByDisplayValue("In review")).toBeInTheDocument();
   });
 
+  it("uses a wrapping multiline status editor", () => {
+    renderCard({ statusMessage: "Needs extra details before review" });
+    const editor = screen.getByDisplayValue("Needs extra details before review");
+    expect(editor.tagName).toBe("TEXTAREA");
+    expect(editor).toHaveAttribute("wrap", "soft");
+  });
+
   it("updates collection on blur", async () => {
     const user = userEvent.setup();
     const { collections } = renderCard({ assignmentId: "asgn-blur" });

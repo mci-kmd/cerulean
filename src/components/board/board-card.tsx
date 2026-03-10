@@ -1,4 +1,4 @@
-import { createElement, useState } from "react";
+import { createElement, useEffect, useRef, useState } from "react";
 import { Pencil } from "lucide-react";
 import { useSortable } from "@dnd-kit/react/sortable";
 import { useBoardCollections } from "@/db/use-board-collections";
@@ -32,6 +32,7 @@ export function BoardCard({
   const { assignments, customTasks } = useBoardCollections();
   const [value, setValue] = useState(statusMessage ?? "");
   const [editOpen, setEditOpen] = useState(false);
+  const statusRef = useRef<HTMLTextAreaElement | null>(null);
 
   const isCustomTask = workItem.type === CUSTOM_TASK_TYPE && !workItem.url;
 
@@ -65,6 +66,13 @@ export function BoardCard({
     const found = customTasks.toArray.find((t) => t.workItemId === workItemId);
     return found?.id ?? null;
   }
+
+  useEffect(() => {
+    const editor = statusRef.current;
+    if (!editor) return;
+    editor.style.height = "0px";
+    editor.style.height = `${editor.scrollHeight}px`;
+  }, [value]);
 
   const style = getTypeStyle(workItem.type);
   const typeIcon = getTypeIcon(workItem.type);
@@ -123,18 +131,23 @@ export function BoardCard({
           </a>
         )}
         <div className="flex items-center gap-2">
-          <input
-            type="text"
+          <textarea
+            ref={statusRef}
+            rows={1}
+            wrap="soft"
             value={value}
             placeholder="Set status..."
             onChange={(e) => setValue(e.target.value)}
             onBlur={save}
             onKeyDown={(e) => {
               e.stopPropagation();
-              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
             }}
             onPointerDown={(e) => e.stopPropagation()}
-            className="flex-1 text-xs text-muted-foreground bg-transparent border-0 outline-none focus:ring-1 focus:ring-ring rounded px-1 py-0.5 placeholder:text-muted-foreground/40"
+            className="w-full resize-none overflow-hidden text-xs text-muted-foreground bg-transparent border-0 outline-none focus:ring-1 focus:ring-ring rounded px-1 py-0.5 leading-snug placeholder:text-muted-foreground/40"
           />
         </div>
       </div>
