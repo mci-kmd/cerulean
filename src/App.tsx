@@ -9,7 +9,7 @@ import { EmptyState } from "@/components/board/empty-state";
 import { DemoView } from "@/components/demo/demo-view";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { TaskDialog } from "@/components/board/task-dialog";
-import { useBoardCollections } from "@/db/provider";
+import { useBoardCollections } from "@/db/use-board-collections";
 import { useBoard, useSettings, useColumns, useAssignments } from "@/hooks/use-board";
 import { useWorkItems } from "@/hooks/use-work-items";
 import { useCompletedWorkItems } from "@/hooks/use-completed-work-items";
@@ -116,7 +116,7 @@ export function App() {
       const taskId = nanoid();
       const assignmentId = nanoid();
 
-      collections.customTasks.insert({ id: taskId, workItemId, title } as any);
+      collections.customTasks.insert({ id: taskId, workItemId, title });
 
       const colItems = boardData.assignments.filter(
         (a) => a.columnId === taskTargetColumn,
@@ -128,61 +128,56 @@ export function App() {
         workItemId,
         columnId: taskTargetColumn,
         position: maxPos + 1,
-      } as any);
+      });
     },
     [taskTargetColumn, collections, boardData.assignments],
   );
 
-  const handleColumnChange = useCallback(
-    (workItemId: number, fromColumnId: string, toColumnId: string) => {
-      // Find if this is a custom task
-      const isCustom = customTasks.some((t) => t.workItemId === workItemId);
+  const handleColumnChange = (workItemId: number, fromColumnId: string, toColumnId: string) => {
+    const isCustom = customTasks.some((t) => t.workItemId === workItemId);
 
-      if (isCustom) {
-        const task = customTasks.find((t) => t.workItemId === workItemId);
-        if (!task) return;
+    if (isCustom) {
+      const task = customTasks.find((t) => t.workItemId === workItemId);
+      if (!task) return;
 
-        if (toColumnId === COMPLETED_COLUMN_ID) {
-          collections.customTasks.update(task.id, (draft: any) => {
-            draft.completedAt = Date.now();
-          });
-        } else if (fromColumnId === COMPLETED_COLUMN_ID) {
-          collections.customTasks.update(task.id, (draft: any) => {
-            draft.completedAt = undefined;
-          });
-        }
-        return;
+      if (toColumnId === COMPLETED_COLUMN_ID) {
+        collections.customTasks.update(task.id, (draft: { completedAt?: number }) => {
+          draft.completedAt = Date.now();
+        });
+      } else if (fromColumnId === COMPLETED_COLUMN_ID) {
+        collections.customTasks.update(task.id, (draft: { completedAt?: number }) => {
+          draft.completedAt = undefined;
+        });
       }
+      return;
+    }
 
-      // ADO work item state changes
-      if (!settings?.approvalState || !settings?.sourceState) return;
+    if (!settings?.approvalState || !settings?.sourceState) return;
 
-      if (toColumnId === COMPLETED_COLUMN_ID && fromColumnId !== COMPLETED_COLUMN_ID) {
-        completeWorkItem.mutate(
-          { workItemId, targetState: settings.approvalState },
-          {
-            onError: (err) =>
-              toast.error("Failed to update work item state", {
-                description: err.message,
-                id: `complete-error-${workItemId}`,
-              }),
-          },
-        );
-      } else if (fromColumnId === COMPLETED_COLUMN_ID && toColumnId !== COMPLETED_COLUMN_ID) {
-        completeWorkItem.mutate(
-          { workItemId, targetState: settings.sourceState },
-          {
-            onError: (err) =>
-              toast.error("Failed to update work item state", {
-                description: err.message,
-                id: `uncomplete-error-${workItemId}`,
-              }),
-          },
-        );
-      }
-    },
-    [customTasks, collections, settings?.approvalState, settings?.sourceState, completeWorkItem],
-  );
+    if (toColumnId === COMPLETED_COLUMN_ID && fromColumnId !== COMPLETED_COLUMN_ID) {
+      completeWorkItem.mutate(
+        { workItemId, targetState: settings.approvalState },
+        {
+          onError: (err) =>
+            toast.error("Failed to update work item state", {
+              description: err.message,
+              id: `complete-error-${workItemId}`,
+            }),
+        },
+      );
+    } else if (fromColumnId === COMPLETED_COLUMN_ID && toColumnId !== COMPLETED_COLUMN_ID) {
+      completeWorkItem.mutate(
+        { workItemId, targetState: settings.sourceState },
+        {
+          onError: (err) =>
+            toast.error("Failed to update work item state", {
+              description: err.message,
+              id: `uncomplete-error-${workItemId}`,
+            }),
+        },
+      );
+    }
+  };
 
   if (!hasSettings || !hasColumns) {
     return (

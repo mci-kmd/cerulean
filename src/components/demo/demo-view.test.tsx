@@ -6,6 +6,7 @@ import { DemoView } from "./demo-view";
 import { server } from "@/test/msw/server";
 import { http, HttpResponse } from "msw";
 import { createAdoWorkItem } from "@/test/fixtures/work-items";
+import type { AdoClient } from "@/api/ado-client";
 
 vi.mock("nanoid", () => ({
   nanoid: (() => {
@@ -39,8 +40,9 @@ function setupHandlers(items: ReturnType<typeof createAdoWorkItem>[]) {
   );
 }
 
+let client: AdoClient | null = null;
+
 const defaultProps = {
-  client: null as any,
   approvalState: "Resolved",
   closedState: "Closed",
   org: "test-org",
@@ -48,10 +50,15 @@ const defaultProps = {
 };
 
 describe("DemoView", () => {
+  const getClient = (): AdoClient => {
+    if (!client) throw new Error("Test client not initialized");
+    return client;
+  };
+
   // Use real HttpAdoClient for MSW tests
   beforeAll(async () => {
     const { HttpAdoClient } = await import("@/api/ado-client");
-    defaultProps.client = new HttpAdoClient({
+    client = new HttpAdoClient({
       pat: "test-pat",
       org: "test-org",
       project: "test-project",
@@ -66,14 +73,14 @@ describe("DemoView", () => {
         return new Promise(() => {}); // never resolves
       }),
     );
-    renderWithProviders(<DemoView {...defaultProps} />);
+    renderWithProviders(<DemoView client={getClient()} {...defaultProps} />);
     // Should show spinner (svg with animate-spin)
     expect(document.querySelector(".animate-spin")).toBeInTheDocument();
   });
 
   it("shows empty state when no items", async () => {
     setupHandlers([]);
-    renderWithProviders(<DemoView {...defaultProps} />);
+    renderWithProviders(<DemoView client={getClient()} {...defaultProps} />);
 
     await waitFor(() => {
       expect(
@@ -98,7 +105,7 @@ describe("DemoView", () => {
       }),
     ]);
 
-    renderWithProviders(<DemoView {...defaultProps} />);
+    renderWithProviders(<DemoView client={getClient()} {...defaultProps} />);
 
     await waitFor(() => {
       expect(screen.getByText("Feature X")).toBeInTheDocument();
@@ -121,7 +128,7 @@ describe("DemoView", () => {
       }),
     ]);
 
-    renderWithProviders(<DemoView {...defaultProps} />);
+    renderWithProviders(<DemoView client={getClient()} {...defaultProps} />);
 
     await waitFor(() => {
       expect(screen.getByText("Clickable Item")).toBeInTheDocument();
@@ -152,7 +159,7 @@ describe("DemoView", () => {
       }),
     ]);
 
-    renderWithProviders(<DemoView {...defaultProps} />);
+    renderWithProviders(<DemoView client={getClient()} {...defaultProps} />);
 
     await waitFor(() => {
       expect(screen.getByText("Close-safe story")).toBeInTheDocument();

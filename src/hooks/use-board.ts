@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useLiveQuery } from "@tanstack/react-db";
-import { useBoardCollections } from "@/db/provider";
+import { useBoardCollections } from "@/db/use-board-collections";
 import type { BoardColumn, ColumnAssignment, WorkItem, AdoSettings } from "@/types/board";
 import { COMPLETED_COLUMN_ID } from "@/types/board";
 
@@ -14,7 +14,10 @@ export function useSettings(): AdoSettings | null {
 export function useColumns(): BoardColumn[] {
   const { columns } = useBoardCollections();
   const result = useLiveQuery(columns);
-  const data = (result.data ?? []) as unknown as BoardColumn[];
+  const data = useMemo(
+    () => (result.data ?? []) as unknown as BoardColumn[],
+    [result.data],
+  );
   const sorted = useMemo(
     () => [...data].sort((a, b) => a.order - b.order),
     [data],

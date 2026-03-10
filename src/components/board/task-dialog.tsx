@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ClipboardList } from "lucide-react";
 import {
   Dialog,
@@ -29,11 +29,29 @@ export function TaskDialog({
   initialTitle = "",
   mode,
 }: TaskDialogProps) {
-  const [title, setTitle] = useState(initialTitle);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      {open && (
+        <TaskDialogContent
+          onOpenChange={onOpenChange}
+          onSave={onSave}
+          onDelete={onDelete}
+          initialTitle={initialTitle}
+          mode={mode}
+        />
+      )}
+    </Dialog>
+  );
+}
 
-  useEffect(() => {
-    if (open) setTitle(initialTitle);
-  }, [open, initialTitle]);
+function TaskDialogContent({
+  onOpenChange,
+  onSave,
+  onDelete,
+  initialTitle,
+  mode,
+}: Omit<TaskDialogProps, "open"> & { initialTitle: string }) {
+  const [title, setTitle] = useState(initialTitle);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,50 +62,48 @@ export function TaskDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <ClipboardList className="h-4 w-4 text-amber-600" />
-            {mode === "create" ? "New Task" : "Edit Task"}
-          </DialogTitle>
-          <DialogDescription>
-            {mode === "create"
-              ? "Create a personal task not tracked in Azure DevOps."
-              : "Update this task's title."}
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-3 py-2">
-            <Label htmlFor="task-title">Title</Label>
-            <Input
-              id="task-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="What needs to be done?"
-              autoFocus
-            />
-          </div>
-          <DialogFooter className="mt-4 gap-2 sm:gap-0">
-            {mode === "edit" && onDelete && (
-              <Button
-                type="button"
-                variant="ghost"
-                className="text-red-600 hover:text-red-700 hover:bg-red-50 mr-auto"
-                onClick={() => {
-                  onDelete();
-                  onOpenChange(false);
-                }}
-              >
-                Delete
-              </Button>
-            )}
-            <Button type="submit" disabled={!title.trim()}>
-              {mode === "create" ? "Create" : "Save"}
+    <DialogContent className="sm:max-w-md">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <ClipboardList className="h-4 w-4 text-amber-600" />
+          {mode === "create" ? "New Task" : "Edit Task"}
+        </DialogTitle>
+        <DialogDescription>
+          {mode === "create"
+            ? "Create a personal task not tracked in Azure DevOps."
+            : "Update this task's title."}
+        </DialogDescription>
+      </DialogHeader>
+      <form onSubmit={handleSubmit}>
+        <div className="grid gap-3 py-2">
+          <Label htmlFor="task-title">Title</Label>
+          <Input
+            id="task-title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="What needs to be done?"
+            autoFocus
+          />
+        </div>
+        <DialogFooter className="mt-4 gap-2 sm:gap-0">
+          {mode === "edit" && onDelete && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-red-600 hover:text-red-700 hover:bg-red-50 mr-auto"
+              onClick={() => {
+                onDelete();
+                onOpenChange(false);
+              }}
+            >
+              Delete
             </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+          )}
+          <Button type="submit" disabled={!title.trim()}>
+            {mode === "create" ? "Create" : "Save"}
+          </Button>
+        </DialogFooter>
+      </form>
+    </DialogContent>
   );
 }

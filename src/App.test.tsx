@@ -6,8 +6,20 @@ import { App } from "./App";
 import { server } from "@/test/msw/server";
 import { http, HttpResponse } from "msw";
 import { createAdoWorkItem } from "@/test/fixtures/work-items";
+import { DEFAULT_SETTINGS, type AdoSettings, type BoardColumn } from "@/types/board";
 
 const BASE = "https://dev.azure.com/test-org/test-project";
+
+function createSettings(overrides: Partial<AdoSettings> = {}): AdoSettings {
+  return {
+    ...DEFAULT_SETTINGS,
+    pat: "test-pat",
+    org: "test-org",
+    project: "test-project",
+    sourceState: "Active",
+    ...overrides,
+  };
+}
 
 beforeAll(() => server.listen({ onUnhandledRequest: "bypass" }));
 afterEach(() => server.resetHandlers());
@@ -23,15 +35,13 @@ describe("App integration", () => {
     const { collections } = renderWithProviders(<App />);
 
     // Insert settings
-    collections.settings.insert({
-      id: "settings",
-      pat: "test",
-      org: "test-org",
-      project: "test-project",
-      team: "",
-      sourceState: "Active",
-      pollInterval: 30,
-    } as any);
+    collections.settings.insert(
+      createSettings({
+        id: "settings",
+        pat: "test",
+        pollInterval: 30,
+      }),
+    );
 
     await waitFor(() => {
       expect(screen.getByText("Set Up Columns")).toBeInTheDocument();
@@ -66,18 +76,15 @@ describe("App integration", () => {
 
     const { collections } = renderWithProviders(<App />);
 
-    collections.settings.insert({
-      id: "settings",
-      pat: "test-pat",
-      org: "test-org",
-      project: "test-project",
-      team: "",
-      sourceState: "Active",
-      pollInterval: 60,
-    } as any);
+    collections.settings.insert(
+      createSettings({
+        id: "settings",
+        pollInterval: 60,
+      }),
+    );
 
-    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 } as any);
-    collections.columns.insert({ id: "col-2", name: "Done", order: 1 } as any);
+    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 } as BoardColumn);
+    collections.columns.insert({ id: "col-2", name: "Done", order: 1 } as BoardColumn);
 
     await waitFor(
       () => {
@@ -116,18 +123,15 @@ describe("App integration", () => {
 
     const { collections } = renderWithProviders(<App />);
 
-    collections.settings.insert({
-      id: "settings",
-      pat: "test-pat",
-      org: "test-org",
-      project: "test-project",
-      team: "",
-      sourceState: "Active",
-      approvalState: "Resolved",
-      closedState: "Closed",
-      pollInterval: 60,
-    } as any);
-    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 } as any);
+    collections.settings.insert(
+      createSettings({
+        id: "settings",
+        approvalState: "Resolved",
+        closedState: "Closed",
+        pollInterval: 60,
+      }),
+    );
+    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 } as BoardColumn);
 
     await waitFor(() => {
       expect(screen.getByLabelText("Demo mode")).toBeInTheDocument();
@@ -143,18 +147,15 @@ describe("App integration", () => {
 
     const { collections } = renderWithProviders(<App />);
 
-    collections.settings.insert({
-      id: "settings",
-      pat: "test-pat",
-      org: "test-org",
-      project: "test-project",
-      team: "",
-      sourceState: "Active",
-      approvalState: "",
-      closedState: "",
-      pollInterval: 60,
-    } as any);
-    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 } as any);
+    collections.settings.insert(
+      createSettings({
+        id: "settings",
+        approvalState: "",
+        closedState: "",
+        pollInterval: 60,
+      }),
+    );
+    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 } as BoardColumn);
 
     await waitFor(() => {
       expect(screen.getByText("To Do")).toBeInTheDocument();
@@ -174,18 +175,15 @@ describe("App integration", () => {
 
     const { collections } = renderWithProviders(<App />);
 
-    collections.settings.insert({
-      id: "settings",
-      pat: "test-pat",
-      org: "test-org",
-      project: "test-project",
-      team: "",
-      sourceState: "Active",
-      approvalState: "Resolved",
-      closedState: "Closed",
-      pollInterval: 60,
-    } as any);
-    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 } as any);
+    collections.settings.insert(
+      createSettings({
+        id: "settings",
+        approvalState: "Resolved",
+        closedState: "Closed",
+        pollInterval: 60,
+      }),
+    );
+    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 } as BoardColumn);
 
     await waitFor(() => {
       expect(screen.getByLabelText("Demo mode")).toBeInTheDocument();

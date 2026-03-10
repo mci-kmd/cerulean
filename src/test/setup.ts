@@ -5,11 +5,13 @@ import { ensureLocalStorageApi } from "./local-storage-shim";
 
 // Polyfill ResizeObserver for jsdom (needed by @dnd-kit)
 if (typeof globalThis.ResizeObserver === "undefined") {
-  globalThis.ResizeObserver = class ResizeObserver {
+  class ResizeObserverMock {
     observe() {}
     unobserve() {}
     disconnect() {}
-  } as any;
+  }
+
+  globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
 }
 
 ensureLocalStorageApi();

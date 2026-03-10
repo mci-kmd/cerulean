@@ -20,7 +20,7 @@ export function useReconcile(
 
     if (added.length > 0) {
       for (const a of added) {
-        collections.assignments.insert(a as any);
+        collections.assignments.insert(a);
       }
     }
 

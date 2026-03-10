@@ -27,7 +27,7 @@ describe("useCustomTasks", () => {
       id: "t-1",
       workItemId: -1000,
       title: "My task",
-    } as any);
+    });
 
     await waitFor(() => {
       expect(screen.getByText("My task")).toBeInTheDocument();
@@ -85,12 +85,12 @@ describe("useCustomTasks 24h filter", () => {
       workItemId: -1,
       title: "Old completed",
       completedAt: old,
-    } as any);
+    });
     collections.customTasks.insert({
       id: "t-new",
       workItemId: -2,
       title: "Recent task",
-    } as any);
+    });
 
     await waitFor(() => {
       expect(screen.getByText("Recent task")).toBeInTheDocument();
@@ -105,7 +105,7 @@ describe("useCustomTasks 24h filter", () => {
       workItemId: -3,
       title: "Just completed",
       completedAt: Date.now() - 60 * 1000,
-    } as any);
+    });
 
     await waitFor(() => {
       expect(screen.getByText("Just completed")).toBeInTheDocument();

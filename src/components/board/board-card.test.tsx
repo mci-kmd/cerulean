@@ -29,7 +29,7 @@ function renderCard(props: {
   );
 
   // Seed assignment into collection so updates work
-  result.collections.assignments.insert(assignment as any);
+  result.collections.assignments.insert(assignment);
 
   return result;
 }
@@ -56,12 +56,12 @@ function renderCustomTaskCard() {
     />,
   );
 
-  result.collections.assignments.insert(assignment as any);
+  result.collections.assignments.insert(assignment);
   result.collections.customTasks.insert({
     id: "ct-1",
     workItemId: -1000,
     title: "Custom Task",
-  } as any);
+  });
 
   return result;
 }
@@ -102,7 +102,9 @@ describe("BoardCard status message", () => {
     await user.tab(); // blur
 
     await waitFor(() => {
-      const updated = (collections.assignments as any).state.get("asgn-blur");
+      const updated = collections.assignments.get("asgn-blur") as
+        | { statusMessage?: string }
+        | undefined;
       expect(updated?.statusMessage).toBe("Blocked");
     });
   });
@@ -117,7 +119,9 @@ describe("BoardCard status message", () => {
     await user.keyboard("{Enter}");
 
     await waitFor(() => {
-      const updated = (collections.assignments as any).state.get("asgn-enter");
+      const updated = collections.assignments.get("asgn-enter") as
+        | { statusMessage?: string }
+        | undefined;
       expect(updated?.statusMessage).toBe("Done");
     });
   });
@@ -132,7 +136,9 @@ describe("BoardCard status message", () => {
     await user.tab();
 
     await waitFor(() => {
-      const updated = (collections.assignments as any).state.get("asgn-trim");
+      const updated = collections.assignments.get("asgn-trim") as
+        | { statusMessage?: string }
+        | undefined;
       expect(updated?.statusMessage).toBe("Spaced");
     });
   });
@@ -149,7 +155,9 @@ describe("BoardCard status message", () => {
     await user.tab();
 
     await waitFor(() => {
-      const updated = (collections.assignments as any).state.get("asgn-clear");
+      const updated = collections.assignments.get("asgn-clear") as
+        | { statusMessage?: string }
+        | undefined;
       expect(updated?.statusMessage).toBeUndefined();
     });
   });

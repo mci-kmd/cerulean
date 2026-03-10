@@ -1,7 +1,6 @@
-import { createContext, useContext, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { BoardCollectionsContext } from "./board-collections-context";
 import type { BoardCollections } from "./create-collections";
-
-const BoardCollectionsContext = createContext<BoardCollections | null>(null);
 
 export function BoardCollectionsProvider({
   collections,
@@ -15,11 +14,4 @@ export function BoardCollectionsProvider({
       {children}
     </BoardCollectionsContext>
   );
-}
-
-export function useBoardCollections(): BoardCollections {
-  const ctx = useContext(BoardCollectionsContext);
-  if (!ctx)
-    throw new Error("useBoardCollections must be used within BoardCollectionsProvider");
-  return ctx;
 }

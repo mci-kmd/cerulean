@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "==> Linting..."
+bun run lint
+
 echo "==> Type checking..."
 bunx --bun tsc -b
 

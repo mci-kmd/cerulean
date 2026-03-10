@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { createElement, useState } from "react";
 import { Pencil } from "lucide-react";
 import { useSortable } from "@dnd-kit/react/sortable";
-import { useBoardCollections } from "@/db/provider";
+import { useBoardCollections } from "@/db/use-board-collections";
 import { CopyableId } from "@/components/copyable-id";
 import { getTypeStyle, getTypeIcon, CUSTOM_TASK_TYPE } from "@/lib/work-item-types";
 import { TaskDialog } from "./task-dialog";
-import type { WorkItem } from "@/types/board";
+import type { CustomTask, WorkItem } from "@/types/board";
 
 interface BoardCardProps {
   workItem: WorkItem;
@@ -38,7 +38,7 @@ export function BoardCard({
   const save = () => {
     const trimmed = value.trim();
     if (trimmed !== (statusMessage ?? "")) {
-      assignments.update(assignmentId, (draft: any) => {
+      assignments.update(assignmentId, (draft: { statusMessage?: string }) => {
         draft.statusMessage = trimmed || undefined;
       });
     }
@@ -47,7 +47,7 @@ export function BoardCard({
   const handleEditSave = (newTitle: string) => {
     const taskId = findCustomTaskId(workItem.id);
     if (taskId) {
-      customTasks.update(taskId, (draft: any) => {
+      customTasks.update(taskId, (draft: { title: string }) => {
         draft.title = newTitle;
       });
     }
@@ -62,13 +62,13 @@ export function BoardCard({
   };
 
   function findCustomTaskId(workItemId: number): string | null {
-    const all = [...(customTasks as any).state.values()] as any[];
+    const all = customTasks.toArray as CustomTask[];
     const found = all.find((t) => t.workItemId === workItemId);
     return found?.id ?? null;
   }
 
   const style = getTypeStyle(workItem.type);
-  const TypeIcon = getTypeIcon(workItem.type);
+  const typeIcon = getTypeIcon(workItem.type);
 
   return (
     <>
@@ -79,7 +79,9 @@ export function BoardCard({
         }`}
       >
         <div className="flex items-center gap-1.5 mb-1.5">
-          <TypeIcon className={`h-3.5 w-3.5 shrink-0 ${style.text}`} />
+          {createElement(typeIcon, {
+            className: `h-3.5 w-3.5 shrink-0 ${style.text}`,
+          })}
           <span className="flex-1" />
           {isCustomTask ? (
             <button

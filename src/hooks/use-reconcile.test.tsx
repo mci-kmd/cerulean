@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, act, waitFor } from "@testing-library/react";
+import { renderHook, waitFor } from "@testing-library/react";
 import { type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BoardCollectionsProvider } from "@/db/provider";
@@ -58,11 +58,11 @@ describe("useReconcile", () => {
       workItemId: 999,
       columnId: "col-todo",
     });
-    collections.assignments.insert(assignment as any);
+    collections.assignments.insert(assignment);
 
     // No work items match
     renderHook(
-      () => useReconcile([], [assignment as any], columns, collections),
+      () => useReconcile([], [assignment], columns, collections),
       { wrapper },
     );
 
@@ -78,10 +78,10 @@ describe("useReconcile", () => {
       workItemId: 999,
       columnId: "col-todo",
     });
-    collections.assignments.insert(assignment as any);
+    collections.assignments.insert(assignment);
 
     renderHook(
-      () => useReconcile([], [assignment as any], columns, collections, false),
+      () => useReconcile([], [assignment], columns, collections, false),
       { wrapper },
     );
 
@@ -99,7 +99,7 @@ describe("useReconcile", () => {
     });
     // Assignment exists in the list but NOT in the collection (already deleted)
     renderHook(
-      () => useReconcile([], [assignment as any], columns, collections),
+      () => useReconcile([], [assignment], columns, collections),
       { wrapper },
     );
 

@@ -17,7 +17,10 @@ export function createBatchResponse(
   return {
     count: ids.length,
     value: ids.map((id) =>
-      createAdoWorkItem({ id, fields: overrides[id] as any }),
+      createAdoWorkItem({
+        id,
+        fields: overrides[id] as unknown as AdoBatchResponse["value"][number]["fields"],
+      }),
     ),
   };
 }

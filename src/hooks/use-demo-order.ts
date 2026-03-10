@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo } from "react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { nanoid } from "nanoid";
-import { useBoardCollections } from "@/db/provider";
+import { useBoardCollections } from "@/db/use-board-collections";
 import type { DemoWorkItem, DemoOrderItem } from "@/types/demo";
 
 export function useDemoOrder(items: DemoWorkItem[]) {
   const { demoOrder } = useBoardCollections();
   const result = useLiveQuery(demoOrder);
-  const orderItems = (result.data ?? []) as unknown as DemoOrderItem[];
+  const orderItems = useMemo(
+    () => (result.data ?? []) as unknown as DemoOrderItem[],
+    [result.data],
+  );
 
   // Build a position map from persisted order
   const positionMap = useMemo(() => {
@@ -32,7 +35,7 @@ export function useDemoOrder(items: DemoWorkItem[]) {
           id: nanoid(),
           workItemId: item.id,
           position: maxPos,
-        } as any);
+        });
       }
     }
   }, [items, orderItems, demoOrder]);
@@ -72,7 +75,7 @@ export function useDemoOrder(items: DemoWorkItem[]) {
         (o) => o.workItemId === sourceWorkItemId,
       );
       if (sourceOrder) {
-        demoOrder.update(sourceOrder.id, (draft: any) => {
+        demoOrder.update(sourceOrder.id, (draft: { position: number }) => {
           draft.position = newPosition;
         });
       }

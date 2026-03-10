@@ -1,4 +1,4 @@
-import { useState, type Ref } from "react";
+import { createElement, useState, type Ref } from "react";
 import { Check, Undo2, ExternalLink, GripVertical, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CopyableId } from "@/components/copyable-id";
@@ -67,7 +67,7 @@ export function DemoItem({
   isDragSource,
 }: DemoItemProps) {
   const style = getTypeStyle(item.type);
-  const TypeIcon = getTypeIcon(item.type);
+  const typeIcon = getTypeIcon(item.type);
 
   if (isApproved && !isActive) {
     return (
@@ -78,7 +78,9 @@ export function DemoItem({
         aria-label={`Approved: ${item.title}`}
       >
         <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-        <TypeIcon className={`h-3.5 w-3.5 shrink-0 ${style.text}`} />
+        {createElement(typeIcon, {
+          className: `h-3.5 w-3.5 shrink-0 ${style.text}`,
+        })}
         <CopyableId id={item.id} className="text-[11px]" />
         <span className="text-sm line-through text-muted-foreground truncate">
           {item.title}
@@ -101,7 +103,9 @@ export function DemoItem({
           className="h-4 w-4 text-muted-foreground/40 shrink-0 cursor-grab active:cursor-grabbing"
           aria-label="Drag to reorder"
         />
-        <TypeIcon className={`h-3.5 w-3.5 shrink-0 ${style.text}`} />
+        {createElement(typeIcon, {
+          className: `h-3.5 w-3.5 shrink-0 ${style.text}`,
+        })}
         <CopyableId id={item.id} className="text-[11px]" />
         <span
           className={`text-sm font-medium min-w-0 flex-1 ${isActive ? "" : "cursor-pointer"}`}

@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { type ComponentProps, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2, Clock } from "lucide-react";
 import { DragDropProvider } from "@dnd-kit/react";
@@ -17,6 +17,10 @@ interface DemoViewProps {
   org: string;
   project: string;
 }
+
+type DemoDragEndEvent = Parameters<
+  NonNullable<ComponentProps<typeof DragDropProvider>["onDragEnd"]>
+>[0];
 
 export function DemoView({
   client,
@@ -83,13 +87,18 @@ export function DemoView({
   );
 
   const handleDragEnd = useCallback(
-    (event: { canceled: boolean; operation: { source: any; target: any } }) => {
+    (event: DemoDragEndEvent) => {
       if (event.canceled) return;
       const { source, target } = event.operation;
       if (!source || !target) return;
 
-      const sourceId = source.id as number;
-      const targetIndex = target.index as number | undefined;
+      const targetRecord = target as unknown as Record<string, unknown>;
+      const sourceId = Number(source.id);
+      if (!Number.isFinite(sourceId)) return;
+
+      const targetIndex = typeof targetRecord.index === "number"
+        ? targetRecord.index
+        : undefined;
       if (targetIndex === undefined) return;
 
       const unapprovedIds = sortedItems

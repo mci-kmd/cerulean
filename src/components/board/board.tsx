@@ -1,8 +1,8 @@
-import { useCallback } from "react";
+import { type ComponentProps, useCallback } from "react";
 import { DragDropProvider } from "@dnd-kit/react";
 import { BoardColumn } from "./board-column";
 import { scheduleColumnChange } from "./schedule-column-change";
-import { useBoardCollections } from "@/db/provider";
+import { useBoardCollections } from "@/db/use-board-collections";
 import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
 import { COMPLETED_COLUMN_ID } from "@/types/board";
 import type { BoardData } from "@/hooks/use-board";
@@ -14,20 +14,27 @@ interface BoardProps {
   onColumnChange?: (workItemId: number, fromColumnId: string, toColumnId: string) => void;
 }
 
+type DragEndEvent = Parameters<
+  NonNullable<ComponentProps<typeof DragDropProvider>["onDragEnd"]>
+>[0];
+
 export function Board({ data, bottomOffset = 0, onAddTask, onColumnChange }: BoardProps) {
   const { assignments: assignmentsCol } = useBoardCollections();
   const { columns, columnItems } = data;
 
   const handleDragEnd = useCallback(
-    (event: { canceled: boolean; operation: { source: any; target: any } }) => {
+    (event: DragEndEvent) => {
       if (event.canceled) return;
 
       const { source, target } = event.operation;
       if (!source || !target) return;
 
-      const sourceId = source.id as string;
-      const targetGroup = (target.group ?? target.id) as string;
-      const targetIndex = target.index as number | undefined;
+      const targetRecord = target as unknown as Record<string, unknown>;
+      const sourceId = String(source.id);
+      const targetGroup = String(targetRecord.group ?? target.id);
+      const targetIndex = typeof targetRecord.index === "number"
+        ? targetRecord.index
+        : undefined;
 
       const sourceAssignment = data.assignments.find(
         (a) => a.id === sourceId,
@@ -58,7 +65,7 @@ export function Board({ data, bottomOffset = 0, onAddTask, onColumnChange }: Boa
       const fromColumnId = sourceAssignment.columnId;
 
       scheduleDndMutation(() => {
-        assignmentsCol.update(sourceId, (draft: any) => {
+        assignmentsCol.update(sourceId, (draft: { columnId: string; position: number }) => {
           draft.columnId = targetGroup;
           draft.position = newPosition;
         });
