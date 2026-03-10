@@ -102,9 +102,7 @@ describe("BoardCard status message", () => {
     await user.tab(); // blur
 
     await waitFor(() => {
-      const updated = collections.assignments.get("asgn-blur") as
-        | { statusMessage?: string }
-        | undefined;
+      const updated = collections.assignments.get("asgn-blur");
       expect(updated?.statusMessage).toBe("Blocked");
     });
   });
@@ -119,9 +117,7 @@ describe("BoardCard status message", () => {
     await user.keyboard("{Enter}");
 
     await waitFor(() => {
-      const updated = collections.assignments.get("asgn-enter") as
-        | { statusMessage?: string }
-        | undefined;
+      const updated = collections.assignments.get("asgn-enter");
       expect(updated?.statusMessage).toBe("Done");
     });
   });
@@ -136,9 +132,7 @@ describe("BoardCard status message", () => {
     await user.tab();
 
     await waitFor(() => {
-      const updated = collections.assignments.get("asgn-trim") as
-        | { statusMessage?: string }
-        | undefined;
+      const updated = collections.assignments.get("asgn-trim");
       expect(updated?.statusMessage).toBe("Spaced");
     });
   });
@@ -155,9 +149,7 @@ describe("BoardCard status message", () => {
     await user.tab();
 
     await waitFor(() => {
-      const updated = collections.assignments.get("asgn-clear") as
-        | { statusMessage?: string }
-        | undefined;
+      const updated = collections.assignments.get("asgn-clear");
       expect(updated?.statusMessage).toBeUndefined();
     });
   });

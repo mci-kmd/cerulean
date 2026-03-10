@@ -141,11 +141,11 @@ export function App() {
       if (!task) return;
 
       if (toColumnId === COMPLETED_COLUMN_ID) {
-        collections.customTasks.update(task.id, (draft: { completedAt?: number }) => {
+        collections.customTasks.update(task.id, (draft) => {
           draft.completedAt = Date.now();
         });
       } else if (fromColumnId === COMPLETED_COLUMN_ID) {
-        collections.customTasks.update(task.id, (draft: { completedAt?: number }) => {
+        collections.customTasks.update(task.id, (draft) => {
           draft.completedAt = undefined;
         });
       }

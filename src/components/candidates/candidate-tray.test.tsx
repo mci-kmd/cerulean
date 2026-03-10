@@ -5,7 +5,6 @@ import { renderWithProviders } from "@/test/helpers/render";
 import { MockAdoClient } from "@/api/ado-client.mock";
 import { createAdoWorkItem } from "@/test/fixtures/work-items";
 import { CandidateTray } from "./candidate-tray";
-import type { AdoClient } from "@/api/ado-client";
 
 describe("CandidateTray", () => {
   let client: MockAdoClient;
@@ -60,7 +59,7 @@ describe("CandidateTray", () => {
 
     renderWithProviders(
       <CandidateTray
-        client={slowClient as unknown as AdoClient}
+        client={slowClient}
         candidateState="New"
         sourceState="Active"
         org="org"

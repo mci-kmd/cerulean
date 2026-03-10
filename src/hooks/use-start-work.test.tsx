@@ -27,6 +27,10 @@ describe("useStartWork", () => {
           "System.Title": "Work Item 42",
           "System.WorkItemType": "User Story",
           "System.State": "New",
+          "System.AssignedTo": {
+            displayName: "Me",
+            uniqueName: "me@test.com",
+          },
           "System.Rev": 1,
         },
       }),
@@ -55,7 +59,9 @@ describe("useStartWork", () => {
     queryClient.setQueryData(["candidates", "org", "proj", "New"], []);
     const orig = queryClient.invalidateQueries.bind(queryClient);
     queryClient.invalidateQueries = async (opts) => {
-      if ((opts?.queryKey as string[])?.[0] === "work-items") invalidated = true;
+      if (Array.isArray(opts?.queryKey) && opts.queryKey[0] === "work-items") {
+        invalidated = true;
+      }
       return orig(opts);
     };
 
@@ -134,6 +140,7 @@ describe("useStartWork", () => {
           "System.Title": "Work Item 42",
           "System.WorkItemType": "User Story",
           "System.State": "New",
+          "System.AssignedTo": undefined,
           "System.Rev": 1,
         },
       }),

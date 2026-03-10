@@ -3,23 +3,23 @@ import {
   localStorageCollectionOptions,
   localOnlyCollectionOptions,
 } from "@tanstack/db";
+import type { Collection, NonSingleResult } from "@tanstack/db";
 import type { AdoSettings, BoardColumn, ColumnAssignment, CustomTask } from "@/types/board";
 import type { DemoChecklistItem, DemoOrderItem } from "@/types/demo";
 
-// TanStack DB beta has complex generic types; use pragmatic typing
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AppCollection = any;
+export type AppCollection<T extends object, TKey extends string | number> =
+  Collection<T, TKey> & NonSingleResult;
 
 export interface BoardCollections {
-  settings: AppCollection;
-  columns: AppCollection;
-  assignments: AppCollection;
-  demoChecklist: AppCollection;
-  demoOrder: AppCollection;
-  customTasks: AppCollection;
+  settings: AppCollection<AdoSettings, string>;
+  columns: AppCollection<BoardColumn, string>;
+  assignments: AppCollection<ColumnAssignment, string>;
+  demoChecklist: AppCollection<DemoChecklistItem, string>;
+  demoOrder: AppCollection<DemoOrderItem, string>;
+  customTasks: AppCollection<CustomTask, string>;
 }
 
-function createSettingsCollection(inMemory: boolean) {
+function createSettingsCollection(inMemory: boolean): AppCollection<AdoSettings, string> {
   if (inMemory) {
     return createCollection(
       localOnlyCollectionOptions<AdoSettings, string>({
@@ -35,7 +35,7 @@ function createSettingsCollection(inMemory: boolean) {
   );
 }
 
-function createColumnsCollection(inMemory: boolean) {
+function createColumnsCollection(inMemory: boolean): AppCollection<BoardColumn, string> {
   if (inMemory) {
     return createCollection(
       localOnlyCollectionOptions<BoardColumn, string>({
@@ -51,7 +51,7 @@ function createColumnsCollection(inMemory: boolean) {
   );
 }
 
-function createAssignmentsCollection(inMemory: boolean) {
+function createAssignmentsCollection(inMemory: boolean): AppCollection<ColumnAssignment, string> {
   if (inMemory) {
     return createCollection(
       localOnlyCollectionOptions<ColumnAssignment, string>({
@@ -67,7 +67,7 @@ function createAssignmentsCollection(inMemory: boolean) {
   );
 }
 
-function createDemoChecklistCollection(inMemory: boolean) {
+function createDemoChecklistCollection(inMemory: boolean): AppCollection<DemoChecklistItem, string> {
   if (inMemory) {
     return createCollection(
       localOnlyCollectionOptions<DemoChecklistItem, string>({
@@ -83,7 +83,7 @@ function createDemoChecklistCollection(inMemory: boolean) {
   );
 }
 
-function createDemoOrderCollection(inMemory: boolean) {
+function createDemoOrderCollection(inMemory: boolean): AppCollection<DemoOrderItem, string> {
   if (inMemory) {
     return createCollection(
       localOnlyCollectionOptions<DemoOrderItem, string>({
@@ -99,7 +99,7 @@ function createDemoOrderCollection(inMemory: boolean) {
   );
 }
 
-function createCustomTasksCollection(inMemory: boolean) {
+function createCustomTasksCollection(inMemory: boolean): AppCollection<CustomTask, string> {
   if (inMemory) {
     return createCollection(
       localOnlyCollectionOptions<CustomTask, string>({

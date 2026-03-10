@@ -3,6 +3,10 @@ import { DEMO_DETAIL_FIELDS } from "./ado-client";
 import type { DemoWorkItem } from "@/types/demo";
 import type { AdoWorkItem } from "@/types/ado";
 
+function stringOrEmpty(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
 export function mapAdoDemoWorkItem(
   item: AdoWorkItem,
   org: string,
@@ -17,10 +21,9 @@ export function mapAdoDemoWorkItem(
     url:
       item._links?.html?.href ??
       `https://dev.azure.com/${org}/${project}/_workitems/edit/${item.id}`,
-    description: (f["System.Description"] as string) ?? "",
-    acceptanceCriteria:
-      (f["Microsoft.VSTS.Common.AcceptanceCriteria"] as string) ?? "",
-    reproSteps: (f["Microsoft.VSTS.TCM.ReproSteps"] as string) ?? "",
+    description: stringOrEmpty(f["System.Description"]),
+    acceptanceCriteria: stringOrEmpty(f["Microsoft.VSTS.Common.AcceptanceCriteria"]),
+    reproSteps: stringOrEmpty(f["Microsoft.VSTS.TCM.ReproSteps"]),
   };
 }
 

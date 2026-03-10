@@ -7,10 +7,7 @@ import type { DemoWorkItem, DemoOrderItem } from "@/types/demo";
 export function useDemoOrder(items: DemoWorkItem[]) {
   const { demoOrder } = useBoardCollections();
   const result = useLiveQuery(demoOrder);
-  const orderItems = useMemo(
-    () => (result.data ?? []) as unknown as DemoOrderItem[],
-    [result.data],
-  );
+  const orderItems = result.data;
 
   // Build a position map from persisted order
   const positionMap = useMemo(() => {
@@ -55,7 +52,7 @@ export function useDemoOrder(items: DemoWorkItem[]) {
       const others = sortedIds.filter((id) => id !== sourceWorkItemId);
       const otherOrders = others
         .map((id) => orderItems.find((o) => o.workItemId === id))
-        .filter(Boolean) as DemoOrderItem[];
+        .filter((item): item is DemoOrderItem => item !== undefined);
 
       let newPosition: number;
       if (targetIndex < otherOrders.length) {
@@ -75,7 +72,7 @@ export function useDemoOrder(items: DemoWorkItem[]) {
         (o) => o.workItemId === sourceWorkItemId,
       );
       if (sourceOrder) {
-        demoOrder.update(sourceOrder.id, (draft: { position: number }) => {
+        demoOrder.update(sourceOrder.id, (draft) => {
           draft.position = newPosition;
         });
       }

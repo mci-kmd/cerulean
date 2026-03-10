@@ -1,5 +1,6 @@
 import { type ComponentProps, useCallback } from "react";
 import { DragDropProvider } from "@dnd-kit/react";
+import { isSortableOperation } from "@dnd-kit/react/sortable";
 import { BoardColumn } from "./board-column";
 import { scheduleColumnChange } from "./schedule-column-change";
 import { useBoardCollections } from "@/db/use-board-collections";
@@ -25,16 +26,18 @@ export function Board({ data, bottomOffset = 0, onAddTask, onColumnChange }: Boa
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       if (event.canceled) return;
-
-      const { source, target } = event.operation;
+      const operation = event.operation;
+      if (!isSortableOperation(operation)) return;
+      const { source, target } = operation;
       if (!source || !target) return;
 
-      const targetRecord = target as unknown as Record<string, unknown>;
-      const sourceId = String(source.id);
-      const targetGroup = String(targetRecord.group ?? target.id);
-      const targetIndex = typeof targetRecord.index === "number"
-        ? targetRecord.index
-        : undefined;
+      const sourceId = source.id;
+      if (typeof sourceId !== "string") return;
+
+      const targetGroup = target.group ?? target.id;
+      if (typeof targetGroup !== "string") return;
+
+      const targetIndex = target.index;
 
       const sourceAssignment = data.assignments.find(
         (a) => a.id === sourceId,
@@ -65,7 +68,7 @@ export function Board({ data, bottomOffset = 0, onAddTask, onColumnChange }: Boa
       const fromColumnId = sourceAssignment.columnId;
 
       scheduleDndMutation(() => {
-        assignmentsCol.update(sourceId, (draft: { columnId: string; position: number }) => {
+        assignmentsCol.update(sourceId, (draft) => {
           draft.columnId = targetGroup;
           draft.position = newPosition;
         });

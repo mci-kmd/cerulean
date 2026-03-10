@@ -6,11 +6,15 @@ import { Board } from "./board";
 import type { BoardData } from "@/hooks/use-board";
 import type { ColumnAssignment } from "@/types/board";
 
-const dragMocks = vi.hoisted(() => ({
-  onDragEnd: null as
-    | ((event: { canceled: boolean; operation: { source: unknown; target: unknown } }) => void)
-    | null,
-}));
+type MockDragEvent = {
+  canceled: boolean;
+  operation: { source: unknown; target: unknown };
+};
+
+const dragMocks: { onDragEnd: ((event: MockDragEvent) => void) | null } =
+  vi.hoisted(() => ({
+    onDragEnd: null,
+  }));
 
 vi.mock("@dnd-kit/react", async () => {
   const React = await import("react");
@@ -19,7 +23,7 @@ vi.mock("@dnd-kit/react", async () => {
       onDragEnd,
       children,
     }: {
-      onDragEnd: (event: { canceled: boolean; operation: { source: unknown; target: unknown } }) => void;
+      onDragEnd: (event: MockDragEvent) => void;
       children: ReactNode;
     }) => {
       dragMocks.onDragEnd = onDragEnd;
@@ -31,6 +35,15 @@ vi.mock("@dnd-kit/react", async () => {
 
 vi.mock("@dnd-kit/react/sortable", () => ({
   useSortable: () => ({ ref: () => undefined, isDragSource: false }),
+  isSortableOperation: (operation: MockDragEvent["operation"]) =>
+    Boolean(
+      operation.source &&
+      operation.target &&
+      typeof operation.target === "object" &&
+      operation.target !== null &&
+      "index" in operation.target &&
+      typeof operation.target.index === "number",
+    ),
 }));
 
 function createData(): { data: BoardData; assignment: ColumnAssignment } {
@@ -66,7 +79,7 @@ describe("Board drag safety", () => {
   it("defers assignment update when moving last card to another column", async () => {
     const collections = createTestCollections();
     const { data, assignment } = createData();
-    collections.assignments.insert(assignment as never);
+    collections.assignments.insert(assignment);
     const updateSpy = vi.spyOn(collections.assignments, "update");
 
     renderWithProviders(<Board data={data} />, { collections });

@@ -52,7 +52,7 @@ interface DemoItemProps {
   onSelect: () => void;
   onApprove: () => void;
   onUnapprove: () => void;
-  sortableRef?: Ref<HTMLElement>;
+  sortableRef?: Ref<HTMLDivElement>;
   isDragSource?: boolean;
 }
 
@@ -91,7 +91,7 @@ export function DemoItem({
 
   return (
     <div
-      ref={sortableRef as Ref<HTMLDivElement>}
+      ref={sortableRef}
       className={`rounded-lg border text-card-foreground transition-all ${style.border} ${
         isActive
           ? "border-l-[4px] shadow-lg ring-2 ring-primary/50 bg-primary/5"

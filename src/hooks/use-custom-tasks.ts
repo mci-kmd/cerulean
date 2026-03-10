@@ -9,10 +9,7 @@ const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
 export function useCustomTasks(): CustomTask[] {
   const { customTasks } = useBoardCollections();
   const result = useLiveQuery(customTasks);
-  const all = useMemo(
-    () => (result.data ?? []) as unknown as CustomTask[],
-    [result.data],
-  );
+  const all = result.data;
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {

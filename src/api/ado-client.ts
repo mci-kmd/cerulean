@@ -37,6 +37,16 @@ const DETAIL_FIELDS = [
   "System.Rev",
 ];
 
+interface ConnectionDataResponse {
+  authenticatedUser?: {
+    properties?: {
+      Account?: {
+        $value?: unknown;
+      };
+    };
+  };
+}
+
 export const DEMO_DETAIL_FIELDS = [
   ...DETAIL_FIELDS,
   "System.Description",
@@ -124,9 +134,12 @@ export class HttpAdoClient implements AdoClient {
       { headers: { Authorization: this.authHeader } },
     );
     if (!res.ok) throw new Error(`Connection data fetch failed: ${res.status}`);
-    const data = await res.json();
-    this.cachedEmail = data.authenticatedUser.properties.Account
-      .$value as string;
+    const data: ConnectionDataResponse = await res.json();
+    const email = data.authenticatedUser?.properties?.Account?.$value;
+    if (typeof email !== "string" || email.length === 0) {
+      throw new Error("Connection data missing authenticated user email");
+    }
+    this.cachedEmail = email;
     return this.cachedEmail;
   }
 

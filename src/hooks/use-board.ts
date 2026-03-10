@@ -7,20 +7,15 @@ import { COMPLETED_COLUMN_ID } from "@/types/board";
 export function useSettings(): AdoSettings | null {
   const { settings } = useBoardCollections();
   const result = useLiveQuery(settings);
-  const data = result.data as unknown as AdoSettings[] | undefined;
-  return data?.[0] ?? null;
+  return result.data[0] ?? null;
 }
 
 export function useColumns(): BoardColumn[] {
   const { columns } = useBoardCollections();
   const result = useLiveQuery(columns);
-  const data = useMemo(
-    () => (result.data ?? []) as unknown as BoardColumn[],
-    [result.data],
-  );
   const sorted = useMemo(
-    () => [...data].sort((a, b) => a.order - b.order),
-    [data],
+    () => [...result.data].sort((a, b) => a.order - b.order),
+    [result.data],
   );
   return sorted;
 }
@@ -28,7 +23,7 @@ export function useColumns(): BoardColumn[] {
 export function useAssignments(): ColumnAssignment[] {
   const { assignments } = useBoardCollections();
   const result = useLiveQuery(assignments);
-  return (result.data ?? []) as unknown as ColumnAssignment[];
+  return result.data;
 }
 
 export interface BoardData {

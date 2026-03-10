@@ -1,6 +1,8 @@
 import type { WiqlResponse, AdoBatchResponse } from "@/types/ado";
 import { createAdoWorkItem } from "./work-items";
 
+type AdoFields = AdoBatchResponse["value"][number]["fields"];
+
 export function createWiqlResponse(ids: number[]): WiqlResponse {
   return {
     workItems: ids.map((id) => ({
@@ -12,14 +14,14 @@ export function createWiqlResponse(ids: number[]): WiqlResponse {
 
 export function createBatchResponse(
   ids: number[],
-  overrides: Record<number, Record<string, unknown>> = {},
+  overrides: Partial<Record<number, Partial<AdoFields>>> = {},
 ): AdoBatchResponse {
   return {
     count: ids.length,
     value: ids.map((id) =>
       createAdoWorkItem({
         id,
-        fields: overrides[id] as unknown as AdoBatchResponse["value"][number]["fields"],
+        fields: overrides[id],
       }),
     ),
   };

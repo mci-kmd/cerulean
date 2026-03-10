@@ -5,7 +5,7 @@ import { useBoardCollections } from "@/db/use-board-collections";
 import { CopyableId } from "@/components/copyable-id";
 import { getTypeStyle, getTypeIcon, CUSTOM_TASK_TYPE } from "@/lib/work-item-types";
 import { TaskDialog } from "./task-dialog";
-import type { CustomTask, WorkItem } from "@/types/board";
+import type { WorkItem } from "@/types/board";
 
 interface BoardCardProps {
   workItem: WorkItem;
@@ -38,7 +38,7 @@ export function BoardCard({
   const save = () => {
     const trimmed = value.trim();
     if (trimmed !== (statusMessage ?? "")) {
-      assignments.update(assignmentId, (draft: { statusMessage?: string }) => {
+      assignments.update(assignmentId, (draft) => {
         draft.statusMessage = trimmed || undefined;
       });
     }
@@ -47,7 +47,7 @@ export function BoardCard({
   const handleEditSave = (newTitle: string) => {
     const taskId = findCustomTaskId(workItem.id);
     if (taskId) {
-      customTasks.update(taskId, (draft: { title: string }) => {
+      customTasks.update(taskId, (draft) => {
         draft.title = newTitle;
       });
     }
@@ -62,8 +62,7 @@ export function BoardCard({
   };
 
   function findCustomTaskId(workItemId: number): string | null {
-    const all = customTasks.toArray as CustomTask[];
-    const found = all.find((t) => t.workItemId === workItemId);
+    const found = customTasks.toArray.find((t) => t.workItemId === workItemId);
     return found?.id ?? null;
   }
 

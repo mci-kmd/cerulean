@@ -3,10 +3,16 @@ import type { WorkItem } from "@/types/board";
 
 let nextId = 1;
 
+type AdoWorkItemOverrides = Omit<Partial<AdoWorkItem>, "fields"> & {
+  id?: number;
+  fields?: Partial<AdoWorkItem["fields"]>;
+};
+
 export function createAdoWorkItem(
-  overrides: Partial<AdoWorkItem> & { id?: number } = {},
+  overrides: AdoWorkItemOverrides = {},
 ): AdoWorkItem {
   const id = overrides.id ?? nextId++;
+  const { fields: fieldOverrides, ...rest } = overrides;
   return {
     id,
     rev: 1,
@@ -21,10 +27,10 @@ export function createAdoWorkItem(
         uniqueName: "test@example.com",
       },
       "System.Rev": 1,
-      ...(overrides.fields ?? {}),
+      ...(fieldOverrides ?? {}),
     },
     _links: { html: { href: `https://dev.azure.com/test-org/test-project/_workitems/edit/${id}` } },
-    ...overrides,
+    ...rest,
   };
 }
 

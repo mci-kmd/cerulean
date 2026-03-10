@@ -2,6 +2,7 @@ import { type ComponentProps, useState, useCallback } from "react";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2, Clock } from "lucide-react";
 import { DragDropProvider } from "@dnd-kit/react";
+import { isSortableOperation } from "@dnd-kit/react/sortable";
 import { DemoItem } from "./demo-item";
 import { SortableDemoItem } from "./sortable-demo-item";
 import { useDemoWorkItems } from "@/hooks/use-demo-work-items";
@@ -89,17 +90,14 @@ export function DemoView({
   const handleDragEnd = useCallback(
     (event: DemoDragEndEvent) => {
       if (event.canceled) return;
-      const { source, target } = event.operation;
+      const operation = event.operation;
+      if (!isSortableOperation(operation)) return;
+      const { source, target } = operation;
       if (!source || !target) return;
 
-      const targetRecord = target as unknown as Record<string, unknown>;
-      const sourceId = Number(source.id);
-      if (!Number.isFinite(sourceId)) return;
-
-      const targetIndex = typeof targetRecord.index === "number"
-        ? targetRecord.index
-        : undefined;
-      if (targetIndex === undefined) return;
+      const sourceId = source.id;
+      if (typeof sourceId !== "number") return;
+      const targetIndex = target.index;
 
       const unapprovedIds = sortedItems
         .filter((i) => !approvedIds.has(i.id))

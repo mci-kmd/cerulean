@@ -16,7 +16,7 @@ export function CopyableId({ id, className = "" }: CopyableIdProps) {
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(String(id));
+    navigator.clipboard.writeText(id.toString());
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };

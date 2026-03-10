@@ -2,11 +2,18 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { ReactNode } from "react";
 import { renderWithProviders } from "@/test/helpers/render";
 import { DemoView } from "./demo-view";
+import { MockAdoClient } from "@/api/ado-client.mock";
 
-const demoDragMocks = vi.hoisted(() => ({
-  onDragEnd: null as
-    | ((event: { canceled: boolean; operation: { source: unknown; target: unknown } }) => void)
-    | null,
+type MockDragEvent = {
+  canceled: boolean;
+  operation: { source: unknown; target: unknown };
+};
+
+const demoDragMocks: {
+  onDragEnd: ((event: MockDragEvent) => void) | null;
+  reorder: ReturnType<typeof vi.fn>;
+} = vi.hoisted(() => ({
+  onDragEnd: null,
   reorder: vi.fn(),
 }));
 
@@ -17,7 +24,7 @@ vi.mock("@dnd-kit/react", async () => {
       onDragEnd,
       children,
     }: {
-      onDragEnd: (event: { canceled: boolean; operation: { source: unknown; target: unknown } }) => void;
+      onDragEnd: (event: MockDragEvent) => void;
       children: ReactNode;
     }) => {
       demoDragMocks.onDragEnd = onDragEnd;
@@ -67,6 +74,19 @@ vi.mock("@/hooks/use-demo-order", () => ({
   }),
 }));
 
+vi.mock("@dnd-kit/react/sortable", () => ({
+  useSortable: () => ({ ref: () => undefined, isDragSource: false }),
+  isSortableOperation: (operation: MockDragEvent["operation"]) =>
+    Boolean(
+      operation.source &&
+      operation.target &&
+      typeof operation.target === "object" &&
+      operation.target !== null &&
+      "index" in operation.target &&
+      typeof operation.target.index === "number",
+    ),
+}));
+
 describe("DemoView drag safety", () => {
   beforeEach(() => {
     demoDragMocks.onDragEnd = null;
@@ -76,7 +96,7 @@ describe("DemoView drag safety", () => {
   it("defers reorder mutation from onDragEnd", async () => {
     renderWithProviders(
       <DemoView
-        client={null as never}
+        client={new MockAdoClient()}
         approvalState="Resolved"
         closedState="Closed"
         org="org"

@@ -7,10 +7,7 @@ import type { DemoChecklistItem } from "@/types/demo";
 export function useDemoChecklist(workItemId: number) {
   const { demoChecklist } = useBoardCollections();
   const result = useLiveQuery(demoChecklist);
-  const allItems = useMemo(
-    () => (result.data ?? []) as unknown as DemoChecklistItem[],
-    [result.data],
-  );
+  const allItems = result.data;
   const items = useMemo(
     () =>
       allItems
@@ -37,7 +34,7 @@ export function useDemoChecklist(workItemId: number) {
     (id: string) => {
       const item = allItems.find((i) => i.id === id);
       if (item) {
-        demoChecklist.update(id, (d: { checked: boolean }) => {
+        demoChecklist.update(id, (d) => {
           d.checked = !item.checked;
         });
       }

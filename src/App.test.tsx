@@ -6,7 +6,7 @@ import { App } from "./App";
 import { server } from "@/test/msw/server";
 import { http, HttpResponse } from "msw";
 import { createAdoWorkItem } from "@/test/fixtures/work-items";
-import { DEFAULT_SETTINGS, type AdoSettings, type BoardColumn } from "@/types/board";
+import { DEFAULT_SETTINGS, type AdoSettings } from "@/types/board";
 
 const BASE = "https://dev.azure.com/test-org/test-project";
 
@@ -83,8 +83,8 @@ describe("App integration", () => {
       }),
     );
 
-    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 } as BoardColumn);
-    collections.columns.insert({ id: "col-2", name: "Done", order: 1 } as BoardColumn);
+    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+    collections.columns.insert({ id: "col-2", name: "Done", order: 1 });
 
     await waitFor(
       () => {
@@ -131,7 +131,7 @@ describe("App integration", () => {
         pollInterval: 60,
       }),
     );
-    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 } as BoardColumn);
+    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
 
     await waitFor(() => {
       expect(screen.getByLabelText("Demo mode")).toBeInTheDocument();
@@ -155,7 +155,7 @@ describe("App integration", () => {
         pollInterval: 60,
       }),
     );
-    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 } as BoardColumn);
+    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
 
     await waitFor(() => {
       expect(screen.getByText("To Do")).toBeInTheDocument();
@@ -183,7 +183,7 @@ describe("App integration", () => {
         pollInterval: 60,
       }),
     );
-    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 } as BoardColumn);
+    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
 
     await waitFor(() => {
       expect(screen.getByLabelText("Demo mode")).toBeInTheDocument();
