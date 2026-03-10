@@ -3,6 +3,7 @@ import { DragDropProvider } from "@dnd-kit/react";
 import { BoardColumn } from "./board-column";
 import { scheduleColumnChange } from "./schedule-column-change";
 import { useBoardCollections } from "@/db/provider";
+import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
 import { COMPLETED_COLUMN_ID } from "@/types/board";
 import type { BoardData } from "@/hooks/use-board";
 
@@ -56,19 +57,21 @@ export function Board({ data, bottomOffset = 0, onAddTask, onColumnChange }: Boa
 
       const fromColumnId = sourceAssignment.columnId;
 
-      assignmentsCol.update(sourceId, (draft: any) => {
-        draft.columnId = targetGroup;
-        draft.position = newPosition;
-      });
+      scheduleDndMutation(() => {
+        assignmentsCol.update(sourceId, (draft: any) => {
+          draft.columnId = targetGroup;
+          draft.position = newPosition;
+        });
 
-      if (fromColumnId !== targetGroup && onColumnChange) {
-        scheduleColumnChange(
-          onColumnChange,
-          sourceAssignment.workItemId,
-          fromColumnId,
-          targetGroup,
-        );
-      }
+        if (fromColumnId !== targetGroup && onColumnChange) {
+          scheduleColumnChange(
+            onColumnChange,
+            sourceAssignment.workItemId,
+            fromColumnId,
+            targetGroup,
+          );
+        }
+      });
     },
     [data.assignments, columnItems, assignmentsCol, onColumnChange],
   );

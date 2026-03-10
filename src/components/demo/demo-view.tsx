@@ -7,6 +7,7 @@ import { SortableDemoItem } from "./sortable-demo-item";
 import { useDemoWorkItems } from "@/hooks/use-demo-work-items";
 import { useDemoApprove } from "@/hooks/use-demo-approve";
 import { useDemoOrder } from "@/hooks/use-demo-order";
+import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
 import type { AdoClient } from "@/api/ado-client";
 
 interface DemoViewProps {
@@ -94,7 +95,7 @@ export function DemoView({
       const unapprovedIds = sortedItems
         .filter((i) => !approvedIds.has(i.id))
         .map((i) => i.id);
-      reorder(sourceId, targetIndex, unapprovedIds);
+      scheduleDndMutation(() => reorder(sourceId, targetIndex, unapprovedIds));
     },
     [reorder, sortedItems, approvedIds],
   );
