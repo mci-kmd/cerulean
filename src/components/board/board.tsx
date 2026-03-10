@@ -27,24 +27,43 @@ export function Board({ data, bottomOffset = 0, onAddTask, onColumnChange }: Boa
     (event: DragEndEvent) => {
       if (event.canceled) return;
       const operation = event.operation;
-      if (!isSortableOperation(operation)) return;
       const { source, target } = operation;
       if (!source || !target) return;
 
       const sourceId = source.id;
       if (typeof sourceId !== "string") return;
 
-      const targetGroup = target.group ?? target.id;
-      if (typeof targetGroup !== "string") return;
+      const sortableOperation = isSortableOperation(operation);
+      let targetIndex: number | undefined;
+      const targetColumnId = (() => {
+        if (sortableOperation) {
+          const sortableTarget = operation.target;
+          if (!sortableTarget) return undefined;
 
-      const targetIndex = target.index;
+          targetIndex = sortableTarget.index;
+          if (typeof sortableTarget.group === "string") {
+            return sortableTarget.group;
+          }
+
+          if (typeof sortableTarget.id === "string") {
+            return data.assignments.find((a) => a.id === sortableTarget.id)?.columnId;
+          }
+        }
+
+        const fallbackTargetId = target.id;
+        if (typeof fallbackTargetId !== "string") return undefined;
+        if (columnItems.has(fallbackTargetId)) return fallbackTargetId;
+
+        return data.assignments.find((a) => a.id === fallbackTargetId)?.columnId;
+      })();
+      if (!targetColumnId) return;
 
       const sourceAssignment = data.assignments.find(
         (a) => a.id === sourceId,
       );
       if (!sourceAssignment) return;
 
-      const targetItems = columnItems.get(targetGroup) ?? [];
+      const targetItems = columnItems.get(targetColumnId) ?? [];
       const targetAssignments = targetItems
         .map((t) => t.assignment)
         .filter((a) => a.id !== sourceId);
@@ -69,16 +88,16 @@ export function Board({ data, bottomOffset = 0, onAddTask, onColumnChange }: Boa
 
       scheduleDndMutation(() => {
         assignmentsCol.update(sourceId, (draft) => {
-          draft.columnId = targetGroup;
+          draft.columnId = targetColumnId;
           draft.position = newPosition;
         });
 
-        if (fromColumnId !== targetGroup && onColumnChange) {
+        if (fromColumnId !== targetColumnId && onColumnChange) {
           scheduleColumnChange(
             onColumnChange,
             sourceAssignment.workItemId,
             fromColumnId,
-            targetGroup,
+            targetColumnId,
           );
         }
       });

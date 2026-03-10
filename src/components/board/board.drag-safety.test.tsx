@@ -5,6 +5,7 @@ import { createWorkItem } from "@/test/fixtures/work-items";
 import { Board } from "./board";
 import type { BoardData } from "@/hooks/use-board";
 import type { ColumnAssignment } from "@/types/board";
+import { COMPLETED_COLUMN_ID } from "@/types/board";
 
 type MockDragEvent = {
   canceled: boolean;
@@ -96,5 +97,38 @@ describe("Board drag safety", () => {
     expect(updateSpy).not.toHaveBeenCalled();
     await new Promise<void>((resolve) => queueMicrotask(resolve));
     expect(updateSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("allows dropping into empty completed column", async () => {
+    const collections = createTestCollections();
+    const { data, assignment } = createData();
+    collections.assignments.insert(assignment);
+
+    const dataWithCompleted: BoardData = {
+      ...data,
+      columns: [
+        ...data.columns,
+        { id: COMPLETED_COLUMN_ID, name: "Completed", order: Number.POSITIVE_INFINITY },
+      ],
+      columnItems: new Map([
+        ...data.columnItems,
+        [COMPLETED_COLUMN_ID, []],
+      ]),
+    };
+
+    renderWithProviders(<Board data={dataWithCompleted} />, { collections });
+    expect(dragMocks.onDragEnd).toBeTypeOf("function");
+
+    dragMocks.onDragEnd?.({
+      canceled: false,
+      operation: {
+        source: { id: assignment.id },
+        target: { id: COMPLETED_COLUMN_ID },
+      },
+    });
+
+    expect(collections.assignments.get(assignment.id)?.columnId).toBe("col-1");
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    expect(collections.assignments.get(assignment.id)?.columnId).toBe(COMPLETED_COLUMN_ID);
   });
 });
