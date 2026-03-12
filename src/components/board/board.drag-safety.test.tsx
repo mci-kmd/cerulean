@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { renderWithProviders, createTestCollections } from "@/test/helpers/render";
 import { createWorkItem } from "@/test/fixtures/work-items";
@@ -74,10 +74,15 @@ function createData(): { data: BoardData; assignment: ColumnAssignment } {
 
 describe("Board drag safety", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     dragMocks.onDragEnd = null;
   });
 
-  it("defers assignment update when moving last card to another column", async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("defers assignment update when moving last card to another column", () => {
     const collections = createTestCollections();
     const { data, assignment } = createData();
     collections.assignments.insert(assignment);
@@ -95,11 +100,11 @@ describe("Board drag safety", () => {
     });
 
     expect(updateSpy).not.toHaveBeenCalled();
-    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    vi.runAllTimers();
     expect(updateSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("allows dropping into empty completed column", async () => {
+  it("allows dropping into empty completed column", () => {
     const collections = createTestCollections();
     const { data, assignment } = createData();
     collections.assignments.insert(assignment);
@@ -128,7 +133,7 @@ describe("Board drag safety", () => {
     });
 
     expect(collections.assignments.get(assignment.id)?.columnId).toBe("col-1");
-    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    vi.runAllTimers();
     expect(collections.assignments.get(assignment.id)?.columnId).toBe(COMPLETED_COLUMN_ID);
   });
 });

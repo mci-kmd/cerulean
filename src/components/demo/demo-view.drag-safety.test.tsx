@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { renderWithProviders } from "@/test/helpers/render";
 import { DemoView } from "./demo-view";
@@ -89,11 +89,16 @@ vi.mock("@dnd-kit/react/sortable", () => ({
 
 describe("DemoView drag safety", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     demoDragMocks.onDragEnd = null;
     demoDragMocks.reorder.mockReset();
   });
 
-  it("defers reorder mutation from onDragEnd", async () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("defers reorder mutation from onDragEnd", () => {
     renderWithProviders(
       <DemoView
         client={new MockAdoClient()}
@@ -115,7 +120,7 @@ describe("DemoView drag safety", () => {
     });
 
     expect(demoDragMocks.reorder).not.toHaveBeenCalled();
-    await new Promise<void>((resolve) => queueMicrotask(resolve));
+    vi.runAllTimers();
     expect(demoDragMocks.reorder).toHaveBeenCalledTimes(1);
     expect(demoDragMocks.reorder).toHaveBeenCalledWith(300, 0, [300]);
   });
