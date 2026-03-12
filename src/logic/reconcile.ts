@@ -1,5 +1,5 @@
 import type { BoardColumn, ColumnAssignment, WorkItem } from "@/types/board";
-import { COMPLETED_COLUMN_ID } from "@/types/board";
+import { COMPLETED_COLUMN_ID, NEW_WORK_COLUMN_ID } from "@/types/board";
 import { nanoid } from "nanoid";
 
 export interface ReconcileResult {
@@ -13,6 +13,7 @@ export function reconcile(
   freshWorkItems: WorkItem[],
   columns: BoardColumn[],
   approvalState?: string,
+  candidateState?: string,
 ): ReconcileResult {
   const freshIds = new Set(freshWorkItems.map((w) => w.id));
   const assignedIds = new Set(currentAssignments.map((a) => a.workItemId));
@@ -27,13 +28,35 @@ export function reconcile(
 
   const added: ColumnAssignment[] = [];
 
-  // Split new items: completed (approvalState) vs active (first column)
+  // Split new items: candidate (new work), completed, active
+  const candidateItems = candidateState
+    ? newItems.filter((w) => w.state === candidateState)
+    : [];
+  const nonCandidateItems = candidateState
+    ? newItems.filter((w) => w.state !== candidateState)
+    : newItems;
   const completedItems = approvalState
-    ? newItems.filter((w) => w.state === approvalState)
+    ? nonCandidateItems.filter((w) => w.state === approvalState)
     : [];
   const activeItems = approvalState
-    ? newItems.filter((w) => w.state !== approvalState)
-    : newItems;
+    ? nonCandidateItems.filter((w) => w.state !== approvalState)
+    : nonCandidateItems;
+
+  // Add candidate items to New Work
+  if (candidateItems.length > 0) {
+    const existingInNewWork = currentAssignments
+      .filter((a) => a.columnId === NEW_WORK_COLUMN_ID)
+      .reduce((max, a) => Math.max(max, a.position), 0);
+
+    for (let i = 0; i < candidateItems.length; i++) {
+      added.push({
+        id: nanoid(),
+        workItemId: candidateItems[i].id,
+        columnId: NEW_WORK_COLUMN_ID,
+        position: existingInNewWork + i + 1,
+      });
+    }
+  }
 
   // Add active items to first column
   const existingInFirstCol = currentAssignments

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/helpers/render";
 import { Board } from "./board";
 import { scheduleColumnChange } from "./schedule-column-change";
@@ -77,7 +78,7 @@ describe("Board", () => {
 
     renderWithProviders(<Board data={data} />);
     expect(screen.getByText("Empty Col")).toBeInTheDocument();
-    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(screen.getAllByText("0").length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders completed column with distinct styling", () => {
@@ -104,5 +105,19 @@ describe("Board", () => {
     renderWithProviders(<Board data={data} />);
     expect(screen.getByText("Completed")).toBeInTheDocument();
     expect(screen.getByText("Done item")).toBeInTheDocument();
+  });
+
+  it("shows add-task button only on New Work when enabled", async () => {
+    const user = userEvent.setup();
+    const onAddTask = vi.fn();
+
+    renderWithProviders(<Board data={createBoardData()} onAddTask={onAddTask} />);
+
+    const addButtons = screen.getAllByRole("button", { name: /add task to/i });
+    expect(addButtons).toHaveLength(1);
+    expect(addButtons[0]).toHaveAccessibleName("Add task to New Work");
+
+    await user.click(addButtons[0]);
+    expect(onAddTask).toHaveBeenCalledTimes(1);
   });
 });

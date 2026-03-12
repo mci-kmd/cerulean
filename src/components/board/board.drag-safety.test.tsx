@@ -5,7 +5,7 @@ import { createWorkItem } from "@/test/fixtures/work-items";
 import { Board } from "./board";
 import type { BoardData } from "@/hooks/use-board";
 import type { ColumnAssignment } from "@/types/board";
-import { COMPLETED_COLUMN_ID } from "@/types/board";
+import { COMPLETED_COLUMN_ID, NEW_WORK_COLUMN_ID } from "@/constants/board-columns";
 
 type MockDragEvent = {
   canceled: boolean;
@@ -135,5 +135,26 @@ describe("Board drag safety", () => {
     expect(collections.assignments.get(assignment.id)?.columnId).toBe("col-1");
     vi.runAllTimers();
     expect(collections.assignments.get(assignment.id)?.columnId).toBe(COMPLETED_COLUMN_ID);
+  });
+
+  it("allows dropping into New Work column", () => {
+    const collections = createTestCollections();
+    const { data, assignment } = createData();
+    collections.assignments.insert(assignment);
+
+    renderWithProviders(<Board data={data} />, { collections });
+    expect(dragMocks.onDragEnd).toBeTypeOf("function");
+
+    dragMocks.onDragEnd?.({
+      canceled: false,
+      operation: {
+        source: { id: assignment.id },
+        target: { id: NEW_WORK_COLUMN_ID },
+      },
+    });
+
+    expect(collections.assignments.get(assignment.id)?.columnId).toBe("col-1");
+    vi.runAllTimers();
+    expect(collections.assignments.get(assignment.id)?.columnId).toBe(NEW_WORK_COLUMN_ID);
   });
 });

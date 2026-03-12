@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useLiveQuery } from "@tanstack/react-db";
 import { useBoardCollections } from "@/db/use-board-collections";
 import type { BoardColumn, ColumnAssignment, WorkItem, AdoSettings } from "@/types/board";
-import { COMPLETED_COLUMN_ID } from "@/types/board";
+import { COMPLETED_COLUMN_ID, NEW_WORK_COLUMN_ID } from "@/constants/board-columns";
 
 export function useSettings(): AdoSettings | null {
   const { settings } = useBoardCollections();
@@ -59,15 +59,21 @@ export function useBoard(workItems: WorkItem[]): BoardData {
       { assignment: ColumnAssignment; workItem: WorkItem | undefined }[]
     >();
 
-    for (const col of columns) {
+    const knownColumnIds = new Set(columns.map((col) => col.id));
+    knownColumnIds.add(NEW_WORK_COLUMN_ID);
+    for (const assignment of assignments) {
+      knownColumnIds.add(assignment.columnId);
+    }
+
+    for (const columnId of knownColumnIds) {
       const items = assignments
-        .filter((a) => a.columnId === col.id)
+        .filter((a) => a.columnId === columnId)
         .sort((a, b) => a.position - b.position)
         .map((a) => ({
           assignment: a,
           workItem: workItemMap.get(a.workItemId),
         }));
-      map.set(col.id, items);
+      map.set(columnId, items);
     }
 
     return map;

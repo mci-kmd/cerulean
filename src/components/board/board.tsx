@@ -2,16 +2,18 @@ import { type ComponentProps, useCallback } from "react";
 import { DragDropProvider } from "@dnd-kit/react";
 import { isSortableOperation } from "@dnd-kit/react/sortable";
 import { BoardColumn } from "./board-column";
+import { NewWorkColumn } from "./new-work-column";
 import { scheduleColumnChange } from "./schedule-column-change";
 import { useBoardCollections } from "@/db/use-board-collections";
 import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
-import { COMPLETED_COLUMN_ID } from "@/types/board";
+import { COMPLETED_COLUMN_ID, NEW_WORK_COLUMN_ID } from "@/constants/board-columns";
 import type { BoardData } from "@/hooks/use-board";
 
 interface BoardProps {
   data: BoardData;
   bottomOffset?: number;
-  onAddTask?: (columnId: string) => void;
+  isLoadingCandidates?: boolean;
+  onAddTask?: () => void;
   onColumnChange?: (workItemId: number, fromColumnId: string, toColumnId: string) => void;
 }
 
@@ -19,7 +21,13 @@ type DragEndEvent = Parameters<
   NonNullable<ComponentProps<typeof DragDropProvider>["onDragEnd"]>
 >[0];
 
-export function Board({ data, bottomOffset = 0, onAddTask, onColumnChange }: BoardProps) {
+export function Board({
+  data,
+  bottomOffset = 0,
+  isLoadingCandidates = false,
+  onAddTask,
+  onColumnChange,
+}: BoardProps) {
   const { assignments: assignmentsCol } = useBoardCollections();
   const { columns, columnItems } = data;
 
@@ -52,7 +60,12 @@ export function Board({ data, bottomOffset = 0, onAddTask, onColumnChange }: Boa
 
         const fallbackTargetId = target.id;
         if (typeof fallbackTargetId !== "string") return undefined;
-        if (columnItems.has(fallbackTargetId)) return fallbackTargetId;
+        if (
+          fallbackTargetId === NEW_WORK_COLUMN_ID ||
+          columnItems.has(fallbackTargetId)
+        ) {
+          return fallbackTargetId;
+        }
 
         return data.assignments.find((a) => a.id === fallbackTargetId)?.columnId;
       })();
@@ -111,13 +124,17 @@ export function Board({ data, bottomOffset = 0, onAddTask, onColumnChange }: Boa
         className="flex gap-3 p-4 overflow-x-auto bg-background"
         style={{ height: `calc(100vh - 49px - ${bottomOffset}px)` }}
       >
+        <NewWorkColumn
+          boardItems={columnItems.get(NEW_WORK_COLUMN_ID) ?? []}
+          isLoadingCandidates={isLoadingCandidates}
+          onAddTask={onAddTask}
+        />
         {columns.map((col) => (
           <BoardColumn
             key={col.id}
             id={col.id}
             name={col.name}
             items={columnItems.get(col.id) ?? []}
-            onAddTask={onAddTask}
             variant={col.id === COMPLETED_COLUMN_ID ? "completed" : "default"}
           />
         ))}

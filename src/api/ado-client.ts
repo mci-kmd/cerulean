@@ -17,6 +17,7 @@ export interface AdoClient {
   batchGetWorkItems(ids: number[], fields?: string[]): Promise<AdoWorkItem[]>;
   updateWorkItemState(id: number, state: string): Promise<AdoWorkItem>;
   startWorkItem(id: number, targetState: string): Promise<AdoWorkItem>;
+  returnWorkItemToCandidate(id: number, targetState: string): Promise<AdoWorkItem>;
   testConnection(): Promise<boolean>;
 }
 
@@ -166,6 +167,22 @@ export class HttpAdoClient implements AdoClient {
       },
     );
     if (!res.ok) throw new Error(`Start work item failed: ${res.status}`);
+    return res.json();
+  }
+
+  async returnWorkItemToCandidate(id: number, targetState: string): Promise<AdoWorkItem> {
+    const res = await fetch(
+      `${this.baseUrl}/_apis/wit/workitems/${id}?api-version=7.1`,
+      {
+        method: "PATCH",
+        headers: this.patchHeaders(),
+        body: JSON.stringify([
+          { op: "add", path: "/fields/System.State", value: targetState },
+          { op: "add", path: "/fields/System.AssignedTo", value: "" },
+        ]),
+      },
+    );
+    if (!res.ok) throw new Error(`Return work item failed: ${res.status}`);
     return res.json();
   }
 

@@ -88,11 +88,23 @@ describe("App integration", () => {
 
     await waitFor(
       () => {
+        expect(screen.getByText("New Work")).toBeInTheDocument();
         expect(screen.getByText("To Do")).toBeInTheDocument();
         expect(screen.getByText("Done")).toBeInTheDocument();
       },
       { timeout: 3000 },
     );
+
+    const newWorkHeading = screen.getByRole("heading", { name: "New Work" });
+    const firstUserColumnHeading = screen.getByRole("heading", { name: "To Do" });
+    expect(
+      newWorkHeading.compareDocumentPosition(firstUserColumnHeading) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    expect(
+      screen.getAllByRole("button", { name: /add task to/i }),
+    ).toHaveLength(1);
 
     await waitFor(
       () => {

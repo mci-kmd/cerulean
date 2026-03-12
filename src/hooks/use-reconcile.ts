@@ -10,13 +10,20 @@ export function useReconcile(
   collections: BoardCollections,
   isReady = true,
   approvalState?: string,
+  candidateState?: string,
 ) {
   useEffect(() => {
     if (!isReady) return;
     if (workItems.length === 0 && assignments.length === 0) return;
     if (columns.length === 0) return;
 
-    const { added, removed } = reconcile(assignments, workItems, columns, approvalState);
+    const { added, removed } = reconcile(
+      assignments,
+      workItems,
+      columns,
+      approvalState,
+      candidateState,
+    );
 
     if (added.length > 0) {
       for (const a of added) {
@@ -30,5 +37,5 @@ export function useReconcile(
         collections.assignments.delete(existing);
       }
     }
-  }, [workItems, assignments, columns, collections, isReady, approvalState]);
+  }, [workItems, assignments, columns, collections, isReady, approvalState, candidateState]);
 }

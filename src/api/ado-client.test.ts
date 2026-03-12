@@ -232,4 +232,41 @@ describe("HttpAdoClient", () => {
       await expect(client.startWorkItem(99, "Active")).rejects.toThrow(WorkItemAlreadyAssignedError);
     });
   });
+
+  describe("returnWorkItemToCandidate", () => {
+    it("sends PATCH with state + clear assignee ops", async () => {
+      let capturedBody: unknown = null;
+      let capturedContentType = "";
+      server.use(
+        http.patch(`${BASE}/_apis/wit/workitems/99`, async ({ request }) => {
+          capturedContentType = request.headers.get("content-type") ?? "";
+          capturedBody = await request.json();
+          return HttpResponse.json({
+            id: 99,
+            rev: 2,
+            fields: { "System.Id": 99, "System.State": "New" },
+            url: `${BASE}/_apis/wit/workItems/99`,
+          });
+        }),
+      );
+
+      const result = await client.returnWorkItemToCandidate(99, "New");
+      expect(capturedContentType).toBe("application/json-patch+json");
+      expect(capturedBody).toEqual([
+        { op: "add", path: "/fields/System.State", value: "New" },
+        { op: "add", path: "/fields/System.AssignedTo", value: "" },
+      ]);
+      expect(result.id).toBe(99);
+    });
+
+    it("throws on failure", async () => {
+      server.use(
+        http.patch(`${BASE}/_apis/wit/workitems/99`, () => {
+          return new HttpResponse(null, { status: 400 });
+        }),
+      );
+
+      await expect(client.returnWorkItemToCandidate(99, "New")).rejects.toThrow("400");
+    });
+  });
 });

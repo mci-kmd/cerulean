@@ -97,4 +97,18 @@ describe("reconcile", () => {
     expect(result.added).toHaveLength(2);
     expect(result.added.every((a) => a.columnId === "col-todo")).toBe(true);
   });
+
+  it("routes candidate-state items to New Work column", () => {
+    const items = [
+      createWorkItem({ id: 10, state: "New" }),
+      createWorkItem({ id: 20, state: "Active" }),
+    ];
+    const result = reconcile([], items, columns, undefined, "New");
+
+    expect(result.added).toHaveLength(2);
+    const candidate = result.added.find((a) => a.workItemId === 10);
+    const active = result.added.find((a) => a.workItemId === 20);
+    expect(candidate?.columnId).toBe("__new_work__");
+    expect(active?.columnId).toBe("col-todo");
+  });
 });

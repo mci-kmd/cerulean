@@ -58,4 +58,4 @@ export interface CustomTask {
   completedAt?: number;
 }
 
-export const COMPLETED_COLUMN_ID = "__completed__";
+export { COMPLETED_COLUMN_ID, NEW_WORK_COLUMN_ID } from "../constants/board-columns";

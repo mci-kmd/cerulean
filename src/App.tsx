@@ -16,10 +16,12 @@ import { useCompletedWorkItems } from "@/hooks/use-completed-work-items";
 import { useCompleteWorkItem } from "@/hooks/use-complete-work-item";
 import { useReconcile } from "@/hooks/use-reconcile";
 import { useCustomTasks, customTasksToWorkItems } from "@/hooks/use-custom-tasks";
-import { CandidateTray } from "@/components/candidates/candidate-tray";
+import { useCandidates } from "@/hooks/use-candidates";
+import { useStartWork } from "@/hooks/use-start-work";
+import { useReturnToCandidate } from "@/hooks/use-return-to-candidate";
 import { createAdoClient, type AdoClient } from "@/api/ado-client";
 import { isReconcileReady } from "@/logic/reconcile-readiness";
-import { COMPLETED_COLUMN_ID } from "@/types/board";
+import { COMPLETED_COLUMN_ID, NEW_WORK_COLUMN_ID } from "@/constants/board-columns";
 
 export function App() {
   const collections = useBoardCollections();
@@ -29,9 +31,7 @@ export function App() {
   const customTasks = useCustomTasks();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
-  const [trayExpanded, setTrayExpanded] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
-  const [taskTargetColumn, setTaskTargetColumn] = useState<string | null>(null);
 
   const client: AdoClient | null = (() => {
     if (!settings?.pat || !settings?.org || !settings?.project) return null;
@@ -65,6 +65,23 @@ export function App() {
     );
 
   const completeWorkItem = useCompleteWorkItem(client);
+  const returnToCandidate = useReturnToCandidate(client);
+  const startWork = useStartWork(client);
+  const canLoadCandidates =
+    !demoMode &&
+    !!client &&
+    !!settings?.candidateState &&
+    !!settings?.org &&
+    !!settings?.project;
+  const { candidates, isLoading: isLoadingCandidates } = useCandidates(
+    client,
+    settings?.candidateState ?? "",
+    settings?.org ?? "",
+    settings?.project ?? "",
+    canLoadCandidates,
+    settings?.areaPath,
+    settings?.workItemTypes,
+  );
 
   const customWorkItems = useMemo(
     () => customTasksToWorkItems(customTasks, settings?.approvalState),
@@ -75,6 +92,18 @@ export function App() {
     () => [...adoWorkItems, ...completedAdoItems, ...customWorkItems],
     [adoWorkItems, completedAdoItems, customWorkItems],
   );
+  const boardWorkItems = useMemo(() => {
+    const merged = new Map<number, (typeof workItems)[number]>();
+    for (const item of workItems) {
+      merged.set(item.id, item);
+    }
+    for (const item of candidates) {
+      if (!merged.has(item.id)) {
+        merged.set(item.id, item);
+      }
+    }
+    return [...merged.values()];
+  }, [workItems, candidates]);
   const reconcileReady = isReconcileReady(
     isSuccess,
     completedSuccess,
@@ -82,12 +111,13 @@ export function App() {
   );
 
   useReconcile(
-    workItems,
+    boardWorkItems,
     assignments,
     columns,
     collections,
     reconcileReady,
     settings?.approvalState,
+    settings?.candidateState,
   );
 
   if (error) {
@@ -97,21 +127,17 @@ export function App() {
     });
   }
 
-  const boardData = useBoard(workItems);
+  const boardData = useBoard(boardWorkItems);
   const hasSettings = !!(settings?.pat && settings?.org && settings?.project);
   const hasColumns = columns.length > 0;
   const showDemoButton = !!settings?.approvalState;
-  const showCandidateTray = !demoMode && !!client && !!settings?.candidateState;
-  const trayHeight = showCandidateTray ? (trayExpanded ? 220 : 40) : 0;
 
-  const handleAddTask = useCallback((columnId: string) => {
-    setTaskTargetColumn(columnId);
+  const handleAddTask = useCallback(() => {
     setTaskDialogOpen(true);
   }, []);
 
   const handleCreateTask = useCallback(
     (title: string) => {
-      if (!taskTargetColumn) return;
       const workItemId = -Date.now();
       const taskId = nanoid();
       const assignmentId = nanoid();
@@ -119,18 +145,18 @@ export function App() {
       collections.customTasks.insert({ id: taskId, workItemId, title });
 
       const colItems = boardData.assignments.filter(
-        (a) => a.columnId === taskTargetColumn,
+        (a) => a.columnId === NEW_WORK_COLUMN_ID,
       );
       const maxPos = colItems.reduce((max, a) => Math.max(max, a.position), 0);
 
       collections.assignments.insert({
         id: assignmentId,
         workItemId,
-        columnId: taskTargetColumn,
+        columnId: NEW_WORK_COLUMN_ID,
         position: maxPos + 1,
       });
     },
-    [taskTargetColumn, collections, boardData.assignments],
+    [collections, boardData.assignments],
   );
 
   const handleColumnChange = (workItemId: number, fromColumnId: string, toColumnId: string) => {
@@ -149,6 +175,40 @@ export function App() {
           draft.completedAt = undefined;
         });
       }
+      return;
+    }
+
+    if (toColumnId === NEW_WORK_COLUMN_ID) {
+      if (!settings?.candidateState) return;
+      returnToCandidate.mutate(
+        { workItemId, targetState: settings.candidateState },
+        {
+          onError: (err) =>
+            toast.error("Failed to return work item", {
+              description: err.message,
+              id: `return-error-${workItemId}`,
+            }),
+        },
+      );
+      return;
+    }
+
+    if (fromColumnId === NEW_WORK_COLUMN_ID) {
+      if (!settings?.sourceState) return;
+      startWork.mutate(
+        {
+          workItemId,
+          targetState: settings.sourceState,
+          optimisticRemoveFromCandidates: false,
+        },
+        {
+          onError: (err) =>
+            toast.error("Failed to start work item", {
+              description: err.message,
+              id: `start-error-${workItemId}`,
+            }),
+        },
+      );
       return;
     }
 
@@ -222,21 +282,9 @@ export function App() {
         ) : (
           <Board
             data={boardData}
-            bottomOffset={trayHeight}
+            isLoadingCandidates={isLoadingCandidates}
             onAddTask={handleAddTask}
             onColumnChange={handleColumnChange}
-          />
-        )}
-        {showCandidateTray && (
-          <CandidateTray
-            client={client!}
-            candidateState={settings!.candidateState}
-            sourceState={settings!.sourceState}
-            org={settings!.org}
-            project={settings!.project}
-            areaPath={settings!.areaPath}
-            workItemTypes={settings!.workItemTypes}
-            onExpandChange={setTrayExpanded}
           />
         )}
         <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

@@ -2,21 +2,32 @@ import { createElement } from "react";
 import { Loader2, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getTypeStyle, getTypeIcon } from "@/lib/work-item-types";
+import { cn } from "@/lib/utils";
 import type { WorkItem } from "@/types/board";
 
 interface CandidateCardProps {
   workItem: WorkItem;
   onStart: (id: number) => void;
   isStarting: boolean;
+  className?: string;
 }
 
-export function CandidateCard({ workItem, onStart, isStarting }: CandidateCardProps) {
+export function CandidateCard({
+  workItem,
+  onStart,
+  isStarting,
+  className,
+}: CandidateCardProps) {
   const style = getTypeStyle(workItem.type);
   const typeIcon = getTypeIcon(workItem.type);
 
   return (
     <div
-      className={`w-60 shrink-0 rounded-lg border-l-[3px] border border-border bg-card p-3 shadow-sm ${style.border}`}
+      className={cn(
+        "w-60 shrink-0 rounded-lg border-l-[3px] border border-border bg-card p-3 shadow-sm",
+        style.border,
+        className,
+      )}
     >
       <div className="flex items-center gap-1.5 mb-1">
         {createElement(typeIcon, {

@@ -165,4 +165,39 @@ describe("useStartWork", () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error?.message).toBe("No ADO client");
   });
+
+  it("keeps candidate query data when optimistic removal is disabled", async () => {
+    queryClient.setQueryData(["candidates", "org", "proj", "New"], [
+      {
+        id: 42,
+        title: "Work Item 42",
+        type: "User Story",
+        state: "New",
+        rev: 1,
+        url: "https://example.test/item/42",
+      },
+    ]);
+
+    const { result } = renderHook(() => useStartWork(client), { wrapper });
+
+    act(() => {
+      result.current.mutate({
+        workItemId: 42,
+        targetState: "Active",
+        optimisticRemoveFromCandidates: false,
+      });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(queryClient.getQueryData(["candidates", "org", "proj", "New"])).toEqual([
+      {
+        id: 42,
+        title: "Work Item 42",
+        type: "User Story",
+        state: "New",
+        rev: 1,
+        url: "https://example.test/item/42",
+      },
+    ]);
+  });
 });

@@ -12,21 +12,32 @@ export function useStartWork(client: AdoClient | null) {
     }: {
       workItemId: number;
       targetState: string;
+      optimisticRemoveFromCandidates?: boolean;
     }) => {
       if (!client) throw new Error("No ADO client");
       return client.startWorkItem(workItemId, targetState);
     },
-    onMutate: async ({ workItemId }) => {
+    onMutate: async ({
+      workItemId,
+      optimisticRemoveFromCandidates = true,
+    }: {
+      workItemId: number;
+      targetState: string;
+      optimisticRemoveFromCandidates?: boolean;
+    }) => {
+      if (!optimisticRemoveFromCandidates) {
+        return { prev: undefined, removedOptimistically: false };
+      }
       await queryClient.cancelQueries({ queryKey: ["candidates"] });
       const prev = queryClient.getQueryData<WorkItem[]>(["candidates"]);
       queryClient.setQueriesData<WorkItem[]>(
         { queryKey: ["candidates"] },
         (old) => old?.filter((w) => w.id !== workItemId),
       );
-      return { prev };
+      return { prev, removedOptimistically: true };
     },
     onError: (_err, _vars, context) => {
-      if (context?.prev) {
+      if (context?.removedOptimistically && context.prev) {
         queryClient.setQueriesData<WorkItem[]>(
           { queryKey: ["candidates"] },
           context.prev,
