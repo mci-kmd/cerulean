@@ -55,6 +55,22 @@ export const DEMO_DETAIL_FIELDS = [
   "Microsoft.VSTS.TCM.ReproSteps",
 ];
 
+interface WorkItemBatchGetRequest {
+  ids: number[];
+  fields?: string[];
+  $expand?: "Relations";
+}
+
+class AdoBatchFetchError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "AdoBatchFetchError";
+  }
+}
+
 export class HttpAdoClient implements AdoClient {
   private org: string;
   private baseUrl: string;
@@ -73,6 +89,51 @@ export class HttpAdoClient implements AdoClient {
 
   private patchHeaders(): HeadersInit {
     return { "Content-Type": "application/json-patch+json", Authorization: this.authHeader };
+  }
+
+  private async fetchWorkItemsBatch(
+    request: WorkItemBatchGetRequest,
+  ): Promise<AdoBatchResponse> {
+    const res = await fetch(
+      `${this.baseUrl}/_apis/wit/workitemsbatch?api-version=7.1`,
+      {
+        method: "POST",
+        headers: this.jsonHeaders(),
+        body: JSON.stringify(request),
+      },
+    );
+    if (!res.ok) {
+      const contentType = res.headers.get("content-type") ?? "";
+      if (contentType.includes("application/json")) {
+        const data = await res.json() as { message?: unknown };
+        if (typeof data.message === "string" && data.message.length > 0) {
+          throw new AdoBatchFetchError(res.status, data.message);
+        }
+      } else {
+        const text = await res.text();
+        if (text.length > 0) {
+          throw new AdoBatchFetchError(res.status, text);
+        }
+      }
+      throw new AdoBatchFetchError(res.status, `Batch fetch failed: ${res.status}`);
+    }
+    return res.json();
+  }
+
+  private mergeBatchWithRelations(
+    items: AdoWorkItem[],
+    relationItems: AdoWorkItem[],
+  ): AdoWorkItem[] {
+    const relationById = new Map(relationItems.map((item) => [item.id, item]));
+    return items.map((item) => {
+      const relationItem = relationById.get(item.id);
+      if (!relationItem) return item;
+      return {
+        ...item,
+        ...(relationItem.relations ? { relations: relationItem.relations } : {}),
+        ...(relationItem._links ? { _links: relationItem._links } : {}),
+      };
+    });
   }
 
   async queryWorkItems(wiql: string): Promise<WiqlResponse> {
@@ -97,18 +158,20 @@ export class HttpAdoClient implements AdoClient {
     const results: AdoWorkItem[] = [];
     for (let i = 0; i < ids.length; i += BATCH_SIZE) {
       const batch = ids.slice(i, i + BATCH_SIZE);
-      const params = new URLSearchParams({
-        ids: batch.join(","),
-        fields: fields.join(","),
-        "api-version": "7.1",
-      });
-      const res = await fetch(
-        `${this.baseUrl}/_apis/wit/workitems?${params}`,
-        { headers: this.jsonHeaders() },
-      );
-      if (!res.ok) throw new Error(`Batch fetch failed: ${res.status}`);
-      const data: AdoBatchResponse = await res.json();
-      results.push(...data.value);
+      if (fields.length === 0) {
+        const relationData = await this.fetchWorkItemsBatch({
+          ids: batch,
+          $expand: "Relations",
+        });
+        results.push(...relationData.value);
+        continue;
+      }
+
+      const [fieldData, relationData] = await Promise.all([
+        this.fetchWorkItemsBatch({ ids: batch, fields }),
+        this.fetchWorkItemsBatch({ ids: batch, $expand: "Relations" }),
+      ]);
+      results.push(...this.mergeBatchWithRelations(fieldData.value, relationData.value));
     }
     return results;
   }
