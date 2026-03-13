@@ -29,7 +29,7 @@ function setupHandlers(items: ReturnType<typeof createAdoWorkItem>[]) {
         workItems: ids.map((id) => ({ id, url: "" })),
       });
     }),
-    http.get(`${BASE}/_apis/wit/workitems`, () => {
+    http.post(`${BASE}/_apis/wit/workitemsbatch`, () => {
       return HttpResponse.json({ count: items.length, value: items });
     }),
     http.patch(`${BASE}/_apis/wit/workitems/:id`, ({ params }) => {

@@ -21,6 +21,7 @@ import { useStartWork } from "@/hooks/use-start-work";
 import { useReturnToCandidate } from "@/hooks/use-return-to-candidate";
 import { createAdoClient, type AdoClient } from "@/api/ado-client";
 import { isReconcileReady } from "@/logic/reconcile-readiness";
+import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
 import { COMPLETED_COLUMN_ID, NEW_WORK_COLUMN_ID } from "@/constants/board-columns";
 
 export function App() {
@@ -160,25 +161,45 @@ export function App() {
   );
 
   const handleColumnChange = (workItemId: number, fromColumnId: string, toColumnId: string) => {
-    const isCustom = customTasks.some((t) => t.workItemId === workItemId);
+    if (fromColumnId === toColumnId) return;
+
+    const customTask = collections.customTasks.toArray.find(
+      (t) => t.workItemId === workItemId,
+    );
+    const isCustom = workItemId < 0 || !!customTask;
 
     if (isCustom) {
-      const task = customTasks.find((t) => t.workItemId === workItemId);
-      if (!task) return;
+      if (!customTask) return;
+      if (!collections.customTasks.get(customTask.id)) return;
 
       if (toColumnId === COMPLETED_COLUMN_ID) {
-        collections.customTasks.update(task.id, (draft) => {
-          draft.completedAt = Date.now();
+        scheduleDndMutation(() => {
+          if (!collections.customTasks.get(customTask.id)) return;
+          collections.customTasks.update(customTask.id, (draft) => {
+            draft.completedAt = Date.now();
+          });
         });
       } else if (fromColumnId === COMPLETED_COLUMN_ID) {
-        collections.customTasks.update(task.id, (draft) => {
-          draft.completedAt = undefined;
+        scheduleDndMutation(() => {
+          if (!collections.customTasks.get(customTask.id)) return;
+          collections.customTasks.update(customTask.id, (draft) => {
+            draft.completedAt = undefined;
+          });
         });
       }
       return;
     }
 
-    if (toColumnId === NEW_WORK_COLUMN_ID) {
+    const movingToNewWork = toColumnId === NEW_WORK_COLUMN_ID;
+    const movingFromNewWork = fromColumnId === NEW_WORK_COLUMN_ID;
+    const movingToCompleted =
+      toColumnId === COMPLETED_COLUMN_ID &&
+      fromColumnId !== COMPLETED_COLUMN_ID;
+    const movingFromCompleted =
+      fromColumnId === COMPLETED_COLUMN_ID &&
+      toColumnId !== COMPLETED_COLUMN_ID;
+
+    if (movingToNewWork) {
       if (!settings?.candidateState) return;
       returnToCandidate.mutate(
         { workItemId, targetState: settings.candidateState },
@@ -193,7 +214,7 @@ export function App() {
       return;
     }
 
-    if (fromColumnId === NEW_WORK_COLUMN_ID) {
+    if (movingFromNewWork) {
       if (!settings?.sourceState) return;
       startWork.mutate(
         {
@@ -212,9 +233,8 @@ export function App() {
       return;
     }
 
-    if (!settings?.approvalState || !settings?.sourceState) return;
-
-    if (toColumnId === COMPLETED_COLUMN_ID && fromColumnId !== COMPLETED_COLUMN_ID) {
+    if (movingToCompleted) {
+      if (!settings?.approvalState) return;
       completeWorkItem.mutate(
         { workItemId, targetState: settings.approvalState },
         {
@@ -225,7 +245,11 @@ export function App() {
             }),
         },
       );
-    } else if (fromColumnId === COMPLETED_COLUMN_ID && toColumnId !== COMPLETED_COLUMN_ID) {
+      return;
+    }
+
+    if (movingFromCompleted) {
+      if (!settings?.sourceState) return;
       completeWorkItem.mutate(
         { workItemId, targetState: settings.sourceState },
         {

@@ -32,6 +32,55 @@ describe("mapAdoWorkItem", () => {
     const wi = mapAdoWorkItem(ado, "org", "proj");
     expect(wi.url).toBe("https://custom-link");
   });
+
+  it("maps related pull request artifact links", () => {
+    const ado = createAdoWorkItem({
+      id: 2,
+      relations: [
+        {
+          rel: "ArtifactLink",
+          url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2f11111111-2222-3333-4444-555555555555%2f123",
+          attributes: { name: "Pull Request" },
+        },
+      ],
+    });
+
+    const wi = mapAdoWorkItem(ado, "org", "proj");
+    expect(wi.relatedPullRequests).toEqual([
+      {
+        id: "123",
+        label: "PR #123",
+        url: "https://dev.azure.com/org/proj/_git/11111111-2222-3333-4444-555555555555/pullrequest/123",
+      },
+    ]);
+  });
+
+  it("keeps direct pull request links and ignores non-pr relations", () => {
+    const ado = createAdoWorkItem({
+      id: 3,
+      relations: [
+        {
+          rel: "ArtifactLink",
+          url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/456",
+          attributes: { name: "Pull Request" },
+        },
+        {
+          rel: "ArtifactLink",
+          url: "vstfs:///Git/Commit/aaaaaaaa%2fbbbbbbbb",
+          attributes: { name: "Fixed in Commit" },
+        },
+      ],
+    });
+
+    const wi = mapAdoWorkItem(ado, "org", "proj");
+    expect(wi.relatedPullRequests).toEqual([
+      {
+        id: "456",
+        label: "PR #456",
+        url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/456",
+      },
+    ]);
+  });
 });
 
 describe("fetchWorkItemsInitial", () => {

@@ -1,4 +1,4 @@
-import { type ComponentProps, useState, useCallback } from "react";
+import { type ComponentProps, useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2, Clock } from "lucide-react";
 import { DragDropProvider } from "@dnd-kit/react";
@@ -8,7 +8,7 @@ import { SortableDemoItem } from "./sortable-demo-item";
 import { useDemoWorkItems } from "@/hooks/use-demo-work-items";
 import { useDemoApprove } from "@/hooks/use-demo-approve";
 import { useDemoOrder } from "@/hooks/use-demo-order";
-import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
+import { scheduleDndMutation, setDndRenderSettledResolver } from "@/lib/schedule-dnd-mutation";
 import type { AdoClient } from "@/api/ado-client";
 
 interface DemoViewProps {
@@ -22,6 +22,13 @@ interface DemoViewProps {
 type DemoDragEndEvent = Parameters<
   NonNullable<ComponentProps<typeof DragDropProvider>["onDragEnd"]>
 >[0];
+type DemoDragEndManager = Parameters<
+  NonNullable<ComponentProps<typeof DragDropProvider>["onDragEnd"]>
+>[1];
+
+type RenderTrackingManager = DemoDragEndManager & {
+  renderer?: { rendering?: Promise<unknown> };
+};
 
 export function DemoView({
   client,
@@ -41,6 +48,16 @@ export function DemoView({
   const [activeId, setActiveId] = useState<number | null>(null);
   const [approvedIds, setApprovedIds] = useState<Set<number>>(new Set());
   const { sortedItems, reorder } = useDemoOrder(items);
+
+  const trackDndRendering = useCallback((_: unknown, manager?: DemoDragEndManager) => {
+    setDndRenderSettledResolver(
+      () => (manager as RenderTrackingManager | undefined)?.renderer?.rendering,
+    );
+  }, []);
+
+  useEffect(() => {
+    return () => setDndRenderSettledResolver(undefined);
+  }, []);
 
   const handleApprove = useCallback(
     (workItemId: number) => {
@@ -88,7 +105,8 @@ export function DemoView({
   );
 
   const handleDragEnd = useCallback(
-    (event: DemoDragEndEvent) => {
+    (event: DemoDragEndEvent, manager?: DemoDragEndManager) => {
+      trackDndRendering(event, manager);
       if (event.canceled) return;
       const operation = event.operation;
       if (!isSortableOperation(operation)) return;
@@ -102,9 +120,11 @@ export function DemoView({
       const unapprovedIds = sortedItems
         .filter((i) => !approvedIds.has(i.id))
         .map((i) => i.id);
-      scheduleDndMutation(() => reorder(sourceId, targetIndex, unapprovedIds));
+      const renderSettled = () =>
+        (manager as RenderTrackingManager | undefined)?.renderer?.rendering;
+      scheduleDndMutation(() => reorder(sourceId, targetIndex, unapprovedIds), renderSettled);
     },
-    [reorder, sortedItems, approvedIds],
+    [reorder, sortedItems, approvedIds, trackDndRendering],
   );
 
   if (isLoading) {
@@ -136,7 +156,12 @@ export function DemoView({
 
   return (
     <div className="max-w-3xl mx-auto p-4 space-y-4">
-      <DragDropProvider onDragEnd={handleDragEnd}>
+      <DragDropProvider
+        onDragStart={trackDndRendering}
+        onDragMove={trackDndRendering}
+        onDragOver={trackDndRendering}
+        onDragEnd={handleDragEnd}
+      >
         {unapproved.length > 0 && (
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 px-1">

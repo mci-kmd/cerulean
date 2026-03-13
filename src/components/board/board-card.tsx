@@ -4,6 +4,7 @@ import { useSortable } from "@dnd-kit/react/sortable";
 import { useBoardCollections } from "@/db/use-board-collections";
 import { CopyableId } from "@/components/copyable-id";
 import { getTypeStyle, getTypeIcon, CUSTOM_TASK_TYPE } from "@/lib/work-item-types";
+import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
 import { TaskDialog } from "./task-dialog";
 import type { WorkItem } from "@/types/board";
 
@@ -35,19 +36,26 @@ export function BoardCard({
   const statusRef = useRef<HTMLTextAreaElement | null>(null);
 
   const isCustomTask = workItem.type === CUSTOM_TASK_TYPE && !workItem.url;
+  const relatedPullRequests =
+    workItem.type === "Bug" || workItem.type === "User Story"
+      ? workItem.relatedPullRequests ?? []
+      : [];
 
   const save = () => {
     const trimmed = value.trim();
     if (trimmed !== (statusMessage ?? "")) {
-      assignments.update(assignmentId, (draft) => {
-        draft.statusMessage = trimmed || undefined;
+      scheduleDndMutation(() => {
+        if (!assignments.get(assignmentId)) return;
+        assignments.update(assignmentId, (draft) => {
+          draft.statusMessage = trimmed || undefined;
+        });
       });
     }
   };
 
   const handleEditSave = (newTitle: string) => {
     const taskId = findCustomTaskId(workItem.id);
-    if (taskId) {
+    if (taskId && customTasks.get(taskId)) {
       customTasks.update(taskId, (draft) => {
         draft.title = newTitle;
       });
@@ -129,6 +137,23 @@ export function BoardCard({
           >
             {workItem.title}
           </a>
+        )}
+        {relatedPullRequests.length > 0 && (
+          <ul className="mb-2 list-disc pl-4 space-y-0.5">
+            {relatedPullRequests.map((pr) => (
+              <li key={pr.url}>
+                <a
+                  href={pr.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-muted-foreground hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {pr.label}
+                </a>
+              </li>
+            ))}
+          </ul>
         )}
         <div className="flex items-center gap-2">
           <textarea

@@ -1,8 +1,11 @@
+import { scheduleDndMutation, type DndRenderSettled } from "@/lib/schedule-dnd-mutation";
+
 export function scheduleColumnChange(
   onColumnChange: (workItemId: number, fromColumnId: string, toColumnId: string) => void,
   workItemId: number,
   fromColumnId: string,
   toColumnId: string,
+  renderSettled?: DndRenderSettled,
 ) {
-  queueMicrotask(() => onColumnChange(workItemId, fromColumnId, toColumnId));
+  scheduleDndMutation(() => onColumnChange(workItemId, fromColumnId, toColumnId), renderSettled);
 }

@@ -55,7 +55,7 @@ describe("App integration", () => {
           workItems: [{ id: 1, url: "" }],
         });
       }),
-      http.get(`${BASE}/_apis/wit/workitems`, () => {
+      http.post(`${BASE}/_apis/wit/workitemsbatch`, () => {
         return HttpResponse.json({
           count: 1,
           value: [

@@ -1,17 +1,20 @@
 import { describe, it, expect, vi } from "vitest";
-import { screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/helpers/render";
+import { setDndRenderSettledResolver } from "@/lib/schedule-dnd-mutation";
 import { BoardCard } from "./board-card";
 import { createWorkItem } from "@/test/fixtures/work-items";
 import { createAssignment } from "@/test/fixtures/columns";
+import type { WorkItem } from "@/types/board";
 
 function renderCard(props: {
   statusMessage?: string;
   assignmentId?: string;
   columnId?: string;
+  workItemOverrides?: Partial<WorkItem>;
 }) {
-  const workItem = createWorkItem({ id: 1, title: "Test Item" });
+  const workItem = createWorkItem({ id: 1, title: "Test Item", ...props.workItemOverrides });
   const assignment = createAssignment({
     id: props.assignmentId ?? "asgn-1",
     workItemId: 1,
@@ -200,5 +203,103 @@ describe("BoardCard status message", () => {
     await user.tab(); // blur without changing
 
     expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not crash when assignment is removed before blur save", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderCard({ assignmentId: "asgn-missing" });
+
+    const input = screen.getByPlaceholderText("Set status...");
+    await user.click(input);
+    await user.type(input, "Changed");
+    collections.assignments.delete(["asgn-missing"]);
+
+    await expect(user.tab()).resolves.toBeUndefined();
+    expect(collections.assignments.get("asgn-missing")).toBeUndefined();
+  });
+
+  it("waits for global dnd settle resolver before saving status", async () => {
+    vi.useFakeTimers();
+    try {
+      const { collections } = renderCard({ assignmentId: "asgn-global-settle" });
+      let resolveRendering!: () => void;
+      const renderSettled = new Promise<void>((resolve) => {
+        resolveRendering = resolve;
+      });
+      setDndRenderSettledResolver(() => renderSettled);
+
+      const input = screen.getByPlaceholderText("Set status...");
+      fireEvent.change(input, { target: { value: "Deferred save" } });
+      fireEvent.blur(input);
+
+      expect(collections.assignments.get("asgn-global-settle")?.statusMessage).toBeUndefined();
+      resolveRendering();
+      await Promise.resolve();
+      act(() => {
+        vi.runAllTimers();
+      });
+      expect(collections.assignments.get("asgn-global-settle")?.statusMessage).toBe(
+        "Deferred save",
+      );
+    } finally {
+      setDndRenderSettledResolver(undefined);
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("BoardCard related PR links", () => {
+  it("renders related pull request links for bug cards", () => {
+    renderCard({
+      workItemOverrides: {
+        type: "Bug",
+        relatedPullRequests: [
+          {
+            id: "123",
+            label: "PR #123",
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/123",
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByRole("link", { name: "PR #123" })).toHaveAttribute(
+      "href",
+      "https://dev.azure.com/org/proj/_git/repo/pullrequest/123",
+    );
+  });
+
+  it("renders related pull request links for user stories", () => {
+    renderCard({
+      workItemOverrides: {
+        type: "User Story",
+        relatedPullRequests: [
+          {
+            id: "124",
+            label: "PR #124",
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/124",
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByRole("link", { name: "PR #124" })).toBeInTheDocument();
+  });
+
+  it("does not render related pull request links for non-bug/story cards", () => {
+    renderCard({
+      workItemOverrides: {
+        type: "Task",
+        relatedPullRequests: [
+          {
+            id: "999",
+            label: "PR #999",
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/999",
+          },
+        ],
+      },
+    });
+
+    expect(screen.queryByRole("link", { name: "PR #999" })).toBeNull();
   });
 });

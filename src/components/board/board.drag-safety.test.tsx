@@ -104,6 +104,50 @@ describe("Board drag safety", () => {
     expect(updateSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("does not crash when assignment is removed before deferred update", () => {
+    const collections = createTestCollections();
+    const { data, assignment } = createData();
+    collections.assignments.insert(assignment);
+    const updateSpy = vi.spyOn(collections.assignments, "update");
+
+    renderWithProviders(<Board data={data} />, { collections });
+    expect(dragMocks.onDragEnd).toBeTypeOf("function");
+
+    dragMocks.onDragEnd?.({
+      canceled: false,
+      operation: {
+        source: { id: assignment.id },
+        target: { id: "col-2", group: "col-2", index: 0 },
+      },
+    });
+
+    collections.assignments.delete([assignment.id]);
+    expect(() => vi.runAllTimers()).not.toThrow();
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not invoke column change when assignment no longer exists at flush time", () => {
+    const collections = createTestCollections();
+    const { data, assignment } = createData();
+    collections.assignments.insert(assignment);
+    const onColumnChange = vi.fn();
+
+    renderWithProviders(<Board data={data} onColumnChange={onColumnChange} />, { collections });
+    expect(dragMocks.onDragEnd).toBeTypeOf("function");
+
+    dragMocks.onDragEnd?.({
+      canceled: false,
+      operation: {
+        source: { id: assignment.id },
+        target: { id: NEW_WORK_COLUMN_ID },
+      },
+    });
+
+    collections.assignments.delete([assignment.id]);
+    vi.runAllTimers();
+    expect(onColumnChange).not.toHaveBeenCalled();
+  });
+
   it("allows dropping into empty completed column", () => {
     const collections = createTestCollections();
     const { data, assignment } = createData();

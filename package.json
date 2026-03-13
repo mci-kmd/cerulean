@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:e2e": "vitest run src/App.custom-task-drag.e2e.test.tsx",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
   },

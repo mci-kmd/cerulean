@@ -1,11 +1,11 @@
-import { type ComponentProps, useCallback } from "react";
+import { type ComponentProps, useCallback, useEffect } from "react";
 import { DragDropProvider } from "@dnd-kit/react";
 import { isSortableOperation } from "@dnd-kit/react/sortable";
 import { BoardColumn } from "./board-column";
 import { NewWorkColumn } from "./new-work-column";
 import { scheduleColumnChange } from "./schedule-column-change";
 import { useBoardCollections } from "@/db/use-board-collections";
-import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
+import { scheduleDndMutation, setDndRenderSettledResolver } from "@/lib/schedule-dnd-mutation";
 import { COMPLETED_COLUMN_ID, NEW_WORK_COLUMN_ID } from "@/constants/board-columns";
 import type { BoardData } from "@/hooks/use-board";
 
@@ -20,6 +20,13 @@ interface BoardProps {
 type DragEndEvent = Parameters<
   NonNullable<ComponentProps<typeof DragDropProvider>["onDragEnd"]>
 >[0];
+type DragEndManager = Parameters<
+  NonNullable<ComponentProps<typeof DragDropProvider>["onDragEnd"]>
+>[1];
+
+type RenderTrackingManager = DragEndManager & {
+  renderer?: { rendering?: Promise<unknown> };
+};
 
 export function Board({
   data,
@@ -31,8 +38,19 @@ export function Board({
   const { assignments: assignmentsCol } = useBoardCollections();
   const { columns, columnItems } = data;
 
+  const trackDndRendering = useCallback((_: unknown, manager?: DragEndManager) => {
+    setDndRenderSettledResolver(
+      () => (manager as RenderTrackingManager | undefined)?.renderer?.rendering,
+    );
+  }, []);
+
+  useEffect(() => {
+    return () => setDndRenderSettledResolver(undefined);
+  }, []);
+
   const handleDragEnd = useCallback(
-    (event: DragEndEvent) => {
+    (event: DragEndEvent, manager?: DragEndManager) => {
+      trackDndRendering(event, manager);
       if (event.canceled) return;
       const operation = event.operation;
       const { source, target } = operation;
@@ -71,9 +89,9 @@ export function Board({
       })();
       if (!targetColumnId) return;
 
-      const sourceAssignment = data.assignments.find(
-        (a) => a.id === sourceId,
-      );
+      const sourceAssignment =
+        assignmentsCol.get(sourceId) ??
+        data.assignments.find((a) => a.id === sourceId);
       if (!sourceAssignment) return;
 
       const targetItems = columnItems.get(targetColumnId) ?? [];
@@ -97,29 +115,44 @@ export function Board({
         newPosition = lastPos + 1;
       }
 
-      const fromColumnId = sourceAssignment.columnId;
+      const renderSettled = () =>
+        (manager as RenderTrackingManager | undefined)?.renderer?.rendering;
 
       scheduleDndMutation(() => {
+        const currentAssignment = assignmentsCol.get(sourceId);
+        if (!currentAssignment) {
+          return;
+        }
+        if (currentAssignment.columnId === targetColumnId) return;
+        const fromColumnId = currentAssignment.columnId;
+        const workItemId = currentAssignment.workItemId;
+
         assignmentsCol.update(sourceId, (draft) => {
           draft.columnId = targetColumnId;
           draft.position = newPosition;
         });
 
-        if (fromColumnId !== targetColumnId && onColumnChange) {
+        if (onColumnChange) {
           scheduleColumnChange(
             onColumnChange,
-            sourceAssignment.workItemId,
+            workItemId,
             fromColumnId,
             targetColumnId,
+            renderSettled,
           );
         }
-      });
+      }, renderSettled);
     },
-    [data.assignments, columnItems, assignmentsCol, onColumnChange],
+    [data.assignments, columnItems, assignmentsCol, onColumnChange, trackDndRendering],
   );
 
   return (
-    <DragDropProvider onDragEnd={handleDragEnd}>
+    <DragDropProvider
+      onDragStart={trackDndRendering}
+      onDragMove={trackDndRendering}
+      onDragOver={trackDndRendering}
+      onDragEnd={handleDragEnd}
+    >
       <div
         className="flex gap-3 p-4 overflow-x-auto bg-background"
         style={{ height: `calc(100vh - 49px - ${bottomOffset}px)` }}

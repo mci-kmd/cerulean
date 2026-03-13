@@ -49,6 +49,13 @@ export interface WorkItem {
   state: string;
   rev: number;
   url: string;
+  relatedPullRequests?: RelatedPullRequest[];
+}
+
+export interface RelatedPullRequest {
+  id: string;
+  label: string;
+  url: string;
 }
 
 export interface CustomTask {

@@ -23,8 +23,18 @@ export interface AdoWorkItem {
   rev: number;
   fields: AdoWorkItemFields;
   url: string;
+  relations?: AdoWorkItemRelation[];
   _links?: {
     html?: { href: string };
+  };
+}
+
+export interface AdoWorkItemRelation {
+  rel: string;
+  url: string;
+  attributes?: {
+    name?: string;
+    [key: string]: unknown;
   };
 }
 

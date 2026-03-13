@@ -8,12 +8,9 @@ export const handlers = [
     return HttpResponse.json(createWiqlResponse([1, 2, 3]));
   }),
 
-  http.get(`${BASE}/_apis/wit/workitems`, ({ request }) => {
-    const url = new URL(request.url);
-    const ids = (url.searchParams.get("ids") ?? "")
-      .split(",")
-      .map(Number)
-      .filter(Boolean);
+  http.post(`${BASE}/_apis/wit/workitemsbatch`, async ({ request }) => {
+    const body = await request.json() as { ids?: number[] };
+    const ids = (body.ids ?? []).map(Number).filter(Boolean);
     return HttpResponse.json(createBatchResponse(ids));
   }),
 ];

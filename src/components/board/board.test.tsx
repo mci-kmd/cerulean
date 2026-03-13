@@ -38,14 +38,19 @@ function createBoardData(overrides: Partial<BoardData> = {}): BoardData {
 }
 
 describe("Board", () => {
-  it("defers column change callbacks to a microtask", async () => {
-    const onColumnChange = vi.fn();
+  it("defers column change callbacks using drag-safe scheduling", () => {
+    vi.useFakeTimers();
+    try {
+      const onColumnChange = vi.fn();
 
-    scheduleColumnChange(onColumnChange, 1, "col-1", "col-2");
-    expect(onColumnChange).not.toHaveBeenCalled();
+      scheduleColumnChange(onColumnChange, 1, "col-1", "col-2");
+      expect(onColumnChange).not.toHaveBeenCalled();
 
-    await new Promise<void>((resolve) => queueMicrotask(resolve));
-    expect(onColumnChange).toHaveBeenCalledWith(1, "col-1", "col-2");
+      vi.runAllTimers();
+      expect(onColumnChange).toHaveBeenCalledWith(1, "col-1", "col-2");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders columns with names", () => {

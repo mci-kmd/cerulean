@@ -1,11 +1,69 @@
 import type { AdoClient } from "./ado-client";
-import type { AdoWorkItem } from "@/types/ado";
-import type { WorkItem } from "@/types/board";
+import type { AdoWorkItem, AdoWorkItemRelation } from "@/types/ado";
+import type { RelatedPullRequest, WorkItem } from "@/types/board";
 import { buildWiqlQuery, buildCompletedWiqlQuery, buildCandidateWiqlQuery } from "./wiql";
 import { detectChanges } from "@/logic/detect-changes";
 
+function isPullRequestRelation(relation: AdoWorkItemRelation): boolean {
+  const name = relation.attributes?.name;
+  if (typeof name === "string" && /pull request/i.test(name)) {
+    return true;
+  }
+  return /pullrequest/i.test(relation.url);
+}
+
+function mapPullRequestRelation(
+  relation: AdoWorkItemRelation,
+  org: string,
+  project: string,
+): RelatedPullRequest | null {
+  if (!isPullRequestRelation(relation)) {
+    return null;
+  }
+
+  const decodedUrl = decodeURIComponent(relation.url);
+
+  if (/^https?:\/\//i.test(decodedUrl)) {
+    const prId = decodedUrl.match(/pullrequest\/(\d+)/i)?.[1];
+    return {
+      id: prId ?? decodedUrl,
+      label: prId ? `PR #${prId}` : "Pull Request",
+      url: decodedUrl,
+    };
+  }
+
+  const artifactMatch = decodedUrl.match(
+    /vstfs:\/\/\/Git\/PullRequestId\/([^/]+)\/([^/]+)\/(\d+)/i,
+  );
+  if (!artifactMatch) {
+    return null;
+  }
+
+  const [, , repoId, prId] = artifactMatch;
+  return {
+    id: prId,
+    label: `PR #${prId}`,
+    url: `https://dev.azure.com/${org}/${project}/_git/${repoId}/pullrequest/${prId}`,
+  };
+}
+
+function mapRelatedPullRequests(
+  item: AdoWorkItem,
+  org: string,
+  project: string,
+): RelatedPullRequest[] {
+  const byUrl = new Map<string, RelatedPullRequest>();
+  for (const relation of item.relations ?? []) {
+    const pullRequest = mapPullRequestRelation(relation, org, project);
+    if (!pullRequest || byUrl.has(pullRequest.url)) continue;
+    byUrl.set(pullRequest.url, pullRequest);
+  }
+  return [...byUrl.values()];
+}
+
 export function mapAdoWorkItem(item: AdoWorkItem, org: string, project: string): WorkItem {
   const f = item.fields;
+  const relatedPullRequests = mapRelatedPullRequests(item, org, project);
   return {
     id: f["System.Id"],
     title: f["System.Title"],
@@ -15,6 +73,7 @@ export function mapAdoWorkItem(item: AdoWorkItem, org: string, project: string):
     url:
       item._links?.html?.href ??
       `https://dev.azure.com/${org}/${project}/_workitems/edit/${item.id}`,
+    ...(relatedPullRequests.length > 0 ? { relatedPullRequests } : {}),
   };
 }
 
