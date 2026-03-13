@@ -42,3 +42,9 @@ export interface AdoBatchResponse {
   count: number;
   value: AdoWorkItem[];
 }
+
+export interface AdoPullRequest {
+  pullRequestId: number;
+  title: string;
+  status: string;
+}

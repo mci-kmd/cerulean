@@ -1,4 +1,4 @@
-import type { WiqlResponse, AdoBatchResponse, AdoWorkItem } from "@/types/ado";
+import type { AdoBatchResponse, AdoPullRequest, AdoWorkItem, WiqlResponse } from "@/types/ado";
 
 export class WorkItemAlreadyAssignedError extends Error {
   constructor(
@@ -15,6 +15,7 @@ export class WorkItemAlreadyAssignedError extends Error {
 export interface AdoClient {
   queryWorkItems(wiql: string): Promise<WiqlResponse>;
   batchGetWorkItems(ids: number[], fields?: string[]): Promise<AdoWorkItem[]>;
+  getPullRequest(repositoryId: string, pullRequestId: string): Promise<AdoPullRequest>;
   updateWorkItemState(id: number, state: string): Promise<AdoWorkItem>;
   startWorkItem(id: number, targetState: string): Promise<AdoWorkItem>;
   returnWorkItemToCandidate(id: number, targetState: string): Promise<AdoWorkItem>;
@@ -174,6 +175,21 @@ export class HttpAdoClient implements AdoClient {
       results.push(...this.mergeBatchWithRelations(fieldData.value, relationData.value));
     }
     return results;
+  }
+
+  async getPullRequest(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<AdoPullRequest> {
+    const res = await fetch(
+      `${this.baseUrl}/_apis/git/repositories/${repositoryId}/pullRequests/${pullRequestId}?api-version=7.1`,
+      {
+        method: "GET",
+        headers: this.jsonHeaders(),
+      },
+    );
+    if (!res.ok) throw new Error(`Pull request fetch failed: ${res.status}`);
+    return res.json();
   }
 
   async updateWorkItemState(id: number, state: string): Promise<AdoWorkItem> {

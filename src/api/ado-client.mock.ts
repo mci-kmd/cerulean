@@ -1,11 +1,13 @@
 import { type AdoClient, WorkItemAlreadyAssignedError } from "./ado-client";
-import type { WiqlResponse, AdoWorkItem } from "@/types/ado";
+import type { AdoPullRequest, AdoWorkItem, WiqlResponse } from "@/types/ado";
 
 export class MockAdoClient implements AdoClient {
   public wiqlResult: WiqlResponse = { workItems: [] };
   public workItems: AdoWorkItem[] = [];
   public shouldFail = false;
+  public shouldFailPullRequest = false;
   public myEmail = "me@test.com";
+  public pullRequests = new Map<string, AdoPullRequest>();
   public callLog: { method: string; args: unknown[] }[] = [];
 
   async queryWorkItems(wiql: string): Promise<WiqlResponse> {
@@ -21,6 +23,24 @@ export class MockAdoClient implements AdoClient {
     this.callLog.push({ method: "batchGetWorkItems", args: [ids, fields] });
     if (this.shouldFail) throw new Error("Mock batch error");
     return this.workItems.filter((w) => ids.includes(w.id));
+  }
+
+  async getPullRequest(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<AdoPullRequest> {
+    this.callLog.push({ method: "getPullRequest", args: [repositoryId, pullRequestId] });
+    if (this.shouldFail || this.shouldFailPullRequest) {
+      throw new Error("Mock pull request error");
+    }
+    const key = `${repositoryId}/${pullRequestId}`;
+    const found = this.pullRequests.get(key);
+    if (found) return found;
+    return {
+      pullRequestId: Number(pullRequestId),
+      title: `PR #${pullRequestId}`,
+      status: "active",
+    };
   }
 
   async updateWorkItemState(

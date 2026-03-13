@@ -205,6 +205,38 @@ describe("HttpAdoClient", () => {
     });
   });
 
+  it("fetches pull request details with auth header", async () => {
+    let capturedAuth = "";
+    server.use(
+      http.get(`${BASE}/_apis/git/repositories/repo-1/pullRequests/123`, ({ request }) => {
+        capturedAuth = request.headers.get("authorization") ?? "";
+        return HttpResponse.json({
+          pullRequestId: 123,
+          title: "Improve login flow",
+          status: "completed",
+        });
+      }),
+    );
+
+    const pr = await client.getPullRequest("repo-1", "123");
+    expect(capturedAuth).toBe(`Basic ${btoa(":test-pat")}`);
+    expect(pr).toEqual({
+      pullRequestId: 123,
+      title: "Improve login flow",
+      status: "completed",
+    });
+  });
+
+  it("throws on failed pull request fetch", async () => {
+    server.use(
+      http.get(`${BASE}/_apis/git/repositories/repo-1/pullRequests/123`, () => {
+        return new HttpResponse(null, { status: 404 });
+      }),
+    );
+
+    await expect(client.getPullRequest("repo-1", "123")).rejects.toThrow("404");
+  });
+
   it("tests connection successfully", async () => {
     server.use(
       http.post(`${BASE}/_apis/wit/wiql`, () => {

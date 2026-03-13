@@ -81,6 +81,35 @@ describe("mapAdoWorkItem", () => {
       },
     ]);
   });
+
+  it("maps pull request title and completion metadata when available", () => {
+    const ado = createAdoWorkItem({
+      id: 4,
+      relations: [
+        {
+          rel: "ArtifactLink",
+          url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/789",
+          attributes: {
+            name: "Pull Request",
+            title: "Improve deployments",
+            status: "completed",
+          },
+        },
+      ],
+    });
+
+    const wi = mapAdoWorkItem(ado, "org", "proj");
+    expect(wi.relatedPullRequests).toEqual([
+      {
+        id: "789",
+        label: "PR #789",
+        title: "Improve deployments",
+        status: "completed",
+        isCompleted: true,
+        url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/789",
+      },
+    ]);
+  });
 });
 
 describe("fetchWorkItemsInitial", () => {
@@ -103,6 +132,90 @@ describe("fetchWorkItemsInitial", () => {
     const client = new MockAdoClient();
     const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
     expect(result.workItems).toHaveLength(0);
+  });
+
+  it("enriches related pull requests with fetched title/status", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with PR",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f123",
+            attributes: { name: "Pull Request" },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/123", {
+      pullRequestId: 123,
+      title: "Improve login flow",
+      status: "completed",
+    });
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+    expect(result.workItems[0].relatedPullRequests).toEqual([
+      {
+        id: "123",
+        label: "PR #123",
+        title: "Improve login flow",
+        status: "completed",
+        isCompleted: true,
+        url: "https://dev.azure.com/org/proj/_git/repo-1/pullrequest/123",
+      },
+    ]);
+    expect(
+      client.callLog.filter((call) => call.method === "getPullRequest"),
+    ).toHaveLength(1);
+  });
+
+  it("stops retrying pull request enrichment after first lookup failure", async () => {
+    const client = new MockAdoClient();
+    client.shouldFailPullRequest = true;
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with blocked PR API",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f123",
+            attributes: { name: "Pull Request" },
+          },
+        ],
+      }),
+    ];
+
+    const first = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+    const second = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+
+    expect(first.workItems[0].relatedPullRequests?.[0]).toMatchObject({
+      id: "123",
+      label: "PR #123",
+    });
+    expect(second.workItems[0].relatedPullRequests?.[0]).toMatchObject({
+      id: "123",
+      label: "PR #123",
+    });
+    expect(
+      client.callLog.filter((call) => call.method === "getPullRequest"),
+    ).toHaveLength(1);
   });
 });
 

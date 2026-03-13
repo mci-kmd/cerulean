@@ -55,6 +55,9 @@ export interface WorkItem {
 export interface RelatedPullRequest {
   id: string;
   label: string;
+  title?: string;
+  status?: string;
+  isCompleted?: boolean;
   url: string;
 }
 

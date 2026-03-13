@@ -1,12 +1,12 @@
 import { createElement, useEffect, useRef, useState } from "react";
-import { Pencil } from "lucide-react";
+import { GitPullRequest, Pencil } from "lucide-react";
 import { useSortable } from "@dnd-kit/react/sortable";
 import { useBoardCollections } from "@/db/use-board-collections";
 import { CopyableId } from "@/components/copyable-id";
 import { getTypeStyle, getTypeIcon, CUSTOM_TASK_TYPE } from "@/lib/work-item-types";
 import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
 import { TaskDialog } from "./task-dialog";
-import type { WorkItem } from "@/types/board";
+import type { RelatedPullRequest, WorkItem } from "@/types/board";
 
 interface BoardCardProps {
   workItem: WorkItem;
@@ -14,6 +14,15 @@ interface BoardCardProps {
   statusMessage?: string;
   index: number;
   columnId: string;
+}
+
+function isPullRequestCompleted(pr: RelatedPullRequest): boolean {
+  if (pr.isCompleted !== undefined) return pr.isCompleted;
+  return pr.status?.trim().toLowerCase() === "completed";
+}
+
+function getPullRequestTitle(pr: RelatedPullRequest): string {
+  return pr.title?.trim() || pr.label.trim() || "Pull Request";
 }
 
 export function BoardCard({
@@ -40,6 +49,9 @@ export function BoardCard({
     workItem.type === "Bug" || workItem.type === "User Story"
       ? workItem.relatedPullRequests ?? []
       : [];
+  const sortedPullRequests = [...relatedPullRequests].sort(
+    (a, b) => Number(isPullRequestCompleted(a)) - Number(isPullRequestCompleted(b)),
+  );
 
   const save = () => {
     const trimmed = value.trim();
@@ -138,21 +150,28 @@ export function BoardCard({
             {workItem.title}
           </a>
         )}
-        {relatedPullRequests.length > 0 && (
-          <ul className="mb-2 list-disc pl-4 space-y-0.5">
-            {relatedPullRequests.map((pr) => (
-              <li key={pr.url}>
-                <a
-                  href={pr.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-muted-foreground hover:underline"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {pr.label}
-                </a>
-              </li>
-            ))}
+        {sortedPullRequests.length > 0 && (
+          <ul className="mb-2 space-y-0.5">
+            {sortedPullRequests.map((pr) => {
+              const isCompleted = isPullRequestCompleted(pr);
+              return (
+                <li key={pr.url}>
+                  <a
+                    href={pr.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-start gap-1.5 text-xs text-muted-foreground hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <GitPullRequest className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
+                    <span className={isCompleted ? "opacity-60" : undefined}>
+                      {getPullRequestTitle(pr)}
+                      {isCompleted ? " (Completed)" : ""}
+                    </span>
+                  </a>
+                </li>
+              );
+            })}
           </ul>
         )}
         <div className="flex items-center gap-2">

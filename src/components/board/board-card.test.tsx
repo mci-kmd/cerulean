@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/helpers/render";
 import { setDndRenderSettledResolver } from "@/lib/schedule-dnd-mutation";
@@ -249,7 +249,7 @@ describe("BoardCard status message", () => {
 });
 
 describe("BoardCard related PR links", () => {
-  it("renders related pull request links for bug cards", () => {
+  it("renders related pull request title for bug cards", () => {
     renderCard({
       workItemOverrides: {
         type: "Bug",
@@ -257,19 +257,22 @@ describe("BoardCard related PR links", () => {
           {
             id: "123",
             label: "PR #123",
+            title: "Improve login flow",
             url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/123",
           },
         ],
       },
     });
 
-    expect(screen.getByRole("link", { name: "PR #123" })).toHaveAttribute(
+    const prLink = screen.getByRole("link", { name: "Improve login flow" });
+    expect(prLink).toHaveAttribute(
       "href",
       "https://dev.azure.com/org/proj/_git/repo/pullrequest/123",
     );
+    expect(prLink.querySelector("svg")).not.toBeNull();
   });
 
-  it("renders related pull request links for user stories", () => {
+  it("postfixes completed pull requests", () => {
     renderCard({
       workItemOverrides: {
         type: "User Story",
@@ -277,13 +280,49 @@ describe("BoardCard related PR links", () => {
           {
             id: "124",
             label: "PR #124",
+            title: "Ship release notes",
+            isCompleted: true,
             url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/124",
           },
         ],
       },
     });
 
-    expect(screen.getByRole("link", { name: "PR #124" })).toBeInTheDocument();
+    const completedPrLink = screen.getByRole("link", { name: "Ship release notes (Completed)" });
+    expect(completedPrLink).toBeInTheDocument();
+    expect(within(completedPrLink).getByText("Ship release notes (Completed)")).toHaveClass(
+      "opacity-60",
+    );
+  });
+
+  it("orders active pull requests before completed ones", () => {
+    renderCard({
+      workItemOverrides: {
+        type: "Bug",
+        relatedPullRequests: [
+          {
+            id: "200",
+            label: "PR #200",
+            title: "Finalize migration",
+            isCompleted: true,
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/200",
+          },
+          {
+            id: "199",
+            label: "PR #199",
+            title: "Add migration script",
+            isCompleted: false,
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/199",
+          },
+        ],
+      },
+    });
+
+    const links = within(screen.getByRole("list")).getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual([
+      "Add migration script",
+      "Finalize migration (Completed)",
+    ]);
   });
 
   it("does not render related pull request links for non-bug/story cards", () => {
@@ -294,12 +333,13 @@ describe("BoardCard related PR links", () => {
           {
             id: "999",
             label: "PR #999",
+            title: "This should not render",
             url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/999",
           },
         ],
       },
     });
 
-    expect(screen.queryByRole("link", { name: "PR #999" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "This should not render" })).toBeNull();
   });
 });
