@@ -11,6 +11,26 @@ function deferMutation(mutation: () => void) {
   }, 32);
 }
 
+function isTransientDomDetachError(error: unknown): error is DOMException {
+  if (!(error instanceof DOMException)) return false;
+  if (error.name !== "NotFoundError") return false;
+  return error.message.toLowerCase().includes("removechild");
+}
+
+function runDeferredMutationWithRetry(mutation: () => void, retriesLeft = 1) {
+  deferMutation(() => {
+    try {
+      mutation();
+    } catch (error) {
+      if (retriesLeft > 0 && isTransientDomDetachError(error)) {
+        runDeferredMutationWithRetry(mutation, retriesLeft - 1);
+        return;
+      }
+      throw error;
+    }
+  });
+}
+
 export type DndRenderSettled =
   | Promise<unknown>
   | (() => Promise<unknown> | undefined);
@@ -41,11 +61,11 @@ export function scheduleDndMutation(
 
   const initialSettled = readRenderSettled();
   if (!initialSettled) {
-    deferMutation(mutation);
+    runDeferredMutationWithRetry(mutation);
     return;
   }
 
-  const runDeferred = () => deferMutation(mutation);
+  const runDeferred = () => runDeferredMutationWithRetry(mutation);
   initialSettled.then(
     () => {
       const latestSettled = readRenderSettled();

@@ -105,4 +105,23 @@ describe("scheduleDndMutation", () => {
     vi.runAllTimers();
     expect(mutation).toHaveBeenCalledTimes(1);
   });
+
+  it("retries once when mutation hits transient removeChild DOMException", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("requestAnimationFrame", undefined);
+    const mutation = vi
+      .fn<() => void>()
+      .mockImplementationOnce(() => {
+        throw new DOMException(
+          "Node.removeChild: The node to be removed is not a child of this node",
+          "NotFoundError",
+        );
+      })
+      .mockImplementation(() => {});
+
+    scheduleDndMutation(mutation);
+
+    expect(() => vi.runAllTimers()).not.toThrow();
+    expect(mutation).toHaveBeenCalledTimes(2);
+  });
 });
