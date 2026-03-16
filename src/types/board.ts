@@ -58,6 +58,7 @@ export interface RelatedPullRequest {
   title?: string;
   status?: string;
   mergeStatus?: string;
+  unresolvedCommentCount?: number;
   failingStatusChecks?: string[];
   requiredReviewersApproved?: boolean;
   requiredReviewersPendingCount?: number;

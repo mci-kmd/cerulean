@@ -3,6 +3,7 @@ import type {
   AdoPolicyEvaluationRecord,
   AdoPullRequest,
   AdoPullRequestStatus,
+  AdoPullRequestThread,
   AdoWorkItem,
   WiqlResponse,
 } from "@/types/ado";
@@ -13,10 +14,12 @@ export class MockAdoClient implements AdoClient {
   public shouldFail = false;
   public shouldFailPullRequest = false;
   public shouldFailPullRequestStatuses = false;
+  public shouldFailPullRequestThreads = false;
   public shouldFailPullRequestPolicyEvaluations = false;
   public myEmail = "me@test.com";
   public pullRequests = new Map<string, AdoPullRequest>();
   public pullRequestStatuses = new Map<string, AdoPullRequestStatus[]>();
+  public pullRequestThreads = new Map<string, AdoPullRequestThread[]>();
   public pullRequestPolicyEvaluations = new Map<string, AdoPolicyEvaluationRecord[]>();
   public callLog: { method: string; args: unknown[] }[] = [];
 
@@ -63,6 +66,18 @@ export class MockAdoClient implements AdoClient {
     }
     const key = `${repositoryId}/${pullRequestId}`;
     return this.pullRequestStatuses.get(key) ?? [];
+  }
+
+  async getPullRequestThreads(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<AdoPullRequestThread[]> {
+    this.callLog.push({ method: "getPullRequestThreads", args: [repositoryId, pullRequestId] });
+    if (this.shouldFail || this.shouldFailPullRequestThreads) {
+      throw new Error("Mock pull request threads error");
+    }
+    const key = `${repositoryId}/${pullRequestId}`;
+    return this.pullRequestThreads.get(key) ?? [];
   }
 
   async getPullRequestPolicyEvaluations(

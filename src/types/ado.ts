@@ -70,6 +70,16 @@ export interface AdoPullRequestStatus {
   };
 }
 
+export interface AdoPullRequestThreadComment {
+  isDeleted?: boolean;
+}
+
+export interface AdoPullRequestThread {
+  status?: string;
+  isDeleted?: boolean;
+  comments?: AdoPullRequestThreadComment[];
+}
+
 export interface AdoPolicyEvaluationRecord {
   status?: string;
   configuration?: {

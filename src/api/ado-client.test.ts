@@ -264,6 +264,43 @@ describe("HttpAdoClient", () => {
     await expect(client.getPullRequestStatuses("repo-1", "123")).rejects.toThrow("403");
   });
 
+  it("fetches pull request threads with auth header", async () => {
+    let capturedAuth = "";
+    server.use(
+      http.get(`${BASE}/_apis/git/repositories/repo-1/pullRequests/123/threads`, ({ request }) => {
+        capturedAuth = request.headers.get("authorization") ?? "";
+        return HttpResponse.json({
+          value: [
+            {
+              status: "active",
+              comments: [{ isDeleted: false }],
+            },
+          ],
+          count: 1,
+        });
+      }),
+    );
+
+    const threads = await client.getPullRequestThreads("repo-1", "123");
+    expect(capturedAuth).toBe(`Basic ${btoa(":test-pat")}`);
+    expect(threads).toEqual([
+      {
+        status: "active",
+        comments: [{ isDeleted: false }],
+      },
+    ]);
+  });
+
+  it("throws on failed pull request threads fetch", async () => {
+    server.use(
+      http.get(`${BASE}/_apis/git/repositories/repo-1/pullRequests/123/threads`, () => {
+        return new HttpResponse(null, { status: 403 });
+      }),
+    );
+
+    await expect(client.getPullRequestThreads("repo-1", "123")).rejects.toThrow("403");
+  });
+
   it("fetches pull request policy evaluations with auth header", async () => {
     let capturedAuth = "";
     server.use(

@@ -2,6 +2,7 @@ import type { AdoClient } from "./ado-client";
 import type {
   AdoPolicyEvaluationRecord,
   AdoPullRequest,
+  AdoPullRequestThread,
   AdoWorkItem,
   AdoWorkItemRelation,
 } from "@/types/ado";
@@ -11,6 +12,7 @@ import { detectChanges } from "@/logic/detect-changes";
 
 const prLookupUnavailableClients = new WeakSet<AdoClient>();
 const prPolicyLookupUnavailableClients = new WeakSet<AdoClient>();
+const prThreadsLookupUnavailableClients = new WeakSet<AdoClient>();
 
 function isPullRequestRelation(relation: AdoWorkItemRelation): boolean {
   const name = relation.attributes?.name;
@@ -262,10 +264,38 @@ async function getPullRequestPoliciesSafe(
   }
 }
 
+function getUnresolvedCommentCount(threads: AdoPullRequestThread[]): number {
+  let total = 0;
+  for (const thread of threads) {
+    if (thread.isDeleted === true) continue;
+    if (thread.status?.trim().toLowerCase() !== "active") continue;
+    total += 1;
+  }
+  return total;
+}
+
+async function getPullRequestUnresolvedCommentCountSafe(
+  client: AdoClient,
+  repositoryId: string,
+  pullRequestId: string,
+  status: string,
+): Promise<number | undefined> {
+  if (isPullRequestCompleted(status)) return undefined;
+  if (prThreadsLookupUnavailableClients.has(client)) return undefined;
+  try {
+    const threads = await client.getPullRequestThreads(repositoryId, pullRequestId);
+    return getUnresolvedCommentCount(threads);
+  } catch {
+    prThreadsLookupUnavailableClients.add(client);
+    return undefined;
+  }
+}
+
 interface PullRequestDetails {
   title: string;
   status: string;
   mergeStatus?: string;
+  unresolvedCommentCount?: number;
   requiredReviewersApproved?: boolean;
   requiredReviewersPendingCount?: number;
   failingStatusChecks?: string[];
@@ -278,6 +308,11 @@ function mergePullRequestDetails(
   const title = details.title.trim();
   const status = details.status.trim();
   const mergeStatus = details.mergeStatus?.trim() ?? "";
+  const unresolvedCommentCount = details.unresolvedCommentCount;
+  const normalizedUnresolvedCommentCount =
+    unresolvedCommentCount !== undefined && unresolvedCommentCount > 0
+      ? unresolvedCommentCount
+      : undefined;
   const requiredReviewersApproved = details.requiredReviewersApproved;
   const requiredReviewersPendingCount = details.requiredReviewersPendingCount;
   const failingStatusChecks = details.failingStatusChecks;
@@ -286,6 +321,9 @@ function mergePullRequestDetails(
   const sameTitle = title.length === 0 || title === pr.title;
   const sameStatus = status.length === 0 || status === pr.status;
   const sameMergeStatus = mergeStatus.length === 0 || mergeStatus === pr.mergeStatus;
+  const sameUnresolvedCommentCount =
+    unresolvedCommentCount === undefined ||
+    normalizedUnresolvedCommentCount === pr.unresolvedCommentCount;
   const sameRequiredReviewersApproved =
     requiredReviewersApproved === undefined ||
     requiredReviewersApproved === pr.requiredReviewersApproved;
@@ -305,6 +343,7 @@ function mergePullRequestDetails(
     sameTitle &&
     sameStatus &&
     sameMergeStatus &&
+    sameUnresolvedCommentCount &&
     sameRequiredReviewersApproved &&
     sameRequiredReviewersPendingCount &&
     sameFailingStatusChecks &&
@@ -313,11 +352,14 @@ function mergePullRequestDetails(
     return pr;
   }
 
-  return {
+  const merged: RelatedPullRequest = {
     ...pr,
     ...(title.length > 0 ? { title } : {}),
     ...(status.length > 0 ? { status, isCompleted } : {}),
     ...(mergeStatus.length > 0 ? { mergeStatus } : {}),
+    ...(unresolvedCommentCount !== undefined && normalizedUnresolvedCommentCount !== undefined
+      ? { unresolvedCommentCount: normalizedUnresolvedCommentCount }
+      : {}),
     ...(requiredReviewersApproved !== undefined
       ? { requiredReviewersApproved }
       : {}),
@@ -330,6 +372,10 @@ function mergePullRequestDetails(
         : { failingStatusChecks: undefined }
       : {}),
   };
+  if (unresolvedCommentCount !== undefined && normalizedUnresolvedCommentCount === undefined) {
+    delete merged.unresolvedCommentCount;
+  }
+  return merged;
 }
 
 async function enrichPullRequestDetails(
@@ -359,13 +405,24 @@ async function enrichPullRequestDetails(
   try {
     const firstPr = await client.getPullRequest(firstRef.repositoryId, firstRef.pullRequestId);
     const firstPolicyArtifactId = getPullRequestPolicyArtifactId(firstPr);
-    const failingStatusChecks = firstPolicyArtifactId
-      ? getFailingStatusChecks(await getPullRequestPoliciesSafe(client, firstPolicyArtifactId))
-      : [];
+    const [failingStatusChecks, unresolvedCommentCount] = await Promise.all([
+      firstPolicyArtifactId
+        ? getPullRequestPoliciesSafe(client, firstPolicyArtifactId).then(getFailingStatusChecks)
+        : Promise.resolve<string[]>([]),
+      getPullRequestUnresolvedCommentCountSafe(
+        client,
+        firstRef.repositoryId,
+        firstRef.pullRequestId,
+        firstPr.status,
+      ),
+    ]);
     detailsByKey.set(firstKey, {
       title: firstPr.title,
       status: firstPr.status,
       ...(firstPr.mergeStatus ? { mergeStatus: firstPr.mergeStatus } : {}),
+      ...(unresolvedCommentCount !== undefined
+        ? { unresolvedCommentCount }
+        : {}),
       ...getRequiredReviewerGate(firstPr),
       failingStatusChecks,
     });
@@ -380,15 +437,26 @@ async function enrichPullRequestDetails(
       remaining.map(async ([key, ref]) => {
         const pr = await client.getPullRequest(ref.repositoryId, ref.pullRequestId);
         const policyArtifactId = getPullRequestPolicyArtifactId(pr);
-        const failingStatusChecks = policyArtifactId
-          ? getFailingStatusChecks(await getPullRequestPoliciesSafe(client, policyArtifactId))
-          : [];
+        const [failingStatusChecks, unresolvedCommentCount] = await Promise.all([
+          policyArtifactId
+            ? getPullRequestPoliciesSafe(client, policyArtifactId).then(getFailingStatusChecks)
+            : Promise.resolve<string[]>([]),
+          getPullRequestUnresolvedCommentCountSafe(
+            client,
+            ref.repositoryId,
+            ref.pullRequestId,
+            pr.status,
+          ),
+        ]);
         return [
           key,
           {
             title: pr.title,
             status: pr.status,
             ...(pr.mergeStatus ? { mergeStatus: pr.mergeStatus } : {}),
+            ...(unresolvedCommentCount !== undefined
+              ? { unresolvedCommentCount }
+              : {}),
             ...getRequiredReviewerGate(pr),
             failingStatusChecks,
           },

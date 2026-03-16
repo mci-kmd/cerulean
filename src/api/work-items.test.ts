@@ -183,6 +183,76 @@ describe("fetchWorkItemsInitial", () => {
     expect(
       client.callLog.filter((call) => call.method === "getPullRequest"),
     ).toHaveLength(1);
+    expect(
+      client.callLog.filter((call) => call.method === "getPullRequestThreads"),
+    ).toHaveLength(0);
+  });
+
+  it("enriches active pull requests with unresolved thread counts", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with unresolved comments",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f777",
+            attributes: { name: "Pull Request" },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/777", {
+      pullRequestId: 777,
+      title: "Unresolved comments PR",
+      status: "active",
+      mergeStatus: "succeeded",
+      reviewers: [{ isRequired: true, vote: 10 }],
+    });
+    client.pullRequestThreads.set("repo-1/777", [
+      {
+        status: "active",
+        comments: [{ isDeleted: false }, { isDeleted: false }],
+      },
+      {
+        status: "active",
+        comments: [{ isDeleted: true }, { isDeleted: false }],
+      },
+      {
+        status: "active",
+      },
+      {
+        status: "fixed",
+        comments: [{ isDeleted: false }],
+      },
+    ]);
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+    expect(result.workItems[0].relatedPullRequests).toEqual([
+      {
+        id: "777",
+        label: "PR #777",
+        title: "Unresolved comments PR",
+        status: "active",
+        mergeStatus: "succeeded",
+        unresolvedCommentCount: 3,
+        requiredReviewersApproved: true,
+        requiredReviewersPendingCount: 0,
+        isCompleted: false,
+        url: "https://dev.azure.com/org/proj/_git/repo-1/pullrequest/777",
+      },
+    ]);
+    expect(
+      client.callLog.filter((call) => call.method === "getPullRequestThreads"),
+    ).toHaveLength(1);
   });
 
   it("marks succeeded pull requests as not mergeable when required reviewers are pending", async () => {

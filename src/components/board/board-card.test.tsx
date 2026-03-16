@@ -249,6 +249,81 @@ describe("BoardCard status message", () => {
 });
 
 describe("BoardCard related PR links", () => {
+  it("shows unresolved comment count next to relevant active pull request titles", () => {
+    renderCard({
+      workItemOverrides: {
+        type: "Bug",
+        relatedPullRequests: [
+          {
+            id: "2001",
+            label: "PR #2001",
+            title: "Active PR one",
+            status: "active",
+            unresolvedCommentCount: 2,
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/2001",
+          },
+          {
+            id: "2002",
+            label: "PR #2002",
+            title: "Completed PR",
+            status: "completed",
+            unresolvedCommentCount: 7,
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/2002",
+          },
+          {
+            id: "2003",
+            label: "PR #2003",
+            title: "Active PR two",
+            status: "active",
+            unresolvedCommentCount: 1,
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/2003",
+          },
+        ],
+      },
+    });
+
+    const activePrOne = screen.getByRole("link", { name: "Active PR one" });
+    const activePrTwo = screen.getByRole("link", { name: "Active PR two" });
+    const completedPr = screen.getByRole("link", { name: "Completed PR (Completed)" });
+    const workItemLink = screen.getByRole("link", { name: "Test Item" });
+
+    expect(within(activePrOne).getByTestId("pr-unresolved-comments-2001")).toHaveTextContent("2");
+    expect(within(activePrTwo).getByTestId("pr-unresolved-comments-2003")).toHaveTextContent("1");
+    expect(within(completedPr).queryByTestId("pr-unresolved-comments-2002")).toBeNull();
+    expect(workItemLink.querySelector('[data-testid^="pr-unresolved-comments-"]')).toBeNull();
+  });
+
+  it("hides unresolved comment count when active pull requests have none", () => {
+    renderCard({
+      workItemOverrides: {
+        type: "Bug",
+        relatedPullRequests: [
+          {
+            id: "2010",
+            label: "PR #2010",
+            title: "Active clean PR",
+            status: "active",
+            unresolvedCommentCount: 0,
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/2010",
+          },
+          {
+            id: "2011",
+            label: "PR #2011",
+            title: "Completed old PR",
+            status: "completed",
+            unresolvedCommentCount: 4,
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/2011",
+          },
+        ],
+      },
+    });
+
+    const workItemLink = screen.getByRole("link", { name: "Test Item" });
+    expect(screen.queryByTestId("pr-unresolved-comments-2010")).toBeNull();
+    expect(screen.queryByTestId("pr-unresolved-comments-2011")).toBeNull();
+    expect(workItemLink.querySelector('[data-testid^="pr-unresolved-comments-"]')).toBeNull();
+  });
+
   it("renders related pull request title for bug cards", () => {
     renderCard({
       workItemOverrides: {

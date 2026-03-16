@@ -3,6 +3,7 @@ import type {
   AdoPolicyEvaluationRecord,
   AdoPullRequest,
   AdoPullRequestStatus,
+  AdoPullRequestThread,
   AdoWorkItem,
   WiqlResponse,
 } from "@/types/ado";
@@ -24,6 +25,7 @@ export interface AdoClient {
   batchGetWorkItems(ids: number[], fields?: string[]): Promise<AdoWorkItem[]>;
   getPullRequest(repositoryId: string, pullRequestId: string): Promise<AdoPullRequest>;
   getPullRequestStatuses(repositoryId: string, pullRequestId: string): Promise<AdoPullRequestStatus[]>;
+  getPullRequestThreads(repositoryId: string, pullRequestId: string): Promise<AdoPullRequestThread[]>;
   getPullRequestPolicyEvaluations(artifactId: string): Promise<AdoPolicyEvaluationRecord[]>;
   updateWorkItemState(id: number, state: string): Promise<AdoWorkItem>;
   startWorkItem(id: number, targetState: string): Promise<AdoWorkItem>;
@@ -214,6 +216,22 @@ export class HttpAdoClient implements AdoClient {
     );
     if (!res.ok) throw new Error(`Pull request statuses fetch failed: ${res.status}`);
     const data = await res.json() as { value?: AdoPullRequestStatus[] };
+    return data.value ?? [];
+  }
+
+  async getPullRequestThreads(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<AdoPullRequestThread[]> {
+    const res = await fetch(
+      `${this.baseUrl}/_apis/git/repositories/${repositoryId}/pullRequests/${pullRequestId}/threads?api-version=7.1`,
+      {
+        method: "GET",
+        headers: this.jsonHeaders(),
+      },
+    );
+    if (!res.ok) throw new Error(`Pull request threads fetch failed: ${res.status}`);
+    const data = await res.json() as { value?: AdoPullRequestThread[] };
     return data.value ?? [];
   }
 

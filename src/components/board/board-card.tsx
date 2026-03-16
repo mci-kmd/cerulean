@@ -3,6 +3,7 @@ import {
   GitPullRequest,
   GitPullRequestClosed,
   GitPullRequestDraft,
+  MessageCircle,
   Pencil,
   type LucideIcon,
 } from "lucide-react";
@@ -281,9 +282,19 @@ export function BoardCard({
                       </TooltipTrigger>
                       <TooltipContent>{metadata.tooltip}</TooltipContent>
                     </Tooltip>
-                    <span className={isCompleted ? "opacity-60" : undefined}>
+                    <span className={`inline-flex items-center gap-1 ${isCompleted ? "opacity-60" : ""}`}>
                       {getPullRequestTitle(pr)}
                       {isCompleted ? " (Completed)" : ""}
+                      {!isCompleted && (pr.unresolvedCommentCount ?? 0) > 0 && (
+                        <span
+                          data-testid={`pr-unresolved-comments-${pr.id}`}
+                          className="inline-flex items-center gap-0.5"
+                          aria-hidden="true"
+                        >
+                          <MessageCircle className="h-3 w-3" />
+                          <span>{pr.unresolvedCommentCount}</span>
+                        </span>
+                      )}
                     </span>
                   </a>
                 </li>
