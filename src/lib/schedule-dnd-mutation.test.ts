@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { scheduleDndMutation, setDndRenderSettledResolver } from "./schedule-dnd-mutation";
+import {
+  resolveDndManagerSettled,
+  scheduleDndMutation,
+  setDndRenderSettledResolver,
+} from "./schedule-dnd-mutation";
 
 describe("scheduleDndMutation", () => {
   afterEach(() => {
@@ -106,11 +110,67 @@ describe("scheduleDndMutation", () => {
     expect(mutation).toHaveBeenCalledTimes(1);
   });
 
-  it("retries once when mutation hits transient removeChild DOMException", () => {
+  it("waits for drag operation idle when resolving manager settled state", async () => {
+    vi.useFakeTimers();
+    const status = { idle: false };
+    const settled = resolveDndManagerSettled({ dragOperation: { status } });
+    const resolved = vi.fn();
+    settled?.then(resolved);
+
+    vi.advanceTimersByTime(500);
+    await Promise.resolve();
+    expect(resolved).not.toHaveBeenCalled();
+
+    status.idle = true;
+    vi.runAllTimers();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(resolved).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for both rendering and drag idle in manager settled state", async () => {
+    vi.useFakeTimers();
+    const status = { idle: false };
+    let resolveRendering!: () => void;
+    const rendering = new Promise<void>((resolve) => {
+      resolveRendering = resolve;
+    });
+    const settled = resolveDndManagerSettled({
+      renderer: { rendering },
+      dragOperation: { status },
+    });
+    const resolved = vi.fn();
+    settled?.then(resolved);
+
+    resolveRendering();
+    await Promise.resolve();
+    vi.advanceTimersByTime(32);
+    await Promise.resolve();
+    expect(resolved).not.toHaveBeenCalled();
+
+    status.idle = true;
+    vi.runAllTimers();
+    await settled;
+    expect(resolved).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries transient removeChild DOMException multiple times", () => {
     vi.useFakeTimers();
     vi.stubGlobal("requestAnimationFrame", undefined);
     const mutation = vi
       .fn<() => void>()
+      .mockImplementationOnce(() => {
+        throw new DOMException(
+          "Node.removeChild: The node to be removed is not a child of this node",
+          "NotFoundError",
+        );
+      })
+      .mockImplementationOnce(() => {
+        throw new DOMException(
+          "Node.removeChild: The node to be removed is not a child of this node",
+          "NotFoundError",
+        );
+      })
       .mockImplementationOnce(() => {
         throw new DOMException(
           "Node.removeChild: The node to be removed is not a child of this node",
@@ -122,6 +182,40 @@ describe("scheduleDndMutation", () => {
     scheduleDndMutation(mutation);
 
     expect(() => vi.runAllTimers()).not.toThrow();
+    expect(mutation).toHaveBeenCalledTimes(4);
+  });
+
+  it("retries transient removeChild errors even when thrown as Error", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("requestAnimationFrame", undefined);
+    const mutation = vi
+      .fn<() => void>()
+      .mockImplementationOnce(() => {
+        throw new Error(
+          "Node.removeChild: The node to be removed is not a child of this node",
+        );
+      })
+      .mockImplementation(() => {});
+
+    scheduleDndMutation(mutation);
+
+    expect(() => vi.runAllTimers()).not.toThrow();
     expect(mutation).toHaveBeenCalledTimes(2);
+  });
+
+  it("rethrows when transient removeChild keeps failing after retries", () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("requestAnimationFrame", undefined);
+    const mutation = vi.fn<() => void>(() => {
+      throw new DOMException(
+        "Node.removeChild: The node to be removed is not a child of this node",
+        "NotFoundError",
+      );
+    });
+
+    scheduleDndMutation(mutation);
+
+    expect(() => vi.runAllTimers()).toThrow();
+    expect(mutation).toHaveBeenCalledTimes(4);
   });
 });

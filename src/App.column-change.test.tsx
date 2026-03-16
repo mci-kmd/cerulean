@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   boardOnColumnChange: undefined as
     | ((workItemId: number, fromColumnId: string, toColumnId: string) => void)
     | undefined,
+  boardOnDragStateChange: undefined as ((isDragging: boolean) => void) | undefined,
   startMutate: vi.fn(),
   returnMutate: vi.fn(),
   completeMutate: vi.fn(),
@@ -17,10 +18,13 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/components/board/board", () => ({
   Board: ({
     onColumnChange,
+    onDragStateChange,
   }: {
     onColumnChange?: (workItemId: number, fromColumnId: string, toColumnId: string) => void;
+    onDragStateChange?: (isDragging: boolean) => void;
   }) => {
     mocks.boardOnColumnChange = onColumnChange;
+    mocks.boardOnDragStateChange = onDragStateChange;
     return <div>Board</div>;
   },
 }));
@@ -74,6 +78,7 @@ vi.mock("@/hooks/use-complete-work-item", () => ({
 describe("App column change behavior", () => {
   beforeEach(() => {
     mocks.boardOnColumnChange = undefined;
+    mocks.boardOnDragStateChange = undefined;
     mocks.startMutate.mockReset();
     mocks.returnMutate.mockReset();
     mocks.completeMutate.mockReset();
@@ -246,5 +251,24 @@ describe("App column change behavior", () => {
     expect(mocks.startMutate).not.toHaveBeenCalled();
     expect(mocks.returnMutate).not.toHaveBeenCalled();
     expect(mocks.completeMutate).not.toHaveBeenCalled();
+  });
+
+  it("wires drag-state callback into Board", async () => {
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      collections.settings.insert({
+        ...DEFAULT_SETTINGS,
+        id: "settings",
+        pat: "test-pat",
+        org: "test-org",
+        project: "test-project",
+        sourceState: "Active",
+        candidateState: "New",
+      });
+      collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnDragStateChange).toBeTypeOf("function"));
   });
 });

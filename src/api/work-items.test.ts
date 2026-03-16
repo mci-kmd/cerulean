@@ -93,6 +93,7 @@ describe("mapAdoWorkItem", () => {
             name: "Pull Request",
             title: "Improve deployments",
             status: "completed",
+            mergeStatus: "succeeded",
           },
         },
       ],
@@ -105,6 +106,7 @@ describe("mapAdoWorkItem", () => {
         label: "PR #789",
         title: "Improve deployments",
         status: "completed",
+        mergeStatus: "succeeded",
         isCompleted: true,
         url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/789",
       },
@@ -134,7 +136,7 @@ describe("fetchWorkItemsInitial", () => {
     expect(result.workItems).toHaveLength(0);
   });
 
-  it("enriches related pull requests with fetched title/status", async () => {
+  it("enriches related pull requests with fetched title/status/merge status", async () => {
     const client = new MockAdoClient();
     client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
     client.workItems = [
@@ -160,6 +162,8 @@ describe("fetchWorkItemsInitial", () => {
       pullRequestId: 123,
       title: "Improve login flow",
       status: "completed",
+      mergeStatus: "succeeded",
+      reviewers: [{ isRequired: true, vote: 10 }],
     });
 
     const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
@@ -169,7 +173,318 @@ describe("fetchWorkItemsInitial", () => {
         label: "PR #123",
         title: "Improve login flow",
         status: "completed",
+        mergeStatus: "succeeded",
+        requiredReviewersApproved: true,
+        requiredReviewersPendingCount: 0,
         isCompleted: true,
+        url: "https://dev.azure.com/org/proj/_git/repo-1/pullrequest/123",
+      },
+    ]);
+    expect(
+      client.callLog.filter((call) => call.method === "getPullRequest"),
+    ).toHaveLength(1);
+  });
+
+  it("marks succeeded pull requests as not mergeable when required reviewers are pending", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with PR",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f321",
+            attributes: {
+              name: "Pull Request",
+              title: "Gate blocked PR",
+              status: "active",
+              mergeStatus: "succeeded",
+            },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/321", {
+      pullRequestId: 321,
+      title: "Gate blocked PR",
+      status: "active",
+      mergeStatus: "succeeded",
+      reviewers: [{ isRequired: true, vote: 0 }],
+    });
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+    expect(result.workItems[0].relatedPullRequests).toEqual([
+      {
+        id: "321",
+        label: "PR #321",
+        title: "Gate blocked PR",
+        status: "active",
+        mergeStatus: "succeeded",
+        requiredReviewersApproved: false,
+        requiredReviewersPendingCount: 1,
+        isCompleted: false,
+        url: "https://dev.azure.com/org/proj/_git/repo-1/pullrequest/321",
+      },
+    ]);
+    expect(
+      client.callLog.filter((call) => call.method === "getPullRequest"),
+    ).toHaveLength(1);
+  });
+
+  it("captures failing blocking policy checks and ignores optional checks", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with failed checks",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f999",
+            attributes: {
+              name: "Pull Request",
+              title: "Checks failing PR",
+              status: "active",
+              mergeStatus: "succeeded",
+            },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/999", {
+      pullRequestId: 999,
+      codeReviewId: 123456,
+      title: "Checks failing PR",
+      status: "active",
+      mergeStatus: "succeeded",
+      artifactId: "vstfs:///Git/PullRequestId/project-1%2frepo-1%2f999",
+      reviewers: [{ isRequired: true, vote: 0 }],
+    });
+    client.pullRequestPolicyEvaluations.set("vstfs:///CodeReview/CodeReviewId/project-1/999", [
+      {
+        status: "rejected",
+        configuration: { isBlocking: true, isEnabled: true, type: { displayName: "CI Build" } },
+      },
+      {
+        status: "rejected",
+        configuration: {
+          isBlocking: true,
+          isEnabled: true,
+          type: { displayName: "Require a merge strategy" },
+        },
+      },
+      {
+        status: "rejected",
+        configuration: {
+          isBlocking: false,
+          isEnabled: true,
+          type: { displayName: "Optional Lint" },
+        },
+      },
+      {
+        status: "broken",
+        configuration: { isBlocking: true, isEnabled: true, type: { displayName: "Unit Tests" } },
+      },
+    ]);
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+    expect(result.workItems[0].relatedPullRequests).toEqual([
+      {
+        id: "999",
+        label: "PR #999",
+        title: "Checks failing PR",
+        status: "active",
+        mergeStatus: "succeeded",
+        requiredReviewersApproved: false,
+        requiredReviewersPendingCount: 1,
+        failingStatusChecks: ["CI Build", "Unit Tests"],
+        isCompleted: false,
+        url: "https://dev.azure.com/org/proj/_git/repo-1/pullrequest/999",
+      },
+    ]);
+    expect(
+      client.callLog.filter((call) => call.method === "getPullRequestPolicyEvaluations"),
+    ).toHaveLength(1);
+    expect(
+      client.callLog.find((call) => call.method === "getPullRequestPolicyEvaluations")?.args[0],
+    ).toBe("vstfs:///CodeReview/CodeReviewId/project-1/999");
+  });
+
+  it("ignores require-a-merge-strategy policy when it is the only failed blocking policy", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with merge strategy policy",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f1002",
+            attributes: {
+              name: "Pull Request",
+              title: "Merge strategy only",
+              status: "active",
+              mergeStatus: "succeeded",
+            },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/1002", {
+      pullRequestId: 1002,
+      title: "Merge strategy only",
+      status: "active",
+      mergeStatus: "succeeded",
+      artifactId: "vstfs:///Git/PullRequestId/project-1%2frepo-1%2f1002",
+      reviewers: [{ isRequired: true, vote: 0 }],
+    });
+    client.pullRequestPolicyEvaluations.set("vstfs:///CodeReview/CodeReviewId/project-1/1002", [
+      {
+        status: "rejected",
+        configuration: {
+          isBlocking: true,
+          isEnabled: true,
+          type: { displayName: "Require a merge strategy" },
+        },
+      },
+    ]);
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+    expect(result.workItems[0].relatedPullRequests?.[0]).toMatchObject({
+      id: "1002",
+      requiredReviewersApproved: false,
+      requiredReviewersPendingCount: 1,
+    });
+    expect(result.workItems[0].relatedPullRequests?.[0].failingStatusChecks).toBeUndefined();
+  });
+
+  it("falls back to repository project id for policy artifact when PR artifactId is missing", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with policy fallback",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f1001",
+            attributes: {
+              name: "Pull Request",
+              title: "Fallback policy PR",
+              status: "active",
+              mergeStatus: "succeeded",
+            },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/1001", {
+      pullRequestId: 1001,
+      title: "Fallback policy PR",
+      status: "active",
+      mergeStatus: "succeeded",
+      repository: {
+        project: {
+          id: "project-fallback",
+        },
+      },
+      reviewers: [{ isRequired: true, vote: 0 }],
+    });
+    client.pullRequestPolicyEvaluations.set(
+      "vstfs:///CodeReview/CodeReviewId/project-fallback/1001",
+      [
+        {
+          status: "rejected",
+          configuration: {
+            isBlocking: true,
+            isEnabled: true,
+            type: { displayName: "Build Validation" },
+          },
+        },
+      ],
+    );
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+    expect(result.workItems[0].relatedPullRequests?.[0]).toMatchObject({
+      id: "1001",
+      failingStatusChecks: ["Build Validation"],
+    });
+    expect(
+      client.callLog.find((call) => call.method === "getPullRequestPolicyEvaluations")?.args[0],
+    ).toBe("vstfs:///CodeReview/CodeReviewId/project-fallback/1001");
+  });
+
+  it("still enriches when title/status exist but merge status is missing", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with PR",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f123",
+            attributes: {
+              name: "Pull Request",
+              title: "Improve login flow",
+              status: "active",
+            },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/123", {
+      pullRequestId: 123,
+      title: "Improve login flow",
+      status: "active",
+      mergeStatus: "conflicts",
+    });
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+    expect(result.workItems[0].relatedPullRequests).toEqual([
+      {
+        id: "123",
+        label: "PR #123",
+        title: "Improve login flow",
+        status: "active",
+        mergeStatus: "conflicts",
+        isCompleted: false,
         url: "https://dev.azure.com/org/proj/_git/repo-1/pullrequest/123",
       },
     ]);
@@ -275,6 +590,93 @@ describe("fetchWorkItemsDelta", () => {
     // Item 1 should be updated
     const updated = result.workItems.find((w) => w.id === 1);
     expect(updated?.title).toBe("Updated");
+  });
+
+  it("refreshes active pull request status for unchanged work items", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 2, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 2,
+        fields: {
+          "System.Id": 2,
+          "System.Rev": 1,
+          "System.Title": "Story with stale PR",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+        },
+      }),
+    ];
+    client.pullRequests.set("repo-1/123", {
+      pullRequestId: 123,
+      title: "Story PR",
+      status: "active",
+      mergeStatus: "succeeded",
+      artifactId: "vstfs:///Git/PullRequestId/project-1%2frepo-1%2f123",
+      reviewers: [{ isRequired: true, vote: 0 }],
+    });
+    client.pullRequestPolicyEvaluations.set("vstfs:///CodeReview/CodeReviewId/project-1/123", [
+      {
+        status: "rejected",
+        configuration: { isBlocking: true, isEnabled: true, type: { displayName: "CI Build" } },
+      },
+      {
+        status: "rejected",
+        configuration: {
+          isBlocking: false,
+          isEnabled: true,
+          type: { displayName: "Optional Lint" },
+        },
+      },
+    ]);
+
+    const cachedRevMap = new Map([[2, { rev: 1 }]]);
+    const cachedItems = [
+      {
+        id: 2,
+        title: "Story with stale PR",
+        type: "User Story",
+        state: "Active",
+        rev: 1,
+        url: "https://dev.azure.com/org/proj/_workitems/edit/2",
+        relatedPullRequests: [
+          {
+            id: "123",
+            label: "PR #123",
+            title: "Story PR",
+            status: "active",
+            mergeStatus: "succeeded",
+            requiredReviewersApproved: false,
+            requiredReviewersPendingCount: 1,
+            url: "https://dev.azure.com/org/proj/_git/repo-1/pullrequest/123",
+          },
+        ],
+      },
+    ];
+
+    const result = await fetchWorkItemsDelta(
+      client,
+      "Active",
+      "org",
+      "proj",
+      cachedRevMap,
+      cachedItems,
+    );
+
+    expect(result.workItems).toHaveLength(1);
+    expect(result.workItems[0].relatedPullRequests?.[0]).toMatchObject({
+      id: "123",
+      mergeStatus: "succeeded",
+      requiredReviewersApproved: false,
+      requiredReviewersPendingCount: 1,
+      failingStatusChecks: ["CI Build"],
+    });
+    expect(
+      client.callLog.filter((call) => call.method === "getPullRequest"),
+    ).toHaveLength(1);
+    expect(
+      client.callLog.filter((call) => call.method === "getPullRequestPolicyEvaluations"),
+    ).toHaveLength(1);
   });
 });
 

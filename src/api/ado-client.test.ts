@@ -237,6 +237,82 @@ describe("HttpAdoClient", () => {
     await expect(client.getPullRequest("repo-1", "123")).rejects.toThrow("404");
   });
 
+  it("fetches pull request statuses with auth header", async () => {
+    let capturedAuth = "";
+    server.use(
+      http.get(`${BASE}/_apis/git/repositories/repo-1/pullRequests/123/statuses`, ({ request }) => {
+        capturedAuth = request.headers.get("authorization") ?? "";
+        return HttpResponse.json({
+          value: [{ state: "failed", description: "CI Build" }],
+          count: 1,
+        });
+      }),
+    );
+
+    const statuses = await client.getPullRequestStatuses("repo-1", "123");
+    expect(capturedAuth).toBe(`Basic ${btoa(":test-pat")}`);
+    expect(statuses).toEqual([{ state: "failed", description: "CI Build" }]);
+  });
+
+  it("throws on failed pull request statuses fetch", async () => {
+    server.use(
+      http.get(`${BASE}/_apis/git/repositories/repo-1/pullRequests/123/statuses`, () => {
+        return new HttpResponse(null, { status: 403 });
+      }),
+    );
+
+    await expect(client.getPullRequestStatuses("repo-1", "123")).rejects.toThrow("403");
+  });
+
+  it("fetches pull request policy evaluations with auth header", async () => {
+    let capturedAuth = "";
+    server.use(
+      http.get(`${BASE}/_apis/policy/evaluations`, ({ request }) => {
+        capturedAuth = request.headers.get("authorization") ?? "";
+        expect(new URL(request.url).searchParams.get("artifactId")).toBe(
+          "vstfs:///CodeReview/CodeReviewId/project-1/123",
+        );
+        return HttpResponse.json({
+          value: [
+            {
+              status: "rejected",
+              configuration: {
+                isBlocking: true,
+                type: { displayName: "CI Build" },
+              },
+            },
+          ],
+        });
+      }),
+    );
+
+    const evaluations = await client.getPullRequestPolicyEvaluations(
+      "vstfs:///CodeReview/CodeReviewId/project-1/123",
+    );
+    expect(capturedAuth).toBe(`Basic ${btoa(":test-pat")}`);
+    expect(evaluations).toEqual([
+      {
+        status: "rejected",
+        configuration: {
+          isBlocking: true,
+          type: { displayName: "CI Build" },
+        },
+      },
+    ]);
+  });
+
+  it("throws on failed pull request policy evaluations fetch", async () => {
+    server.use(
+      http.get(`${BASE}/_apis/policy/evaluations`, () => {
+        return new HttpResponse(null, { status: 403 });
+      }),
+    );
+
+    await expect(
+      client.getPullRequestPolicyEvaluations("vstfs:///CodeReview/CodeReviewId/project-1/123"),
+    ).rejects.toThrow("403");
+  });
+
   it("tests connection successfully", async () => {
     server.use(
       http.post(`${BASE}/_apis/wit/wiql`, () => {

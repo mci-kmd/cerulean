@@ -342,4 +342,201 @@ describe("BoardCard related PR links", () => {
 
     expect(screen.queryByRole("link", { name: "This should not render" })).toBeNull();
   });
+
+  it("shows green icon + tooltip for mergeable pull requests", async () => {
+    const user = userEvent.setup();
+    renderCard({
+      workItemOverrides: {
+        type: "Bug",
+        relatedPullRequests: [
+          {
+            id: "300",
+            label: "PR #300",
+            title: "Ready to merge",
+            status: "active",
+            mergeStatus: "succeeded",
+            requiredReviewersApproved: true,
+            requiredReviewersPendingCount: 0,
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/300",
+          },
+        ],
+      },
+    });
+
+    const icon = screen.getByTestId("pr-status-icon-300");
+    expect(icon).toHaveClass("text-green-600");
+    await user.hover(icon);
+    expect(await screen.findByRole("tooltip", { name: "Mergeable" })).toBeInTheDocument();
+  });
+
+  it("shows required-reviewer gate tooltip when approvals are still pending", async () => {
+    const user = userEvent.setup();
+    renderCard({
+      workItemOverrides: {
+        type: "Bug",
+        relatedPullRequests: [
+          {
+            id: "303",
+            label: "PR #303",
+            title: "Waiting on reviewer",
+            status: "active",
+            mergeStatus: "succeeded",
+            requiredReviewersApproved: false,
+            requiredReviewersPendingCount: 1,
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/303",
+          },
+        ],
+      },
+    });
+
+    const icon = screen.getByTestId("pr-status-icon-303");
+    expect(icon).toHaveClass("text-amber-600");
+    expect(icon).toHaveAttribute("data-pr-icon-variant", "review-gate");
+    await user.hover(icon);
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "Waiting for 1 required reviewer approval",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows red conflict icon + tooltip when PR has merge conflicts", async () => {
+    const user = userEvent.setup();
+    renderCard({
+      workItemOverrides: {
+        type: "Bug",
+        relatedPullRequests: [
+          {
+            id: "301",
+            label: "PR #301",
+            title: "Conflict PR",
+            status: "active",
+            mergeStatus: "conflicts",
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/301",
+          },
+        ],
+      },
+    });
+
+    const icon = screen.getByTestId("pr-status-icon-301");
+    expect(icon).toHaveClass("text-red-600");
+    expect(icon).toHaveAttribute("data-pr-icon-variant", "conflict");
+    await user.hover(icon);
+    expect(
+      await screen.findByRole("tooltip", { name: "Cannot merge: merge conflicts" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows red build-error icon + tooltip when PR fails policy/build checks", async () => {
+    const user = userEvent.setup();
+    renderCard({
+      workItemOverrides: {
+        type: "User Story",
+        relatedPullRequests: [
+          {
+            id: "302",
+            label: "PR #302",
+            title: "Broken build PR",
+            status: "active",
+            mergeStatus: "rejectedByPolicy",
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/302",
+          },
+        ],
+      },
+    });
+
+    const icon = screen.getByTestId("pr-status-icon-302");
+    expect(icon).toHaveClass("text-red-600");
+    expect(icon).toHaveAttribute("data-pr-icon-variant", "build-error");
+    await user.hover(icon);
+    expect(
+      await screen.findByRole("tooltip", { name: "Cannot merge: build or policy checks failed" }),
+    ).toBeInTheDocument();
+  });
+
+  it("uses red icon and includes all blocking statuses when build fails and reviewers are pending", async () => {
+    const user = userEvent.setup();
+    renderCard({
+      workItemOverrides: {
+        type: "User Story",
+        relatedPullRequests: [
+          {
+            id: "305",
+            label: "PR #305",
+            title: "Blocked by build and reviewers",
+            status: "active",
+            mergeStatus: "rejectedByPolicy",
+            requiredReviewersApproved: false,
+            requiredReviewersPendingCount: 2,
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/305",
+          },
+        ],
+      },
+    });
+
+    const icon = screen.getByTestId("pr-status-icon-305");
+    expect(icon).toHaveClass("text-red-600");
+    expect(icon).toHaveAttribute("data-pr-icon-variant", "build-error");
+    await user.hover(icon);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Cannot merge: build or policy checks failed");
+    expect(tooltip).toHaveTextContent("Waiting for 2 required reviewers approval");
+  });
+
+  it("uses red icon when checks fail even if merge status is succeeded and reviewers are pending", async () => {
+    const user = userEvent.setup();
+    renderCard({
+      workItemOverrides: {
+        type: "User Story",
+        relatedPullRequests: [
+          {
+            id: "306",
+            label: "PR #306",
+            title: "Failing checks and pending reviewers",
+            status: "active",
+            mergeStatus: "succeeded",
+            requiredReviewersApproved: false,
+            requiredReviewersPendingCount: 1,
+            failingStatusChecks: ["CI Build"],
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/306",
+          },
+        ],
+      },
+    });
+
+    const icon = screen.getByTestId("pr-status-icon-306");
+    expect(icon).toHaveClass("text-red-600");
+    expect(icon).toHaveAttribute("data-pr-icon-variant", "build-error");
+    await user.hover(icon);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Failing required checks: CI Build");
+    expect(tooltip).toHaveTextContent("Waiting for 1 required reviewer approval");
+  });
+
+  it("shows red build-error icon when pull request merge status is failure", async () => {
+    const user = userEvent.setup();
+    renderCard({
+      workItemOverrides: {
+        type: "User Story",
+        relatedPullRequests: [
+          {
+            id: "304",
+            label: "PR #304",
+            title: "Failing merge PR",
+            status: "active",
+            mergeStatus: "failure",
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/304",
+          },
+        ],
+      },
+    });
+
+    const icon = screen.getByTestId("pr-status-icon-304");
+    expect(icon).toHaveClass("text-red-600");
+    expect(icon).toHaveAttribute("data-pr-icon-variant", "build-error");
+    await user.hover(icon);
+    expect(
+      await screen.findByRole("tooltip", { name: "Cannot merge: merge failed" }),
+    ).toBeInTheDocument();
+  });
 });

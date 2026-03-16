@@ -45,6 +45,38 @@ export interface AdoBatchResponse {
 
 export interface AdoPullRequest {
   pullRequestId: number;
+  codeReviewId?: number;
   title: string;
   status: string;
+  mergeStatus?: string;
+  artifactId?: string;
+  repository?: {
+    project?: {
+      id?: string;
+    };
+  };
+  reviewers?: {
+    isRequired?: boolean;
+    vote?: number;
+  }[];
+}
+
+export interface AdoPullRequestStatus {
+  state?: string;
+  description?: string;
+  context?: {
+    name?: string;
+    genre?: string;
+  };
+}
+
+export interface AdoPolicyEvaluationRecord {
+  status?: string;
+  configuration?: {
+    isBlocking?: boolean;
+    isEnabled?: boolean;
+    type?: {
+      displayName?: string;
+    };
+  };
 }

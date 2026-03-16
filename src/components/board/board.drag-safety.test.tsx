@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
+import { act, screen, within } from "@testing-library/react";
 import { renderWithProviders, createTestCollections } from "@/test/helpers/render";
 import { createWorkItem } from "@/test/fixtures/work-items";
 import { Board } from "./board";
@@ -12,25 +13,46 @@ type MockDragEvent = {
   operation: { source: unknown; target: unknown };
 };
 
-const dragMocks: { onDragEnd: ((event: MockDragEvent) => void) | null } =
+const dragMocks: {
+  onDragStart: ((event: MockDragEvent) => void) | null;
+  onDragEnd: ((event: MockDragEvent) => void) | null;
+  overlaySourceId: string | null;
+} =
   vi.hoisted(() => ({
+    onDragStart: null,
     onDragEnd: null,
+    overlaySourceId: null,
   }));
 
 vi.mock("@dnd-kit/react", async () => {
   const React = await import("react");
   return {
     DragDropProvider: ({
+      onDragStart,
       onDragEnd,
       children,
     }: {
+      onDragStart?: (event: MockDragEvent) => void;
       onDragEnd: (event: MockDragEvent) => void;
       children: ReactNode;
     }) => {
+      dragMocks.onDragStart = onDragStart ?? null;
       dragMocks.onDragEnd = onDragEnd;
       return React.createElement(React.Fragment, null, children);
     },
     useDroppable: () => ({ ref: () => undefined }),
+    DragOverlay: ({
+      children,
+    }: {
+      children: ReactNode | ((source: { id: string }) => ReactNode);
+    }) =>
+      React.createElement(
+        React.Fragment,
+        null,
+        typeof children === "function"
+          ? children({ id: dragMocks.overlaySourceId ?? "__overlay-source__" })
+          : children,
+      ),
   };
 });
 
@@ -75,7 +97,9 @@ function createData(): { data: BoardData; assignment: ColumnAssignment } {
 describe("Board drag safety", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    dragMocks.onDragStart = null;
     dragMocks.onDragEnd = null;
+    dragMocks.overlaySourceId = null;
   });
 
   afterEach(() => {
@@ -91,12 +115,14 @@ describe("Board drag safety", () => {
     renderWithProviders(<Board data={data} />, { collections });
     expect(dragMocks.onDragEnd).toBeTypeOf("function");
 
-    dragMocks.onDragEnd?.({
-      canceled: false,
-      operation: {
-        source: { id: assignment.id },
-        target: { id: "col-2", group: "col-2", index: 0 },
-      },
+    act(() => {
+      dragMocks.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: { id: assignment.id },
+          target: { id: "col-2", group: "col-2", index: 0 },
+        },
+      });
     });
 
     expect(updateSpy).not.toHaveBeenCalled();
@@ -200,5 +226,89 @@ describe("Board drag safety", () => {
     expect(collections.assignments.get(assignment.id)?.columnId).toBe("col-1");
     vi.runAllTimers();
     expect(collections.assignments.get(assignment.id)?.columnId).toBe(NEW_WORK_COLUMN_ID);
+  });
+
+  it("renders dropped card in destination column before deferred mutation flush", async () => {
+    const collections = createTestCollections();
+    const { data, assignment } = createData();
+    collections.assignments.insert(assignment);
+
+    const { container } = renderWithProviders(<Board data={data} />, { collections });
+    expect(dragMocks.onDragEnd).toBeTypeOf("function");
+
+    await act(async () => {
+      dragMocks.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: { id: assignment.id },
+          target: { id: "col-2", group: "col-2", index: 0 },
+        },
+      });
+    });
+
+    const firstColumn = container.querySelector('[data-column-id="col-1"]');
+    const secondColumn = container.querySelector('[data-column-id="col-2"]');
+    expect(firstColumn).not.toBeNull();
+    expect(secondColumn).not.toBeNull();
+    expect(collections.assignments.get(assignment.id)?.columnId).toBe("col-1");
+    expect(within(secondColumn as HTMLElement).getByText("Last in first column")).toBeInTheDocument();
+  });
+
+  it("does not crash when sortable drop index is negative", () => {
+    const collections = createTestCollections();
+    const { data, assignment } = createData();
+    collections.assignments.insert(assignment);
+
+    renderWithProviders(<Board data={data} />, { collections });
+    expect(dragMocks.onDragEnd).toBeTypeOf("function");
+
+    expect(() => {
+      dragMocks.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: { id: assignment.id },
+          target: { id: "col-2", group: "col-2", index: -1 },
+        },
+      });
+      vi.runAllTimers();
+    }).not.toThrow();
+
+    expect(collections.assignments.get(assignment.id)?.columnId).toBe("col-2");
+  });
+
+  it("emits drag state start and settled end callbacks", () => {
+    const collections = createTestCollections();
+    const { data, assignment } = createData();
+    collections.assignments.insert(assignment);
+    const onDragStateChange = vi.fn();
+
+    renderWithProviders(<Board data={data} onDragStateChange={onDragStateChange} />, {
+      collections,
+    });
+    expect(dragMocks.onDragStart).toBeTypeOf("function");
+    expect(dragMocks.onDragEnd).toBeTypeOf("function");
+
+    dragMocks.onDragStart?.({
+      canceled: false,
+      operation: { source: { id: assignment.id }, target: { id: "col-1" } },
+    });
+    dragMocks.onDragEnd?.({
+      canceled: true,
+      operation: { source: { id: assignment.id }, target: { id: "col-1" } },
+    });
+
+    expect(onDragStateChange).toHaveBeenNthCalledWith(1, true);
+    expect(onDragStateChange).toHaveBeenLastCalledWith(false);
+  });
+
+  it("renders drag overlay preview for source item", () => {
+    const collections = createTestCollections();
+    const { data, assignment } = createData();
+    collections.assignments.insert(assignment);
+    dragMocks.overlaySourceId = assignment.id;
+
+    renderWithProviders(<Board data={data} />, { collections });
+
+    expect(screen.getAllByText("Last in first column")).toHaveLength(2);
   });
 });

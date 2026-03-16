@@ -1,10 +1,16 @@
 import type { AdoClient } from "./ado-client";
-import type { AdoWorkItem, AdoWorkItemRelation } from "@/types/ado";
+import type {
+  AdoPolicyEvaluationRecord,
+  AdoPullRequest,
+  AdoWorkItem,
+  AdoWorkItemRelation,
+} from "@/types/ado";
 import type { RelatedPullRequest, WorkItem } from "@/types/board";
 import { buildWiqlQuery, buildCompletedWiqlQuery, buildCandidateWiqlQuery } from "./wiql";
 import { detectChanges } from "@/logic/detect-changes";
 
 const prLookupUnavailableClients = new WeakSet<AdoClient>();
+const prPolicyLookupUnavailableClients = new WeakSet<AdoClient>();
 
 function isPullRequestRelation(relation: AdoWorkItemRelation): boolean {
   const name = relation.attributes?.name;
@@ -16,6 +22,7 @@ function isPullRequestRelation(relation: AdoWorkItemRelation): boolean {
 
 const RELATION_TITLE_KEYS = ["title", "Title"];
 const RELATION_STATUS_KEYS = ["status", "Status", "state", "State"];
+const RELATION_MERGE_STATUS_KEYS = ["mergeStatus", "MergeStatus"];
 
 function getRelationAttribute(
   relation: AdoWorkItemRelation,
@@ -50,6 +57,7 @@ function mapPullRequestRelation(
   const decodedUrl = decodeURIComponent(relation.url);
   const title = getRelationAttribute(relation, RELATION_TITLE_KEYS);
   const status = getRelationAttribute(relation, RELATION_STATUS_KEYS);
+  const mergeStatus = getRelationAttribute(relation, RELATION_MERGE_STATUS_KEYS);
   const isCompleted = getCompletionFlag(status);
 
   if (/^https?:\/\//i.test(decodedUrl)) {
@@ -60,6 +68,7 @@ function mapPullRequestRelation(
       label,
       ...(title ? { title } : {}),
       ...(status ? { status } : {}),
+      ...(mergeStatus ? { mergeStatus } : {}),
       ...(isCompleted !== undefined ? { isCompleted } : {}),
       url: decodedUrl,
     };
@@ -78,6 +87,7 @@ function mapPullRequestRelation(
     label: `PR #${prId}`,
     ...(title ? { title } : {}),
     ...(status ? { status } : {}),
+    ...(mergeStatus ? { mergeStatus } : {}),
     ...(isCompleted !== undefined ? { isCompleted } : {}),
     url: `https://dev.azure.com/${org}/${project}/_git/${repoId}/pullrequest/${prId}`,
   };
@@ -133,36 +143,206 @@ function hasPullRequestStatus(pr: RelatedPullRequest): boolean {
   return Boolean(pr.status?.trim()) || pr.isCompleted !== undefined;
 }
 
+function hasPullRequestMergeStatus(pr: RelatedPullRequest): boolean {
+  return Boolean(pr.mergeStatus?.trim());
+}
+
+function hasPullRequestReviewGate(pr: RelatedPullRequest): boolean {
+  const mergeStatus = pr.mergeStatus?.trim().toLowerCase();
+  if (mergeStatus !== "succeeded") return true;
+  return pr.requiredReviewersApproved !== undefined;
+}
+
+function needsPullRequestEnrichment(pr: RelatedPullRequest): boolean {
+  return !(
+    hasPullRequestTitle(pr) &&
+    hasPullRequestStatus(pr) &&
+    hasPullRequestMergeStatus(pr) &&
+    hasPullRequestReviewGate(pr)
+  );
+}
+
+interface PullRequestEnrichmentOptions {
+  refreshActivePullRequests?: boolean;
+}
+
+function shouldRefreshPullRequest(
+  pr: RelatedPullRequest,
+  options?: PullRequestEnrichmentOptions,
+): boolean {
+  if (!options?.refreshActivePullRequests) return needsPullRequestEnrichment(pr);
+  if (isPullRequestCompleted(pr.status, pr.isCompleted)) return needsPullRequestEnrichment(pr);
+  return true;
+}
+
+function isPullRequestCompleted(status?: string, isCompleted?: boolean): boolean {
+  if (isCompleted !== undefined) return isCompleted;
+  return status?.trim().toLowerCase() === "completed";
+}
+
+function getRequiredReviewerGate(pr: AdoPullRequest): {
+  requiredReviewersApproved?: boolean;
+  requiredReviewersPendingCount?: number;
+} {
+  if (!pr.reviewers) return {};
+  const requiredReviewers = pr.reviewers.filter((reviewer) => reviewer.isRequired);
+  if (requiredReviewers.length === 0) {
+    return { requiredReviewersApproved: true, requiredReviewersPendingCount: 0 };
+  }
+  const pendingCount = requiredReviewers.filter(
+    (reviewer) => typeof reviewer.vote !== "number" || reviewer.vote < 5,
+  ).length;
+  return {
+    requiredReviewersApproved: pendingCount === 0,
+    requiredReviewersPendingCount: pendingCount,
+  };
+}
+
+function isFailingPolicyStatus(status?: string): boolean {
+  const normalized = status?.trim().toLowerCase();
+  return normalized === "rejected" || normalized === "broken";
+}
+
+function getPolicyCheckName(record: AdoPolicyEvaluationRecord): string {
+  const displayName = record.configuration?.type?.displayName?.trim();
+  if (displayName && displayName.length > 0) return displayName;
+  return "Required policy";
+}
+
+function isIgnoredFailingPolicy(name: string): boolean {
+  return name.trim().toLowerCase() === "require a merge strategy";
+}
+
+function getFailingStatusChecks(evaluations: AdoPolicyEvaluationRecord[]): string[] {
+  const failures: string[] = [];
+  for (const evaluation of evaluations) {
+    if (evaluation.configuration?.isBlocking !== true) continue;
+    if (evaluation.configuration?.isEnabled === false) continue;
+    if (!isFailingPolicyStatus(evaluation.status)) continue;
+    const policyName = getPolicyCheckName(evaluation);
+    if (isIgnoredFailingPolicy(policyName)) continue;
+    failures.push(policyName);
+  }
+  return [...new Set(failures)].sort((a, b) => a.localeCompare(b));
+}
+
+function getPullRequestPolicyArtifactId(pr: AdoPullRequest): string | undefined {
+  const artifactId = pr.artifactId?.trim();
+  if (artifactId && artifactId.length > 0) {
+    const decoded = decodeURIComponent(artifactId);
+    const codeReviewMatch = decoded.match(
+      /^vstfs:\/\/\/CodeReview\/CodeReviewId\/([^/]+)\/(\d+)$/i,
+    );
+    if (codeReviewMatch) {
+      return `vstfs:///CodeReview/CodeReviewId/${codeReviewMatch[1]}/${codeReviewMatch[2]}`;
+    }
+    const gitMatch = decoded.match(/^vstfs:\/\/\/Git\/PullRequestId\/([^/]+)\/[^/]+\/(\d+)$/i);
+    if (gitMatch) {
+      return `vstfs:///CodeReview/CodeReviewId/${gitMatch[1]}/${gitMatch[2]}`;
+    }
+  }
+
+  const projectId = pr.repository?.project?.id?.trim();
+  if (projectId && projectId.length > 0) {
+    return `vstfs:///CodeReview/CodeReviewId/${projectId}/${pr.pullRequestId}`;
+  }
+  return undefined;
+}
+
+async function getPullRequestPoliciesSafe(
+  client: AdoClient,
+  artifactId: string,
+): Promise<AdoPolicyEvaluationRecord[]> {
+  if (prPolicyLookupUnavailableClients.has(client)) return [];
+  try {
+    return await client.getPullRequestPolicyEvaluations(artifactId);
+  } catch {
+    prPolicyLookupUnavailableClients.add(client);
+    return [];
+  }
+}
+
+interface PullRequestDetails {
+  title: string;
+  status: string;
+  mergeStatus?: string;
+  requiredReviewersApproved?: boolean;
+  requiredReviewersPendingCount?: number;
+  failingStatusChecks?: string[];
+}
+
 function mergePullRequestDetails(
   pr: RelatedPullRequest,
-  details: { title: string; status: string },
+  details: PullRequestDetails,
 ): RelatedPullRequest {
   const title = details.title.trim();
   const status = details.status.trim();
+  const mergeStatus = details.mergeStatus?.trim() ?? "";
+  const requiredReviewersApproved = details.requiredReviewersApproved;
+  const requiredReviewersPendingCount = details.requiredReviewersPendingCount;
+  const failingStatusChecks = details.failingStatusChecks;
   const isCompleted = status.toLowerCase() === "completed";
 
   const sameTitle = title.length === 0 || title === pr.title;
   const sameStatus = status.length === 0 || status === pr.status;
+  const sameMergeStatus = mergeStatus.length === 0 || mergeStatus === pr.mergeStatus;
+  const sameRequiredReviewersApproved =
+    requiredReviewersApproved === undefined ||
+    requiredReviewersApproved === pr.requiredReviewersApproved;
+  const sameRequiredReviewersPendingCount =
+    requiredReviewersPendingCount === undefined ||
+    requiredReviewersPendingCount === pr.requiredReviewersPendingCount;
+  const sameFailingStatusChecks =
+    failingStatusChecks === undefined ||
+    (failingStatusChecks.length === 0 &&
+      (!pr.failingStatusChecks || pr.failingStatusChecks.length === 0)) ||
+    (failingStatusChecks.length > 0 &&
+      pr.failingStatusChecks !== undefined &&
+      failingStatusChecks.length === pr.failingStatusChecks.length &&
+      failingStatusChecks.every((check, index) => check === pr.failingStatusChecks?.[index]));
   const sameCompletion = status.length === 0 || isCompleted === pr.isCompleted;
-  if (sameTitle && sameStatus && sameCompletion) return pr;
+  if (
+    sameTitle &&
+    sameStatus &&
+    sameMergeStatus &&
+    sameRequiredReviewersApproved &&
+    sameRequiredReviewersPendingCount &&
+    sameFailingStatusChecks &&
+    sameCompletion
+  ) {
+    return pr;
+  }
 
   return {
     ...pr,
     ...(title.length > 0 ? { title } : {}),
     ...(status.length > 0 ? { status, isCompleted } : {}),
+    ...(mergeStatus.length > 0 ? { mergeStatus } : {}),
+    ...(requiredReviewersApproved !== undefined
+      ? { requiredReviewersApproved }
+      : {}),
+    ...(requiredReviewersPendingCount !== undefined
+      ? { requiredReviewersPendingCount }
+      : {}),
+    ...(failingStatusChecks !== undefined
+      ? failingStatusChecks.length > 0
+        ? { failingStatusChecks }
+        : { failingStatusChecks: undefined }
+      : {}),
   };
 }
 
 async function enrichPullRequestDetails(
   client: AdoClient,
   workItems: WorkItem[],
+  options?: PullRequestEnrichmentOptions,
 ): Promise<WorkItem[]> {
   if (prLookupUnavailableClients.has(client)) return workItems;
 
   const refsByKey = new Map<string, PullRequestRef>();
   for (const workItem of workItems) {
     for (const pr of workItem.relatedPullRequests ?? []) {
-      if (hasPullRequestTitle(pr) && hasPullRequestStatus(pr)) continue;
+      if (!shouldRefreshPullRequest(pr, options)) continue;
       const ref = parsePullRequestRef(pr.url);
       if (!ref) continue;
       const key = `${ref.repositoryId}/${ref.pullRequestId}`;
@@ -173,12 +353,22 @@ async function enrichPullRequestDetails(
   if (refsByKey.size === 0) return workItems;
 
   const refs = [...refsByKey.entries()];
-  const detailsByKey = new Map<string, { title: string; status: string }>();
+  const detailsByKey = new Map<string, PullRequestDetails>();
 
   const [firstKey, firstRef] = refs[0];
   try {
     const firstPr = await client.getPullRequest(firstRef.repositoryId, firstRef.pullRequestId);
-    detailsByKey.set(firstKey, { title: firstPr.title, status: firstPr.status });
+    const firstPolicyArtifactId = getPullRequestPolicyArtifactId(firstPr);
+    const failingStatusChecks = firstPolicyArtifactId
+      ? getFailingStatusChecks(await getPullRequestPoliciesSafe(client, firstPolicyArtifactId))
+      : [];
+    detailsByKey.set(firstKey, {
+      title: firstPr.title,
+      status: firstPr.status,
+      ...(firstPr.mergeStatus ? { mergeStatus: firstPr.mergeStatus } : {}),
+      ...getRequiredReviewerGate(firstPr),
+      failingStatusChecks,
+    });
   } catch {
     prLookupUnavailableClients.add(client);
     return workItems;
@@ -189,7 +379,20 @@ async function enrichPullRequestDetails(
     const remainingResults = await Promise.allSettled(
       remaining.map(async ([key, ref]) => {
         const pr = await client.getPullRequest(ref.repositoryId, ref.pullRequestId);
-        return [key, { title: pr.title, status: pr.status }] as const;
+        const policyArtifactId = getPullRequestPolicyArtifactId(pr);
+        const failingStatusChecks = policyArtifactId
+          ? getFailingStatusChecks(await getPullRequestPoliciesSafe(client, policyArtifactId))
+          : [];
+        return [
+          key,
+          {
+            title: pr.title,
+            status: pr.status,
+            ...(pr.mergeStatus ? { mergeStatus: pr.mergeStatus } : {}),
+            ...getRequiredReviewerGate(pr),
+            failingStatusChecks,
+          },
+        ] as const;
       }),
     );
     let hadLookupFailure = false;
@@ -211,7 +414,7 @@ async function enrichPullRequestDetails(
 
     let changed = false;
     const enrichedPullRequests = pullRequests.map((pr) => {
-      if (hasPullRequestTitle(pr) && hasPullRequestStatus(pr)) return pr;
+      if (!shouldRefreshPullRequest(pr, options)) return pr;
       const ref = parsePullRequestRef(pr.url);
       if (!ref) return pr;
       const detailKey = `${ref.repositoryId}/${ref.pullRequestId}`;
@@ -303,9 +506,13 @@ export async function fetchWorkItemsDelta(
     .map((id) => fetchedMap.get(id) ?? cachedMap.get(id))
     .filter((w): w is WorkItem => w !== undefined);
 
-  const revMap = new Map(workItems.map((w) => [w.id, { rev: w.rev }]));
+  const refreshedWorkItems = await enrichPullRequestDetails(client, workItems, {
+    refreshActivePullRequests: true,
+  });
 
-  return { workItems, revMap };
+  const revMap = new Map(refreshedWorkItems.map((w) => [w.id, { rev: w.rev }]));
+
+  return { workItems: refreshedWorkItems, revMap };
 }
 
 export async function fetchCompletedWorkItems(

@@ -1,13 +1,23 @@
 import { type AdoClient, WorkItemAlreadyAssignedError } from "./ado-client";
-import type { AdoPullRequest, AdoWorkItem, WiqlResponse } from "@/types/ado";
+import type {
+  AdoPolicyEvaluationRecord,
+  AdoPullRequest,
+  AdoPullRequestStatus,
+  AdoWorkItem,
+  WiqlResponse,
+} from "@/types/ado";
 
 export class MockAdoClient implements AdoClient {
   public wiqlResult: WiqlResponse = { workItems: [] };
   public workItems: AdoWorkItem[] = [];
   public shouldFail = false;
   public shouldFailPullRequest = false;
+  public shouldFailPullRequestStatuses = false;
+  public shouldFailPullRequestPolicyEvaluations = false;
   public myEmail = "me@test.com";
   public pullRequests = new Map<string, AdoPullRequest>();
+  public pullRequestStatuses = new Map<string, AdoPullRequestStatus[]>();
+  public pullRequestPolicyEvaluations = new Map<string, AdoPolicyEvaluationRecord[]>();
   public callLog: { method: string; args: unknown[] }[] = [];
 
   async queryWorkItems(wiql: string): Promise<WiqlResponse> {
@@ -41,6 +51,28 @@ export class MockAdoClient implements AdoClient {
       title: `PR #${pullRequestId}`,
       status: "active",
     };
+  }
+
+  async getPullRequestStatuses(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<AdoPullRequestStatus[]> {
+    this.callLog.push({ method: "getPullRequestStatuses", args: [repositoryId, pullRequestId] });
+    if (this.shouldFail || this.shouldFailPullRequestStatuses) {
+      throw new Error("Mock pull request statuses error");
+    }
+    const key = `${repositoryId}/${pullRequestId}`;
+    return this.pullRequestStatuses.get(key) ?? [];
+  }
+
+  async getPullRequestPolicyEvaluations(
+    artifactId: string,
+  ): Promise<AdoPolicyEvaluationRecord[]> {
+    this.callLog.push({ method: "getPullRequestPolicyEvaluations", args: [artifactId] });
+    if (this.shouldFail || this.shouldFailPullRequestPolicyEvaluations) {
+      throw new Error("Mock pull request policy evaluations error");
+    }
+    return this.pullRequestPolicyEvaluations.get(artifactId) ?? [];
   }
 
   async updateWorkItemState(

@@ -29,7 +29,10 @@ export function BoardColumn({ id, name, items, onAddTask, variant = "default" }:
   const styles = variantStyles[variant];
 
   return (
-    <div className={`flex flex-col flex-1 min-w-[260px] max-w-[380px] rounded-lg shrink-0 ${styles.container}`}>
+    <div
+      data-column-id={id}
+      className={`flex flex-col flex-1 min-w-[260px] max-w-[380px] rounded-lg shrink-0 ${styles.container}`}
+    >
       <div className="flex items-center justify-between px-3 py-2.5">
         <div className="flex items-center gap-1.5">
           {variant === "completed" && (

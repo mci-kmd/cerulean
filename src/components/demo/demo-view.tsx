@@ -8,7 +8,12 @@ import { SortableDemoItem } from "./sortable-demo-item";
 import { useDemoWorkItems } from "@/hooks/use-demo-work-items";
 import { useDemoApprove } from "@/hooks/use-demo-approve";
 import { useDemoOrder } from "@/hooks/use-demo-order";
-import { scheduleDndMutation, setDndRenderSettledResolver } from "@/lib/schedule-dnd-mutation";
+import {
+  resolveDndManagerSettled,
+  scheduleDndMutation,
+  setDndRenderSettledResolver,
+  type DndManagerLike,
+} from "@/lib/schedule-dnd-mutation";
 import type { AdoClient } from "@/api/ado-client";
 
 interface DemoViewProps {
@@ -25,10 +30,6 @@ type DemoDragEndEvent = Parameters<
 type DemoDragEndManager = Parameters<
   NonNullable<ComponentProps<typeof DragDropProvider>["onDragEnd"]>
 >[1];
-
-type RenderTrackingManager = DemoDragEndManager & {
-  renderer?: { rendering?: Promise<unknown> };
-};
 
 export function DemoView({
   client,
@@ -50,8 +51,8 @@ export function DemoView({
   const { sortedItems, reorder } = useDemoOrder(items);
 
   const trackDndRendering = useCallback((_: unknown, manager?: DemoDragEndManager) => {
-    setDndRenderSettledResolver(
-      () => (manager as RenderTrackingManager | undefined)?.renderer?.rendering,
+    setDndRenderSettledResolver(() =>
+      resolveDndManagerSettled(manager as DndManagerLike | undefined),
     );
   }, []);
 
@@ -121,7 +122,7 @@ export function DemoView({
         .filter((i) => !approvedIds.has(i.id))
         .map((i) => i.id);
       const renderSettled = () =>
-        (manager as RenderTrackingManager | undefined)?.renderer?.rendering;
+        resolveDndManagerSettled(manager as DndManagerLike | undefined);
       scheduleDndMutation(() => reorder(sourceId, targetIndex, unapprovedIds), renderSettled);
     },
     [reorder, sortedItems, approvedIds, trackDndRendering],

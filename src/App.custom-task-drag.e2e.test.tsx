@@ -39,6 +39,16 @@ vi.mock("@dnd-kit/react", async () => {
       return React.createElement(React.Fragment, null, children);
     },
     useDroppable: () => ({ ref: () => undefined }),
+    DragOverlay: ({
+      children,
+    }: {
+      children: React.ReactNode | ((source: { id: string }) => React.ReactNode);
+    }) =>
+      React.createElement(
+        React.Fragment,
+        null,
+        typeof children === "function" ? children({ id: "__overlay-source__" }) : children,
+      ),
   };
 });
 

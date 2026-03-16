@@ -57,6 +57,10 @@ export interface RelatedPullRequest {
   label: string;
   title?: string;
   status?: string;
+  mergeStatus?: string;
+  failingStatusChecks?: string[];
+  requiredReviewersApproved?: boolean;
+  requiredReviewersPendingCount?: number;
   isCompleted?: boolean;
   url: string;
 }

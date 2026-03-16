@@ -33,6 +33,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [isBoardDragging, setIsBoardDragging] = useState(false);
 
   const client: AdoClient | null = (() => {
     if (!settings?.pat || !settings?.org || !settings?.project) return null;
@@ -116,7 +117,7 @@ export function App() {
     assignments,
     columns,
     collections,
-    reconcileReady,
+    reconcileReady && !isBoardDragging,
     settings?.approvalState,
     settings?.candidateState,
   );
@@ -309,6 +310,7 @@ export function App() {
             isLoadingCandidates={isLoadingCandidates}
             onAddTask={handleAddTask}
             onColumnChange={handleColumnChange}
+            onDragStateChange={setIsBoardDragging}
           />
         )}
         <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

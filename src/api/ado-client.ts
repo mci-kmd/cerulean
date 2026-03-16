@@ -1,4 +1,11 @@
-import type { AdoBatchResponse, AdoPullRequest, AdoWorkItem, WiqlResponse } from "@/types/ado";
+import type {
+  AdoBatchResponse,
+  AdoPolicyEvaluationRecord,
+  AdoPullRequest,
+  AdoPullRequestStatus,
+  AdoWorkItem,
+  WiqlResponse,
+} from "@/types/ado";
 
 export class WorkItemAlreadyAssignedError extends Error {
   constructor(
@@ -16,6 +23,8 @@ export interface AdoClient {
   queryWorkItems(wiql: string): Promise<WiqlResponse>;
   batchGetWorkItems(ids: number[], fields?: string[]): Promise<AdoWorkItem[]>;
   getPullRequest(repositoryId: string, pullRequestId: string): Promise<AdoPullRequest>;
+  getPullRequestStatuses(repositoryId: string, pullRequestId: string): Promise<AdoPullRequestStatus[]>;
+  getPullRequestPolicyEvaluations(artifactId: string): Promise<AdoPolicyEvaluationRecord[]>;
   updateWorkItemState(id: number, state: string): Promise<AdoWorkItem>;
   startWorkItem(id: number, targetState: string): Promise<AdoWorkItem>;
   returnWorkItemToCandidate(id: number, targetState: string): Promise<AdoWorkItem>;
@@ -190,6 +199,38 @@ export class HttpAdoClient implements AdoClient {
     );
     if (!res.ok) throw new Error(`Pull request fetch failed: ${res.status}`);
     return res.json();
+  }
+
+  async getPullRequestStatuses(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<AdoPullRequestStatus[]> {
+    const res = await fetch(
+      `${this.baseUrl}/_apis/git/repositories/${repositoryId}/pullRequests/${pullRequestId}/statuses?api-version=7.1`,
+      {
+        method: "GET",
+        headers: this.jsonHeaders(),
+      },
+    );
+    if (!res.ok) throw new Error(`Pull request statuses fetch failed: ${res.status}`);
+    const data = await res.json() as { value?: AdoPullRequestStatus[] };
+    return data.value ?? [];
+  }
+
+  async getPullRequestPolicyEvaluations(
+    artifactId: string,
+  ): Promise<AdoPolicyEvaluationRecord[]> {
+    const res = await fetch(
+      `${this.baseUrl}/_apis/policy/evaluations?artifactId=${encodeURIComponent(artifactId)}&api-version=7.1-preview.1`,
+      {
+        method: "GET",
+        headers: this.jsonHeaders(),
+      },
+    );
+    if (!res.ok) throw new Error(`Pull request policy evaluations fetch failed: ${res.status}`);
+    const data = await res.json() as AdoPolicyEvaluationRecord[] | { value?: AdoPolicyEvaluationRecord[] };
+    if (Array.isArray(data)) return data;
+    return data.value ?? [];
   }
 
   async updateWorkItemState(id: number, state: string): Promise<AdoWorkItem> {
