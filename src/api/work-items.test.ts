@@ -255,6 +255,57 @@ describe("fetchWorkItemsInitial", () => {
     ).toHaveLength(1);
   });
 
+  it("enriches active pull requests with approval count when more than one reviewer approved", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with approvals",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f778",
+            attributes: { name: "Pull Request" },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/778", {
+      pullRequestId: 778,
+      title: "Approvals PR",
+      status: "active",
+      mergeStatus: "succeeded",
+      reviewers: [
+        { isRequired: true, vote: 10 },
+        { isRequired: false, vote: 5 },
+        { isRequired: false, vote: 0 },
+      ],
+    });
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+    expect(result.workItems[0].relatedPullRequests).toEqual([
+      {
+        id: "778",
+        label: "PR #778",
+        title: "Approvals PR",
+        status: "active",
+        mergeStatus: "succeeded",
+        approvalCount: 2,
+        requiredReviewersApproved: true,
+        requiredReviewersPendingCount: 0,
+        isCompleted: false,
+        url: "https://dev.azure.com/org/proj/_git/repo-1/pullrequest/778",
+      },
+    ]);
+  });
+
   it("marks succeeded pull requests as not mergeable when required reviewers are pending", async () => {
     const client = new MockAdoClient();
     client.wiqlResult = { workItems: [{ id: 1, url: "" }] };

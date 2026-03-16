@@ -324,6 +324,60 @@ describe("BoardCard related PR links", () => {
     expect(workItemLink.querySelector('[data-testid^="pr-unresolved-comments-"]')).toBeNull();
   });
 
+  it("shows approval count for active pull requests when more than one", () => {
+    renderCard({
+      workItemOverrides: {
+        type: "Bug",
+        relatedPullRequests: [
+          {
+            id: "2020",
+            label: "PR #2020",
+            title: "Active PR with approvals",
+            status: "active",
+            unresolvedCommentCount: 2,
+            approvalCount: 3,
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/2020",
+          },
+          {
+            id: "2021",
+            label: "PR #2021",
+            title: "Active PR with one approval",
+            status: "active",
+            unresolvedCommentCount: 2,
+            approvalCount: 1,
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/2021",
+          },
+          {
+            id: "2022",
+            label: "PR #2022",
+            title: "Completed PR with approvals",
+            status: "completed",
+            unresolvedCommentCount: 4,
+            approvalCount: 5,
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/2022",
+          },
+        ],
+      },
+    });
+
+    const activePrWithApprovals = screen.getByRole("link", { name: "Active PR with approvals" });
+    const activePrWithOneApproval = screen.getByRole("link", { name: "Active PR with one approval" });
+    const completedPr = screen.getByRole("link", { name: "Completed PR with approvals (Completed)" });
+
+    expect(within(activePrWithApprovals).getByTestId("pr-unresolved-comments-2020")).toHaveTextContent(
+      "2",
+    );
+    expect(within(activePrWithApprovals).getByTestId("pr-approval-count-2020")).toHaveTextContent(
+      "3",
+    );
+    expect(within(activePrWithOneApproval).queryByTestId("pr-approval-count-2021")).toBeNull();
+    expect(within(completedPr).queryByTestId("pr-approval-count-2022")).toBeNull();
+
+    const unresolvedBadge = within(activePrWithApprovals).getByTestId("pr-unresolved-comments-2020");
+    const approvalBadge = within(activePrWithApprovals).getByTestId("pr-approval-count-2020");
+    expect(unresolvedBadge.compareDocumentPosition(approvalBadge) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+
   it("renders related pull request title for bug cards", () => {
     renderCard({
       workItemOverrides: {

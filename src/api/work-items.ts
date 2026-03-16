@@ -200,6 +200,12 @@ function getRequiredReviewerGate(pr: AdoPullRequest): {
   };
 }
 
+function getPullRequestApprovalCount(pr: AdoPullRequest): number | undefined {
+  if (!pr.reviewers) return undefined;
+  return pr.reviewers.filter((reviewer) => typeof reviewer.vote === "number" && reviewer.vote >= 5)
+    .length;
+}
+
 function isFailingPolicyStatus(status?: string): boolean {
   const normalized = status?.trim().toLowerCase();
   return normalized === "rejected" || normalized === "broken";
@@ -296,6 +302,7 @@ interface PullRequestDetails {
   status: string;
   mergeStatus?: string;
   unresolvedCommentCount?: number;
+  approvalCount?: number;
   requiredReviewersApproved?: boolean;
   requiredReviewersPendingCount?: number;
   failingStatusChecks?: string[];
@@ -313,6 +320,9 @@ function mergePullRequestDetails(
     unresolvedCommentCount !== undefined && unresolvedCommentCount > 0
       ? unresolvedCommentCount
       : undefined;
+  const approvalCount = details.approvalCount;
+  const normalizedApprovalCount =
+    approvalCount !== undefined && approvalCount > 1 ? approvalCount : undefined;
   const requiredReviewersApproved = details.requiredReviewersApproved;
   const requiredReviewersPendingCount = details.requiredReviewersPendingCount;
   const failingStatusChecks = details.failingStatusChecks;
@@ -324,6 +334,8 @@ function mergePullRequestDetails(
   const sameUnresolvedCommentCount =
     unresolvedCommentCount === undefined ||
     normalizedUnresolvedCommentCount === pr.unresolvedCommentCount;
+  const sameApprovalCount =
+    approvalCount === undefined || normalizedApprovalCount === pr.approvalCount;
   const sameRequiredReviewersApproved =
     requiredReviewersApproved === undefined ||
     requiredReviewersApproved === pr.requiredReviewersApproved;
@@ -344,6 +356,7 @@ function mergePullRequestDetails(
     sameStatus &&
     sameMergeStatus &&
     sameUnresolvedCommentCount &&
+    sameApprovalCount &&
     sameRequiredReviewersApproved &&
     sameRequiredReviewersPendingCount &&
     sameFailingStatusChecks &&
@@ -360,6 +373,9 @@ function mergePullRequestDetails(
     ...(unresolvedCommentCount !== undefined && normalizedUnresolvedCommentCount !== undefined
       ? { unresolvedCommentCount: normalizedUnresolvedCommentCount }
       : {}),
+    ...(approvalCount !== undefined && normalizedApprovalCount !== undefined
+      ? { approvalCount: normalizedApprovalCount }
+      : {}),
     ...(requiredReviewersApproved !== undefined
       ? { requiredReviewersApproved }
       : {}),
@@ -374,6 +390,9 @@ function mergePullRequestDetails(
   };
   if (unresolvedCommentCount !== undefined && normalizedUnresolvedCommentCount === undefined) {
     delete merged.unresolvedCommentCount;
+  }
+  if (approvalCount !== undefined && normalizedApprovalCount === undefined) {
+    delete merged.approvalCount;
   }
   return merged;
 }
@@ -405,6 +424,7 @@ async function enrichPullRequestDetails(
   try {
     const firstPr = await client.getPullRequest(firstRef.repositoryId, firstRef.pullRequestId);
     const firstPolicyArtifactId = getPullRequestPolicyArtifactId(firstPr);
+    const firstApprovalCount = getPullRequestApprovalCount(firstPr);
     const [failingStatusChecks, unresolvedCommentCount] = await Promise.all([
       firstPolicyArtifactId
         ? getPullRequestPoliciesSafe(client, firstPolicyArtifactId).then(getFailingStatusChecks)
@@ -423,6 +443,7 @@ async function enrichPullRequestDetails(
       ...(unresolvedCommentCount !== undefined
         ? { unresolvedCommentCount }
         : {}),
+      ...(firstApprovalCount !== undefined ? { approvalCount: firstApprovalCount } : {}),
       ...getRequiredReviewerGate(firstPr),
       failingStatusChecks,
     });
@@ -437,6 +458,7 @@ async function enrichPullRequestDetails(
       remaining.map(async ([key, ref]) => {
         const pr = await client.getPullRequest(ref.repositoryId, ref.pullRequestId);
         const policyArtifactId = getPullRequestPolicyArtifactId(pr);
+        const approvalCount = getPullRequestApprovalCount(pr);
         const [failingStatusChecks, unresolvedCommentCount] = await Promise.all([
           policyArtifactId
             ? getPullRequestPoliciesSafe(client, policyArtifactId).then(getFailingStatusChecks)
@@ -457,6 +479,7 @@ async function enrichPullRequestDetails(
             ...(unresolvedCommentCount !== undefined
               ? { unresolvedCommentCount }
               : {}),
+            ...(approvalCount !== undefined ? { approvalCount } : {}),
             ...getRequiredReviewerGate(pr),
             failingStatusChecks,
           },

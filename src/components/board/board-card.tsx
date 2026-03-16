@@ -5,6 +5,7 @@ import {
   GitPullRequestDraft,
   MessageCircle,
   Pencil,
+  User,
   type LucideIcon,
 } from "lucide-react";
 import { useSortable } from "@dnd-kit/react/sortable";
@@ -293,6 +294,16 @@ export function BoardCard({
                         >
                           <MessageCircle className="h-3 w-3" />
                           <span>{pr.unresolvedCommentCount}</span>
+                        </span>
+                      )}
+                      {!isCompleted && (pr.approvalCount ?? 0) > 1 && (
+                        <span
+                          data-testid={`pr-approval-count-${pr.id}`}
+                          className="inline-flex items-center gap-0.5"
+                          aria-hidden="true"
+                        >
+                          <User className="h-3 w-3" />
+                          <span>{pr.approvalCount}</span>
                         </span>
                       )}
                     </span>
