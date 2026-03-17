@@ -67,20 +67,24 @@ function SettingsDialogContent({
       project: draft.project,
     });
     const nextDraft: AdoSettings = {
-      ...draft,
+      id: "settings",
       pat: normalizedConnection.pat,
       org: normalizedConnection.org,
       project: normalizedConnection.project,
+      sourceState: draft.sourceState,
+      approvalState: draft.approvalState,
+      closedState: draft.closedState,
+      candidateState: draft.candidateState,
+      areaPath: draft.areaPath,
+      workItemTypes: draft.workItemTypes,
+      pollInterval: draft.pollInterval,
     };
 
     const existing = collections.settings.get("settings");
     if (existing) {
-      collections.settings.update("settings", (d: AdoSettings) => {
-        Object.assign(d, nextDraft);
-      });
-    } else {
-      collections.settings.insert({ ...nextDraft, id: "settings" });
+      collections.settings.delete("settings");
     }
+    collections.settings.insert(nextDraft);
 
     const currentIds = new Set(currentColumns.map((c) => c.id));
     const draftIds = new Set(draftColumns.map((c) => c.id));
@@ -125,7 +129,6 @@ function SettingsDialogContent({
             pat={draft.pat}
             org={draft.org}
             project={draft.project}
-            team={draft.team}
             onChange={handleFieldChange}
           />
         </div>

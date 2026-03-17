@@ -3,7 +3,6 @@ export interface AdoSettings {
   pat: string;
   org: string;
   project: string;
-  team: string;
   sourceState: string;
   approvalState: string;
   closedState: string;
@@ -18,7 +17,6 @@ export const DEFAULT_SETTINGS: AdoSettings = {
   pat: "",
   org: "",
   project: "",
-  team: "",
   sourceState: "Active",
   approvalState: "",
   closedState: "",

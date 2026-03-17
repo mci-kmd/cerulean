@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { renderWithProviders } from "@/test/helpers/render";
+import { DEFAULT_SETTINGS } from "@/types/board";
+import { createTestCollections, renderWithProviders } from "@/test/helpers/render";
 import { SettingsDialog } from "./settings-dialog";
 
 describe("SettingsDialog", () => {
@@ -14,6 +15,7 @@ describe("SettingsDialog", () => {
     expect(screen.getByLabelText("Personal Access Token")).toBeInTheDocument();
     expect(screen.getByLabelText("Organization")).toBeInTheDocument();
     expect(screen.getByLabelText("Project")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Team (optional)")).not.toBeInTheDocument();
   });
 
   it("shows connection, source, and columns sections", () => {
@@ -97,5 +99,22 @@ describe("SettingsDialog", () => {
 
     const settings = collections.settings.get("settings");
     expect(settings?.areaPath).toBe("MyProject\\MyTeam");
+  });
+
+  it("drops legacy team data when saving", async () => {
+    const user = userEvent.setup();
+    const collections = createTestCollections();
+    const legacySettings = { ...DEFAULT_SETTINGS, team: "legacy-team" };
+    collections.settings.insert(legacySettings);
+
+    renderWithProviders(
+      <SettingsDialog open={true} onOpenChange={() => {}} />,
+      { collections },
+    );
+
+    await user.click(screen.getByText("Save"));
+
+    const settings = collections.settings.get("settings");
+    expect(Object.hasOwn(settings ?? {}, "team")).toBe(false);
   });
 });
