@@ -39,7 +39,33 @@ export interface AdoClientConfig {
   project: string;
 }
 
+export function normalizeAdoClientConfig(config: AdoClientConfig): AdoClientConfig {
+  const parsedOrg = parseAdoUrl(config.org);
+  const parsedProject = parseAdoUrl(config.project);
+
+  const pat = config.pat.trim();
+  const trimmedOrg = config.org.trim();
+  const trimmedProject = config.project.trim();
+  const orgFromOrgInput =
+    parsedOrg?.org ??
+    (trimmedOrg && !parsedOrg ? normalizeAdoPathPart(trimmedOrg) : undefined);
+  const orgFromProjectInput = parsedProject?.org;
+  const projectFromProjectInput =
+    parsedProject?.project ??
+    (trimmedProject && !parsedProject ? normalizeAdoPathPart(trimmedProject) : undefined);
+  const projectFromOrgInput = parsedOrg?.project;
+  const org = orgFromOrgInput ?? orgFromProjectInput ?? "";
+  const project = projectFromProjectInput ?? projectFromOrgInput ?? "";
+
+  return { ...config, pat, org, project };
+}
+
 const BATCH_SIZE = 200;
+const JSON_ACCEPT_HEADER = "application/json";
+const FEDAUTH_REDIRECT_HEADER = "X-TFS-FedAuthRedirect";
+const FEDAUTH_REDIRECT_SUPPRESS = "Suppress";
+const FORCE_MSA_PASSTHROUGH_HEADER = "X-VSS-ForceMsaPassThrough";
+const FORCE_MSA_PASSTHROUGH_VALUE = "true";
 
 const DETAIL_FIELDS = [
   "System.Id",
@@ -73,6 +99,53 @@ interface WorkItemBatchGetRequest {
   $expand?: "Relations";
 }
 
+function normalizeAdoPathPart(value: string): string {
+  return decodeAdoValue(value).trim().replace(/^\/+|\/+$/g, "");
+}
+
+function decodeAdoValue(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function parseAdoUrl(
+  value: string,
+): { org?: string; project?: string } | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  const candidates = trimmed.includes("://") ? [trimmed] : [`https://${trimmed}`];
+  for (const candidate of candidates) {
+    try {
+      const url = new URL(candidate);
+      const host = url.hostname.toLowerCase();
+      const pathParts = url.pathname
+        .split("/")
+        .filter(Boolean)
+        .map(normalizeAdoPathPart)
+        .filter(Boolean);
+
+      if (host === "dev.azure.com") {
+        const [org, project] = pathParts;
+        if (org || project) return { org, project };
+      }
+
+      if (host.endsWith(".visualstudio.com")) {
+        const org = normalizeAdoPathPart(host.slice(0, -".visualstudio.com".length));
+        const [project] = pathParts;
+        if (org || project) return { org, project };
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
 class AdoBatchFetchError extends Error {
   constructor(
     public status: number,
@@ -90,17 +163,48 @@ export class HttpAdoClient implements AdoClient {
   private cachedEmail: string | null = null;
 
   constructor(config: AdoClientConfig) {
-    this.org = config.org;
-    this.baseUrl = `https://dev.azure.com/${config.org}/${config.project}`;
-    this.authHeader = `Basic ${btoa(":" + config.pat)}`;
+    const normalized = normalizeAdoClientConfig(config);
+    this.org = normalized.org;
+    this.baseUrl = `https://dev.azure.com/${encodeURIComponent(normalized.org)}/${encodeURIComponent(normalized.project)}`;
+    this.authHeader = `Basic ${btoa(":" + normalized.pat)}`;
+  }
+
+  private authHeaders(contentType?: string): HeadersInit {
+    return {
+      Accept: JSON_ACCEPT_HEADER,
+      Authorization: this.authHeader,
+      [FEDAUTH_REDIRECT_HEADER]: FEDAUTH_REDIRECT_SUPPRESS,
+      [FORCE_MSA_PASSTHROUGH_HEADER]: FORCE_MSA_PASSTHROUGH_VALUE,
+      ...(contentType ? { "Content-Type": contentType } : {}),
+    };
   }
 
   private jsonHeaders(): HeadersInit {
-    return { "Content-Type": "application/json", Authorization: this.authHeader };
+    return this.authHeaders("application/json");
   }
 
   private patchHeaders(): HeadersInit {
-    return { "Content-Type": "application/json-patch+json", Authorization: this.authHeader };
+    return this.authHeaders("application/json-patch+json");
+  }
+
+  private async readJson<T>(res: Response, operation: string): Promise<T> {
+    const body = (await res.text()).trim();
+    if (body.length === 0) {
+      throw new Error(`${operation} returned an empty response`);
+    }
+
+    try {
+      return JSON.parse(body) as T;
+    } catch {
+      const contentType = res.headers.get("content-type") ?? "unknown";
+      const preview = body.replace(/\s+/g, " ").slice(0, 120);
+      const authHint = contentType.includes("text/html")
+        ? " Azure DevOps likely returned a sign-in page; check PAT/org/project and auth redirect headers."
+        : "";
+      throw new Error(
+        `${operation} returned non-JSON response (${contentType}): ${preview}${authHint}`,
+      );
+    }
   }
 
   private async fetchWorkItemsBatch(
@@ -129,7 +233,7 @@ export class HttpAdoClient implements AdoClient {
       }
       throw new AdoBatchFetchError(res.status, `Batch fetch failed: ${res.status}`);
     }
-    return res.json();
+    return this.readJson<AdoBatchResponse>(res, "Work items batch fetch");
   }
 
   private mergeBatchWithRelations(
@@ -158,7 +262,7 @@ export class HttpAdoClient implements AdoClient {
       },
     );
     if (!res.ok) throw new Error(`WIQL query failed: ${res.status}`);
-    return res.json();
+    return this.readJson<WiqlResponse>(res, "WIQL query");
   }
 
   async batchGetWorkItems(
@@ -200,7 +304,7 @@ export class HttpAdoClient implements AdoClient {
       },
     );
     if (!res.ok) throw new Error(`Pull request fetch failed: ${res.status}`);
-    return res.json();
+    return this.readJson<AdoPullRequest>(res, "Pull request fetch");
   }
 
   async getPullRequestStatuses(
@@ -215,7 +319,10 @@ export class HttpAdoClient implements AdoClient {
       },
     );
     if (!res.ok) throw new Error(`Pull request statuses fetch failed: ${res.status}`);
-    const data = await res.json() as { value?: AdoPullRequestStatus[] };
+    const data = await this.readJson<{ value?: AdoPullRequestStatus[] }>(
+      res,
+      "Pull request statuses fetch",
+    );
     return data.value ?? [];
   }
 
@@ -231,7 +338,10 @@ export class HttpAdoClient implements AdoClient {
       },
     );
     if (!res.ok) throw new Error(`Pull request threads fetch failed: ${res.status}`);
-    const data = await res.json() as { value?: AdoPullRequestThread[] };
+    const data = await this.readJson<{ value?: AdoPullRequestThread[] }>(
+      res,
+      "Pull request threads fetch",
+    );
     return data.value ?? [];
   }
 
@@ -246,7 +356,9 @@ export class HttpAdoClient implements AdoClient {
       },
     );
     if (!res.ok) throw new Error(`Pull request policy evaluations fetch failed: ${res.status}`);
-    const data = await res.json() as AdoPolicyEvaluationRecord[] | { value?: AdoPolicyEvaluationRecord[] };
+    const data = await this.readJson<
+      AdoPolicyEvaluationRecord[] | { value?: AdoPolicyEvaluationRecord[] }
+    >(res, "Pull request policy evaluations fetch");
     if (Array.isArray(data)) return data;
     return data.value ?? [];
   }
@@ -263,17 +375,17 @@ export class HttpAdoClient implements AdoClient {
       },
     );
     if (!res.ok) throw new Error(`Update work item state failed: ${res.status}`);
-    return res.json();
+    return this.readJson<AdoWorkItem>(res, "Update work item state");
   }
 
   private async getMyEmail(): Promise<string> {
     if (this.cachedEmail) return this.cachedEmail;
     const res = await fetch(
       `https://dev.azure.com/${this.org}/_apis/connectiondata?api-version=7.1-preview`,
-      { headers: { Authorization: this.authHeader } },
+      { headers: this.authHeaders() },
     );
     if (!res.ok) throw new Error(`Connection data fetch failed: ${res.status}`);
-    const data: ConnectionDataResponse = await res.json();
+    const data = await this.readJson<ConnectionDataResponse>(res, "Connection data fetch");
     const email = data.authenticatedUser?.properties?.Account?.$value;
     if (typeof email !== "string" || email.length === 0) {
       throw new Error("Connection data missing authenticated user email");
@@ -305,7 +417,7 @@ export class HttpAdoClient implements AdoClient {
       },
     );
     if (!res.ok) throw new Error(`Start work item failed: ${res.status}`);
-    return res.json();
+    return this.readJson<AdoWorkItem>(res, "Start work item");
   }
 
   async returnWorkItemToCandidate(id: number, targetState: string): Promise<AdoWorkItem> {
@@ -321,7 +433,7 @@ export class HttpAdoClient implements AdoClient {
       },
     );
     if (!res.ok) throw new Error(`Return work item failed: ${res.status}`);
-    return res.json();
+    return this.readJson<AdoWorkItem>(res, "Return work item");
   }
 
   async testConnection(): Promise<boolean> {
@@ -335,7 +447,9 @@ export class HttpAdoClient implements AdoClient {
         }),
       },
     );
-    return res.ok;
+    if (!res.ok) return false;
+    await this.readJson<WiqlResponse>(res, "Connection test");
+    return true;
   }
 }
 

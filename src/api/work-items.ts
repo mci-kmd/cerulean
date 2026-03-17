@@ -202,8 +202,12 @@ function getRequiredReviewerGate(pr: AdoPullRequest): {
 
 function getPullRequestApprovalCount(pr: AdoPullRequest): number | undefined {
   if (!pr.reviewers) return undefined;
-  return pr.reviewers.filter((reviewer) => typeof reviewer.vote === "number" && reviewer.vote >= 5)
-    .length;
+  return pr.reviewers.filter(
+    (reviewer) =>
+      reviewer.isContainer !== true &&
+      typeof reviewer.vote === "number" &&
+      reviewer.vote >= 5,
+  ).length;
 }
 
 function isFailingPolicyStatus(status?: string): boolean {
@@ -322,7 +326,7 @@ function mergePullRequestDetails(
       : undefined;
   const approvalCount = details.approvalCount;
   const normalizedApprovalCount =
-    approvalCount !== undefined && approvalCount > 1 ? approvalCount : undefined;
+    approvalCount !== undefined && approvalCount > 0 ? approvalCount : undefined;
   const requiredReviewersApproved = details.requiredReviewersApproved;
   const requiredReviewersPendingCount = details.requiredReviewersPendingCount;
   const failingStatusChecks = details.failingStatusChecks;

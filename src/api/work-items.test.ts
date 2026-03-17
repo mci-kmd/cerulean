@@ -174,6 +174,7 @@ describe("fetchWorkItemsInitial", () => {
         title: "Improve login flow",
         status: "completed",
         mergeStatus: "succeeded",
+        approvalCount: 1,
         requiredReviewersApproved: true,
         requiredReviewersPendingCount: 0,
         isCompleted: true,
@@ -243,6 +244,7 @@ describe("fetchWorkItemsInitial", () => {
         title: "Unresolved comments PR",
         status: "active",
         mergeStatus: "succeeded",
+        approvalCount: 1,
         unresolvedCommentCount: 3,
         requiredReviewersApproved: true,
         requiredReviewersPendingCount: 0,
@@ -255,7 +257,7 @@ describe("fetchWorkItemsInitial", () => {
     ).toHaveLength(1);
   });
 
-  it("enriches active pull requests with approval count when more than one reviewer approved", async () => {
+  it("enriches active pull requests with approval count when reviewers approved", async () => {
     const client = new MockAdoClient();
     client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
     client.workItems = [
@@ -302,6 +304,56 @@ describe("fetchWorkItemsInitial", () => {
         requiredReviewersPendingCount: 0,
         isCompleted: false,
         url: "https://dev.azure.com/org/proj/_git/repo-1/pullrequest/778",
+      },
+    ]);
+  });
+
+  it("ignores group reviewers when deriving approval count", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with group reviewer",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f779",
+            attributes: { name: "Pull Request" },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/779", {
+      pullRequestId: 779,
+      title: "Group reviewer PR",
+      status: "active",
+      mergeStatus: "succeeded",
+      reviewers: [
+        { isContainer: true, isRequired: true, vote: 10 },
+        { isRequired: false, vote: 10 },
+      ],
+    });
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+    expect(result.workItems[0].relatedPullRequests).toEqual([
+      {
+        id: "779",
+        label: "PR #779",
+        title: "Group reviewer PR",
+        status: "active",
+        mergeStatus: "succeeded",
+        approvalCount: 1,
+        requiredReviewersApproved: true,
+        requiredReviewersPendingCount: 0,
+        isCompleted: false,
+        url: "https://dev.azure.com/org/proj/_git/repo-1/pullrequest/779",
       },
     ]);
   });

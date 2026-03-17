@@ -18,15 +18,24 @@ describe("HttpAdoClient", () => {
 
   it("sends auth header on WIQL query", async () => {
     let capturedAuth = "";
+    let capturedAccept = "";
+    let capturedFedAuthRedirect = "";
+    let capturedForceMsaPassThrough = "";
     server.use(
       http.post(`${BASE}/_apis/wit/wiql`, ({ request }) => {
         capturedAuth = request.headers.get("authorization") ?? "";
+        capturedAccept = request.headers.get("accept") ?? "";
+        capturedFedAuthRedirect = request.headers.get("x-tfs-fedauthredirect") ?? "";
+        capturedForceMsaPassThrough = request.headers.get("x-vss-forcemsapassthrough") ?? "";
         return HttpResponse.json({ workItems: [] });
       }),
     );
 
     await client.queryWorkItems("SELECT [System.Id] FROM WorkItems");
     expect(capturedAuth).toBe(`Basic ${btoa(":test-pat")}`);
+    expect(capturedAccept).toBe("application/json");
+    expect(capturedFedAuthRedirect).toBe("Suppress");
+    expect(capturedForceMsaPassThrough).toBe("true");
   });
 
   it("returns work items from WIQL", async () => {
@@ -43,6 +52,28 @@ describe("HttpAdoClient", () => {
     expect(result.workItems[0].id).toBe(1);
   });
 
+  it("normalizes org, project, and PAT before WIQL query", async () => {
+    const normalizedClient = new HttpAdoClient({
+      pat: "  test-pat  ",
+      org: " https://dev.azure.com/test-org/ ",
+      project: " test project ",
+    });
+    let capturedAuth = "";
+    let capturedPathname = "";
+
+    server.use(
+      http.post("https://dev.azure.com/test-org/test%20project/_apis/wit/wiql", ({ request }) => {
+        capturedAuth = request.headers.get("authorization") ?? "";
+        capturedPathname = new URL(request.url).pathname;
+        return HttpResponse.json({ workItems: [] });
+      }),
+    );
+
+    await normalizedClient.queryWorkItems("SELECT ...");
+    expect(capturedAuth).toBe(`Basic ${btoa(":test-pat")}`);
+    expect(capturedPathname).toBe("/test-org/test%20project/_apis/wit/wiql");
+  });
+
   it("throws on failed WIQL query", async () => {
     server.use(
       http.post(`${BASE}/_apis/wit/wiql`, () => {
@@ -51,6 +82,21 @@ describe("HttpAdoClient", () => {
     );
 
     await expect(client.queryWorkItems("SELECT ...")).rejects.toThrow("401");
+  });
+
+  it("throws a clear error when WIQL returns HTML instead of JSON", async () => {
+    server.use(
+      http.post(`${BASE}/_apis/wit/wiql`, () => {
+        return new HttpResponse("<!DOCTYPE html><html><body>Sign in</body></html>", {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        });
+      }),
+    );
+
+    await expect(client.queryWorkItems("SELECT ...")).rejects.toThrow(
+      /WIQL query returned non-JSON response.*sign-in page/,
+    );
   });
 
   it("batch fetches work items with split field and relation requests", async () => {
@@ -203,6 +249,21 @@ describe("HttpAdoClient", () => {
       ids: [7],
       $expand: "Relations",
     });
+  });
+
+  it("throws a clear error when work item batch fetch returns HTML instead of JSON", async () => {
+    server.use(
+      http.post(`${BASE}/_apis/wit/workitemsbatch`, () => {
+        return new HttpResponse("<!DOCTYPE html><html><body>Sign in</body></html>", {
+          status: 200,
+          headers: { "Content-Type": "text/html" },
+        });
+      }),
+    );
+
+    await expect(client.batchGetWorkItems([1])).rejects.toThrow(
+      /Work items batch fetch returned non-JSON response/,
+    );
   });
 
   it("fetches pull request details with auth header", async () => {
@@ -410,8 +471,15 @@ describe("HttpAdoClient", () => {
     it("sends PATCH with state + assignedTo ops", async () => {
       let capturedBody: unknown = null;
       let capturedContentType = "";
+      let capturedConnectionAccept = "";
+      let capturedConnectionFedAuthRedirect = "";
+      let capturedConnectionForceMsaPassThrough = "";
       server.use(
-        http.get("https://dev.azure.com/test-org/_apis/connectiondata*", () => {
+        http.get("https://dev.azure.com/test-org/_apis/connectiondata*", ({ request }) => {
+          capturedConnectionAccept = request.headers.get("accept") ?? "";
+          capturedConnectionFedAuthRedirect = request.headers.get("x-tfs-fedauthredirect") ?? "";
+          capturedConnectionForceMsaPassThrough =
+            request.headers.get("x-vss-forcemsapassthrough") ?? "";
           return HttpResponse.json({
             authenticatedUser: {
               properties: { Account: { $value: "user@test.com" } },
@@ -437,6 +505,9 @@ describe("HttpAdoClient", () => {
       );
 
       const result = await client.startWorkItem(99, "Active");
+      expect(capturedConnectionAccept).toBe("application/json");
+      expect(capturedConnectionFedAuthRedirect).toBe("Suppress");
+      expect(capturedConnectionForceMsaPassThrough).toBe("true");
       expect(capturedContentType).toBe("application/json-patch+json");
       expect(capturedBody).toEqual([
         { op: "replace", path: "/fields/System.State", value: "Active" },

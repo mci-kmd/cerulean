@@ -56,6 +56,7 @@ export interface AdoPullRequest {
     };
   };
   reviewers?: {
+    isContainer?: boolean;
     isRequired?: boolean;
     vote?: number;
   }[];

@@ -69,6 +69,26 @@ function renderCustomTaskCard() {
   return result;
 }
 
+function getRenderedCardRoot() {
+  const card = screen.getByTestId("board-card");
+
+  if (!(card instanceof HTMLElement)) {
+    throw new Error("Board card root not found");
+  }
+
+  return card;
+}
+
+function getRenderedCardSurface() {
+  const surface = screen.getByTestId("board-card-surface");
+
+  if (!(surface instanceof HTMLElement)) {
+    throw new Error("Board card surface not found");
+  }
+
+  return surface;
+}
+
 describe("BoardCard custom task", () => {
   it("does not render copyable ID for custom tasks", () => {
     renderCustomTaskCard();
@@ -80,6 +100,19 @@ describe("BoardCard custom task", () => {
     const titleBtn = screen.getByRole("button", { name: "Custom Task" });
     expect(titleBtn).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Custom Task" })).toBeNull();
+  });
+});
+
+describe("BoardCard hover styling", () => {
+  it("adds a subtle background highlight without lifting the card", () => {
+    renderCard({});
+
+    const card = getRenderedCardRoot();
+    const surface = getRenderedCardSurface();
+
+    expect(card).not.toHaveClass("hover:-translate-y-px");
+    expect(surface).toHaveClass("transition-[background-color]");
+    expect(surface).toHaveClass("group-hover/card:bg-accent/30");
   });
 });
 
@@ -324,7 +357,7 @@ describe("BoardCard related PR links", () => {
     expect(workItemLink.querySelector('[data-testid^="pr-unresolved-comments-"]')).toBeNull();
   });
 
-  it("shows approval count for active pull requests when more than one", () => {
+  it("shows approval count for active pull requests when at least one reviewer approved", () => {
     renderCard({
       workItemOverrides: {
         type: "Bug",
@@ -370,7 +403,9 @@ describe("BoardCard related PR links", () => {
     expect(within(activePrWithApprovals).getByTestId("pr-approval-count-2020")).toHaveTextContent(
       "3",
     );
-    expect(within(activePrWithOneApproval).queryByTestId("pr-approval-count-2021")).toBeNull();
+    expect(within(activePrWithOneApproval).getByTestId("pr-approval-count-2021")).toHaveTextContent(
+      "1",
+    );
     expect(within(completedPr).queryByTestId("pr-approval-count-2022")).toBeNull();
 
     const unresolvedBadge = within(activePrWithApprovals).getByTestId("pr-unresolved-comments-2020");

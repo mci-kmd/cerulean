@@ -206,15 +206,39 @@ export function BoardCard({
     <>
       <div
         ref={ref}
-        className={`group/card rounded-lg border-l-[3px] border border-border bg-card p-3 shadow-sm cursor-grab active:cursor-grabbing transition-all hover:-translate-y-px hover:shadow-md ${style.border} ${
+        data-testid="board-card"
+        className={`group/card relative rounded-lg cursor-grab active:cursor-grabbing ${
           isDragSource ? "opacity-50 scale-[0.97]" : ""
         }`}
       >
-        <div className="flex items-center gap-1.5 mb-1.5">
-          {createElement(typeIcon, {
-            className: `h-3.5 w-3.5 shrink-0 ${style.text}`,
-          })}
-          <span className="flex-1" />
+        <div
+          data-testid="board-card-surface"
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-x-0 top-0 -bottom-px rounded-lg border-l-[3px] border border-border bg-card shadow-sm transition-[background-color] group-hover/card:bg-accent/30 ${style.border}`}
+        />
+        <div className="relative z-10 p-3">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            {createElement(typeIcon, {
+              className: `h-3.5 w-3.5 shrink-0 ${style.text}`,
+            })}
+            <span className="flex-1" />
+            {isCustomTask ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditOpen(true);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover/card:opacity-100"
+                aria-label="Edit task"
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
+            ) : (
+              <CopyableId id={workItem.id} className="text-[10px]" />
+            )}
+          </div>
           {isCustomTask ? (
             <button
               type="button"
@@ -223,115 +247,99 @@ export function BoardCard({
                 setEditOpen(true);
               }}
               onPointerDown={(e) => e.stopPropagation()}
-              className="text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover/card:opacity-100"
-              aria-label="Edit task"
+              className="block text-left text-sm font-medium leading-snug hover:underline mb-2 w-full"
             >
-              <Pencil className="h-3 w-3" />
+              {workItem.title}
             </button>
           ) : (
-            <CopyableId id={workItem.id} className="text-[10px]" />
+            <a
+              href={workItem.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block text-sm font-medium leading-snug hover:underline mb-2"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {workItem.title}
+            </a>
           )}
-        </div>
-        {isCustomTask ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setEditOpen(true);
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            className="block text-left text-sm font-medium leading-snug hover:underline mb-2 w-full"
-          >
-            {workItem.title}
-          </button>
-        ) : (
-          <a
-            href={workItem.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block text-sm font-medium leading-snug hover:underline mb-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {workItem.title}
-          </a>
-        )}
-        {sortedPullRequests.length > 0 && (
-          <ul className="mb-2 space-y-0.5">
-            {sortedPullRequests.map((pr) => {
-              const isCompleted = isPullRequestCompleted(pr);
-              const metadata = getPullRequestStatusMetadata(pr);
-              const Icon = metadata.icon;
-              return (
-                <li key={pr.url}>
-                  <a
-                    href={pr.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-start gap-1.5 text-xs text-muted-foreground hover:underline"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className="mt-0.5 inline-flex shrink-0">
-                          <Icon
-                            data-testid={`pr-status-icon-${pr.id}`}
-                            data-pr-icon-variant={metadata.iconVariant}
-                            className={`h-3 w-3 ${metadata.iconClassName}`}
+          {sortedPullRequests.length > 0 && (
+            <ul className="mb-2 space-y-0.5">
+              {sortedPullRequests.map((pr) => {
+                const isCompleted = isPullRequestCompleted(pr);
+                const metadata = getPullRequestStatusMetadata(pr);
+                const Icon = metadata.icon;
+                return (
+                  <li key={pr.url}>
+                    <a
+                      href={pr.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-start gap-1.5 text-xs text-muted-foreground hover:underline"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="mt-0.5 inline-flex shrink-0">
+                            <Icon
+                              data-testid={`pr-status-icon-${pr.id}`}
+                              data-pr-icon-variant={metadata.iconVariant}
+                              className={`h-3 w-3 ${metadata.iconClassName}`}
+                              aria-hidden="true"
+                            />
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent>{metadata.tooltip}</TooltipContent>
+                      </Tooltip>
+                      <span className={`inline-flex items-center gap-1 ${isCompleted ? "opacity-60" : ""}`}>
+                        {getPullRequestTitle(pr)}
+                        {isCompleted ? " (Completed)" : ""}
+                        {!isCompleted && (pr.unresolvedCommentCount ?? 0) > 0 && (
+                          <span
+                            data-testid={`pr-unresolved-comments-${pr.id}`}
+                            className="inline-flex items-center gap-0.5"
                             aria-hidden="true"
-                          />
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>{metadata.tooltip}</TooltipContent>
-                    </Tooltip>
-                    <span className={`inline-flex items-center gap-1 ${isCompleted ? "opacity-60" : ""}`}>
-                      {getPullRequestTitle(pr)}
-                      {isCompleted ? " (Completed)" : ""}
-                      {!isCompleted && (pr.unresolvedCommentCount ?? 0) > 0 && (
-                        <span
-                          data-testid={`pr-unresolved-comments-${pr.id}`}
-                          className="inline-flex items-center gap-0.5"
-                          aria-hidden="true"
-                        >
-                          <MessageCircle className="h-3 w-3" />
-                          <span>{pr.unresolvedCommentCount}</span>
-                        </span>
-                      )}
-                      {!isCompleted && (pr.approvalCount ?? 0) > 1 && (
-                        <span
-                          data-testid={`pr-approval-count-${pr.id}`}
-                          className="inline-flex items-center gap-0.5"
-                          aria-hidden="true"
-                        >
-                          <User className="h-3 w-3" />
-                          <span>{pr.approvalCount}</span>
-                        </span>
-                      )}
-                    </span>
-                  </a>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-        <div className="flex items-center gap-2">
-          <textarea
-            ref={statusRef}
-            rows={1}
-            wrap="soft"
-            value={value}
-            placeholder="Set status..."
-            onChange={(e) => setValue(e.target.value)}
-            onBlur={save}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                e.currentTarget.blur();
-              }
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-            className="w-full resize-none overflow-hidden text-xs text-muted-foreground bg-transparent border-0 outline-none focus:ring-1 focus:ring-ring rounded px-1 py-0.5 leading-snug placeholder:text-muted-foreground/40"
-          />
+                          >
+                            <MessageCircle className="h-3 w-3" />
+                            <span>{pr.unresolvedCommentCount}</span>
+                          </span>
+                        )}
+                        {!isCompleted && (pr.approvalCount ?? 0) > 0 && (
+                          <span
+                            data-testid={`pr-approval-count-${pr.id}`}
+                            className="inline-flex items-center gap-0.5"
+                            aria-hidden="true"
+                          >
+                            <User className="h-3 w-3" />
+                            <span>{pr.approvalCount}</span>
+                          </span>
+                        )}
+                      </span>
+                    </a>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <div className="flex items-center gap-2">
+            <textarea
+              ref={statusRef}
+              rows={1}
+              wrap="soft"
+              value={value}
+              placeholder="Set status..."
+              onChange={(e) => setValue(e.target.value)}
+              onBlur={save}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  e.currentTarget.blur();
+                }
+              }}
+              onPointerDown={(e) => e.stopPropagation()}
+              className="w-full resize-none overflow-hidden text-xs text-muted-foreground bg-transparent border-0 outline-none focus:ring-1 focus:ring-ring rounded px-1 py-0.5 leading-snug placeholder:text-muted-foreground/40"
+            />
+          </div>
         </div>
       </div>
       {isCustomTask && (

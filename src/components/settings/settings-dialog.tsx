@@ -15,6 +15,7 @@ import { SourceStateInput } from "./source-state-input";
 import { ColumnsEditor } from "./columns-editor";
 import { useBoardCollections } from "@/db/use-board-collections";
 import { useSettings, useColumns } from "@/hooks/use-board";
+import { normalizeAdoClientConfig } from "@/api/ado-client";
 import { DEFAULT_SETTINGS, type BoardColumn, type AdoSettings } from "@/types/board";
 
 interface SettingsDialogProps {
@@ -60,13 +61,25 @@ function SettingsDialogContent({
   };
 
   const handleSave = async () => {
+    const normalizedConnection = normalizeAdoClientConfig({
+      pat: draft.pat,
+      org: draft.org,
+      project: draft.project,
+    });
+    const nextDraft: AdoSettings = {
+      ...draft,
+      pat: normalizedConnection.pat,
+      org: normalizedConnection.org,
+      project: normalizedConnection.project,
+    };
+
     const existing = collections.settings.get("settings");
     if (existing) {
       collections.settings.update("settings", (d: AdoSettings) => {
-        Object.assign(d, draft);
+        Object.assign(d, nextDraft);
       });
     } else {
-      collections.settings.insert({ ...draft, id: "settings" });
+      collections.settings.insert({ ...nextDraft, id: "settings" });
     }
 
     const currentIds = new Set(currentColumns.map((c) => c.id));

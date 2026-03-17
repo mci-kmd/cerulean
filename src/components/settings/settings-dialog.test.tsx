@@ -59,6 +59,24 @@ describe("SettingsDialog", () => {
     expect(settings?.org).toBe("my-org");
   });
 
+  it("normalizes connection settings before saving", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderWithProviders(
+      <SettingsDialog open={true} onOpenChange={() => {}} />,
+    );
+
+    await user.type(screen.getByLabelText("Personal Access Token"), "  my-pat  ");
+    await user.type(screen.getByLabelText("Organization"), " https://dev.azure.com/my-org/ ");
+    await user.type(screen.getByLabelText("Project"), " my project ");
+
+    await user.click(screen.getByText("Save"));
+
+    const settings = collections.settings.get("settings");
+    expect(settings?.pat).toBe("my-pat");
+    expect(settings?.org).toBe("my-org");
+    expect(settings?.project).toBe("my project");
+  });
+
   it("renders area path input", () => {
     renderWithProviders(
       <SettingsDialog open={true} onOpenChange={() => {}} />,
