@@ -1,9 +1,11 @@
 import type {
+  AdoCurrentUser,
   AdoBoard,
   AdoBoardReference,
   AdoBatchResponse,
   AdoPolicyEvaluationRecord,
   AdoPullRequest,
+  AdoResourceRef,
   AdoPullRequestStatus,
   AdoPullRequestThread,
   AdoWorkItem,
@@ -27,10 +29,23 @@ export interface AdoClient {
   batchGetWorkItems(ids: number[], fields?: string[]): Promise<AdoWorkItem[]>;
   listBoards(team?: string): Promise<AdoBoardReference[]>;
   getBoard(boardId: string, team?: string): Promise<AdoBoard>;
+  getCurrentUser(): Promise<AdoCurrentUser>;
+  listPullRequests(status?: string): Promise<AdoPullRequest[]>;
   getPullRequest(repositoryId: string, pullRequestId: string): Promise<AdoPullRequest>;
+  listPullRequestWorkItems(repositoryId: string, pullRequestId: string): Promise<AdoResourceRef[]>;
   getPullRequestStatuses(repositoryId: string, pullRequestId: string): Promise<AdoPullRequestStatus[]>;
   getPullRequestThreads(repositoryId: string, pullRequestId: string): Promise<AdoPullRequestThread[]>;
   getPullRequestPolicyEvaluations(artifactId: string): Promise<AdoPolicyEvaluationRecord[]>;
+  addCurrentUserAsPullRequestReviewer(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<void>;
+  approvePullRequestAsCurrentUser(repositoryId: string, pullRequestId: string): Promise<void>;
+  clearPullRequestReviewVote(repositoryId: string, pullRequestId: string): Promise<void>;
+  removeCurrentUserAsPullRequestReviewer(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<void>;
   updateWorkItemState(
     id: number,
     state: string,
@@ -102,6 +117,8 @@ const DETAIL_FIELDS = [
 
 interface ConnectionDataResponse {
   authenticatedUser?: {
+    id?: string;
+    providerDisplayName?: string;
     properties?: {
       Account?: {
         $value?: unknown;
@@ -185,7 +202,7 @@ export class HttpAdoClient implements AdoClient {
   private project: string;
   private baseUrl: string;
   private authHeader: string;
-  private cachedEmail: string | null = null;
+  private cachedCurrentUser: AdoCurrentUser | null = null;
 
   constructor(config: AdoClientConfig) {
     const normalized = normalizeAdoClientConfig(config);
@@ -359,6 +376,51 @@ export class HttpAdoClient implements AdoClient {
     return this.readJson<AdoBoard>(res, "Board fetch");
   }
 
+  async getCurrentUser(): Promise<AdoCurrentUser> {
+    if (this.cachedCurrentUser) return this.cachedCurrentUser;
+    const res = await fetch(
+      `https://dev.azure.com/${this.org}/_apis/connectiondata?api-version=7.1-preview`,
+      { headers: this.authHeaders() },
+    );
+    if (!res.ok) throw new Error(`Connection data fetch failed: ${res.status}`);
+    const data = await this.readJson<ConnectionDataResponse>(res, "Connection data fetch");
+    const email = data.authenticatedUser?.properties?.Account?.$value;
+    if (typeof email !== "string" || email.length === 0) {
+      throw new Error("Connection data missing authenticated user email");
+    }
+    this.cachedCurrentUser = {
+      ...(data.authenticatedUser?.id ? { id: data.authenticatedUser.id } : {}),
+      ...(data.authenticatedUser?.providerDisplayName
+        ? { displayName: data.authenticatedUser.providerDisplayName }
+        : {}),
+      email,
+    };
+    return this.cachedCurrentUser;
+  }
+
+  async listPullRequests(status = "active"): Promise<AdoPullRequest[]> {
+    const pullRequests: AdoPullRequest[] = [];
+    const pageSize = 200;
+    for (let skip = 0; ; skip += pageSize) {
+      const res = await fetch(
+        `${this.baseUrl}/_apis/git/pullrequests?searchCriteria.status=${encodeURIComponent(status)}&$top=${pageSize}&$skip=${skip}&api-version=7.1`,
+        {
+          method: "GET",
+          headers: this.jsonHeaders(),
+        },
+      );
+      if (!res.ok) throw new Error(`Pull requests fetch failed: ${res.status}`);
+      const data = await this.readJson<AdoPullRequest[] | { value?: AdoPullRequest[] }>(
+        res,
+        "Pull requests fetch",
+      );
+      const page = Array.isArray(data) ? data : (data.value ?? []);
+      pullRequests.push(...page);
+      if (page.length < pageSize) break;
+    }
+    return pullRequests;
+  }
+
   async getPullRequest(
     repositoryId: string,
     pullRequestId: string,
@@ -372,6 +434,25 @@ export class HttpAdoClient implements AdoClient {
     );
     if (!res.ok) throw new Error(`Pull request fetch failed: ${res.status}`);
     return this.readJson<AdoPullRequest>(res, "Pull request fetch");
+  }
+
+  async listPullRequestWorkItems(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<AdoResourceRef[]> {
+    const res = await fetch(
+      `${this.baseUrl}/_apis/git/repositories/${repositoryId}/pullRequests/${pullRequestId}/workitems?api-version=7.1`,
+      {
+        method: "GET",
+        headers: this.jsonHeaders(),
+      },
+    );
+    if (!res.ok) throw new Error(`Pull request work items fetch failed: ${res.status}`);
+    const data = await this.readJson<AdoResourceRef[] | { value?: AdoResourceRef[] }>(
+      res,
+      "Pull request work items fetch",
+    );
+    return Array.isArray(data) ? data : (data.value ?? []);
   }
 
   async getPullRequestStatuses(
@@ -430,6 +511,71 @@ export class HttpAdoClient implements AdoClient {
     return data.value ?? [];
   }
 
+  private async getRequiredCurrentUserId(): Promise<string> {
+    const currentUser = await this.getCurrentUser();
+    if (!currentUser.id) {
+      throw new Error("Connection data missing authenticated user id");
+    }
+    return currentUser.id;
+  }
+
+  private async putPullRequestReviewerVote(
+    repositoryId: string,
+    pullRequestId: string,
+    reviewerId: string,
+    vote: number,
+  ): Promise<void> {
+    const res = await fetch(
+      `${this.baseUrl}/_apis/git/repositories/${repositoryId}/pullRequests/${pullRequestId}/reviewers/${reviewerId}?api-version=7.1`,
+      {
+        method: "PUT",
+        headers: this.jsonHeaders(),
+        body: JSON.stringify({ id: reviewerId, vote }),
+      },
+    );
+    if (!res.ok) throw new Error(`Pull request reviewer update failed: ${res.status}`);
+    await this.readJson(res, "Pull request reviewer update");
+  }
+
+  async addCurrentUserAsPullRequestReviewer(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<void> {
+    const reviewerId = await this.getRequiredCurrentUserId();
+    await this.putPullRequestReviewerVote(repositoryId, pullRequestId, reviewerId, 0);
+  }
+
+  async approvePullRequestAsCurrentUser(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<void> {
+    const reviewerId = await this.getRequiredCurrentUserId();
+    await this.putPullRequestReviewerVote(repositoryId, pullRequestId, reviewerId, 10);
+  }
+
+  async clearPullRequestReviewVote(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<void> {
+    const reviewerId = await this.getRequiredCurrentUserId();
+    await this.putPullRequestReviewerVote(repositoryId, pullRequestId, reviewerId, 0);
+  }
+
+  async removeCurrentUserAsPullRequestReviewer(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<void> {
+    const reviewerId = await this.getRequiredCurrentUserId();
+    const res = await fetch(
+      `${this.baseUrl}/_apis/git/repositories/${repositoryId}/pullRequests/${pullRequestId}/reviewers/${reviewerId}?api-version=7.1`,
+      {
+        method: "DELETE",
+        headers: this.authHeaders(),
+      },
+    );
+    if (!res.ok) throw new Error(`Pull request reviewer delete failed: ${res.status}`);
+  }
+
   private buildBoardColumnPatch(
     targetBoardColumnField?: string,
     targetBoardColumnName?: string,
@@ -483,19 +629,7 @@ export class HttpAdoClient implements AdoClient {
   }
 
   private async getMyEmail(): Promise<string> {
-    if (this.cachedEmail) return this.cachedEmail;
-    const res = await fetch(
-      `https://dev.azure.com/${this.org}/_apis/connectiondata?api-version=7.1-preview`,
-      { headers: this.authHeaders() },
-    );
-    if (!res.ok) throw new Error(`Connection data fetch failed: ${res.status}`);
-    const data = await this.readJson<ConnectionDataResponse>(res, "Connection data fetch");
-    const email = data.authenticatedUser?.properties?.Account?.$value;
-    if (typeof email !== "string" || email.length === 0) {
-      throw new Error("Connection data missing authenticated user email");
-    }
-    this.cachedEmail = email;
-    return this.cachedEmail;
+    return (await this.getCurrentUser()).email;
   }
 
   async startWorkItem(

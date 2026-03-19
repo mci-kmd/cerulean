@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   startMutate: vi.fn(),
   returnMutate: vi.fn(),
   completeMutate: vi.fn(),
+  reviewMutate: vi.fn(),
   candidateBoardConfig: undefined as
     | {
         boardId: string;
@@ -37,6 +38,28 @@ const mocks = vi.hoisted(() => ({
     rev: number;
     url: string;
     boardColumnName?: string;
+  }>,
+  reviewWorkItems: [] as Array<{
+    id: number;
+    displayId?: number;
+    title: string;
+    type: string;
+    state: string;
+    rev: number;
+    url: string;
+    kind?: "review";
+    review?: {
+      repositoryId: string;
+      pullRequestId: number;
+      reviewState: "new" | "active" | "completed";
+    };
+    relatedPullRequests?: Array<{
+      id: string;
+      label: string;
+      title?: string;
+      status?: string;
+      url: string;
+    }>;
   }>,
 }));
 
@@ -85,6 +108,30 @@ vi.mock("@/hooks/use-candidate-board-config", () => ({
     boardConfig: mocks.candidateBoardConfig,
     isLoading: false,
     error: null,
+  }),
+}));
+
+vi.mock("@/hooks/use-review-work-items", () => ({
+  useReviewWorkItems: () => ({
+    workItems: mocks.reviewWorkItems,
+    newWorkIds: new Set(
+      mocks.reviewWorkItems
+        .filter((item) => item.review?.reviewState === "new")
+        .map((item) => item.id),
+    ),
+    completedIds: new Set(
+      mocks.reviewWorkItems
+        .filter((item) => item.review?.reviewState === "completed")
+        .map((item) => item.id),
+    ),
+    isLoading: false,
+    error: null,
+  }),
+}));
+
+vi.mock("@/hooks/use-review-pull-request", () => ({
+  useReviewPullRequest: () => ({
+    mutate: mocks.reviewMutate,
   }),
 }));
 
@@ -141,6 +188,36 @@ function createWorkItem(id = 101) {
   };
 }
 
+function createReviewWorkItem(
+  id = -501,
+  reviewState: "new" | "active" | "completed" = "new",
+) {
+  return {
+    id,
+    displayId: 101,
+    title: "Review login fix",
+    type: "Bug",
+    state: "Active",
+    rev: 1,
+    url: "https://dev.azure.com/test/_workitems/edit/101",
+    kind: "review" as const,
+    review: {
+      repositoryId: "repo-1",
+      pullRequestId: 7001,
+      reviewState,
+    },
+    relatedPullRequests: [
+      {
+        id: "7001",
+        label: "PR #7001",
+        title: "Review login fix",
+        status: "active",
+        url: "https://dev.azure.com/test/_git/repo-1/pullrequest/7001",
+      },
+    ],
+  };
+}
+
 function insertSettings(
   collections: ReturnType<typeof renderWithProviders>["collections"],
   overrides: Partial<typeof DEFAULT_SETTINGS> = {},
@@ -166,8 +243,10 @@ describe("App column change behavior", () => {
     mocks.startMutate.mockReset();
     mocks.returnMutate.mockReset();
     mocks.completeMutate.mockReset();
+    mocks.reviewMutate.mockReset();
     mocks.candidateBoardConfig = createBoardConfig();
     mocks.workItems = [createWorkItem()];
+    mocks.reviewWorkItems = [];
   });
 
   it("starts work when dragging from New Work into the configured source board column", async () => {
@@ -488,5 +567,117 @@ describe("App column change behavior", () => {
     });
 
     await waitFor(() => expect(mocks.boardOnDragStateChange).toBeTypeOf("function"));
+  });
+
+  it("assigns me as reviewer when dragging review work from New Work into an active column", async () => {
+    mocks.workItems = [];
+    mocks.reviewWorkItems = [createReviewWorkItem(-501, "new")];
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections);
+      collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    act(() => {
+      mocks.boardOnColumnChange?.(-501, NEW_WORK_COLUMN_ID, "col-1");
+    });
+
+    expect(mocks.reviewMutate).toHaveBeenCalledWith(
+      {
+        repositoryId: "repo-1",
+        pullRequestId: 7001,
+        action: "start-review",
+      },
+      expect.objectContaining({
+        onError: expect.any(Function),
+      }),
+    );
+  });
+
+  it("approves review work when dragging it into Completed", async () => {
+    mocks.workItems = [];
+    mocks.reviewWorkItems = [createReviewWorkItem(-502, "active")];
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections);
+      collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    act(() => {
+      mocks.boardOnColumnChange?.(-502, "col-1", COMPLETED_COLUMN_ID);
+    });
+
+    expect(mocks.reviewMutate).toHaveBeenCalledWith(
+      {
+        repositoryId: "repo-1",
+        pullRequestId: 7001,
+        action: "approve-review",
+      },
+      expect.objectContaining({
+        onError: expect.any(Function),
+      }),
+    );
+  });
+
+  it("clears review vote when moving review work back from Completed", async () => {
+    mocks.workItems = [];
+    mocks.reviewWorkItems = [createReviewWorkItem(-503, "completed")];
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections);
+      collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    act(() => {
+      mocks.boardOnColumnChange?.(-503, COMPLETED_COLUMN_ID, "col-1");
+    });
+
+    expect(mocks.reviewMutate).toHaveBeenCalledWith(
+      {
+        repositoryId: "repo-1",
+        pullRequestId: 7001,
+        action: "clear-vote",
+      },
+      expect.objectContaining({
+        onError: expect.any(Function),
+      }),
+    );
+  });
+
+  it("removes me as reviewer when moving review work back to New Work", async () => {
+    mocks.workItems = [];
+    mocks.reviewWorkItems = [createReviewWorkItem(-504, "active")];
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections);
+      collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    act(() => {
+      mocks.boardOnColumnChange?.(-504, "col-1", NEW_WORK_COLUMN_ID);
+    });
+
+    expect(mocks.reviewMutate).toHaveBeenCalledWith(
+      {
+        repositoryId: "repo-1",
+        pullRequestId: 7001,
+        action: "remove-reviewer",
+      },
+      expect.objectContaining({
+        onError: expect.any(Function),
+      }),
+    );
   });
 });

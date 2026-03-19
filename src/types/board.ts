@@ -50,15 +50,24 @@ export interface ColumnAssignment {
   statusMessage?: string;
 }
 
+export interface ReviewWorkItem {
+  repositoryId: string;
+  pullRequestId: number;
+  reviewState: "new" | "active" | "completed";
+}
+
 export interface WorkItem {
   id: number;
+  displayId?: number;
   title: string;
   type: string;
   state: string;
   boardColumnName?: string;
   rev: number;
   url: string;
+  kind?: "ado" | "review";
   relatedPullRequests?: RelatedPullRequest[];
+  review?: ReviewWorkItem;
 }
 
 export interface RelatedPullRequest {
@@ -69,6 +78,7 @@ export interface RelatedPullRequest {
   mergeStatus?: string;
   unresolvedCommentCount?: number;
   approvalCount?: number;
+  reviewerCount?: number;
   failingStatusChecks?: string[];
   requiredReviewersApproved?: boolean;
   requiredReviewersPendingCount?: number;
@@ -81,6 +91,12 @@ export interface CustomTask {
   workItemId: number;
   title: string;
   completedAt?: number;
+}
+
+export function isReviewWorkItem(
+  workItem: WorkItem | undefined,
+): workItem is WorkItem & { kind: "review"; review: ReviewWorkItem } {
+  return workItem?.kind === "review" && workItem.review !== undefined;
 }
 
 export { COMPLETED_COLUMN_ID, NEW_WORK_COLUMN_ID } from "../constants/board-columns";

@@ -17,7 +17,7 @@ function renderCard(props: {
   const workItem = createWorkItem({ id: 1, title: "Test Item", ...props.workItemOverrides });
   const assignment = createAssignment({
     id: props.assignmentId ?? "asgn-1",
-    workItemId: 1,
+    workItemId: workItem.id,
     statusMessage: props.statusMessage,
   });
 
@@ -113,6 +113,42 @@ describe("BoardCard hover styling", () => {
     expect(card).not.toHaveClass("hover:-translate-y-px");
     expect(surface).toHaveClass("transition-[background-color]");
     expect(surface).toHaveClass("group-hover/card:bg-accent/30");
+  });
+});
+
+describe("BoardCard review items", () => {
+  it("renders review label, stripes, reviewer count, and source work item id", () => {
+    renderCard({
+      workItemOverrides: {
+        id: -501,
+        displayId: 42,
+        kind: "review",
+        type: "Bug",
+        relatedPullRequests: [
+          {
+            id: "7001",
+            label: "PR #7001",
+            title: "Review login flow",
+            status: "active",
+            reviewerCount: 4,
+            unresolvedCommentCount: 2,
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/7001",
+          },
+        ],
+        review: {
+          repositoryId: "repo",
+          pullRequestId: 7001,
+          reviewState: "new",
+        },
+      },
+    });
+
+    expect(screen.getByTestId("review-label")).toHaveTextContent("REVIEW");
+    expect(screen.getByText("#42")).toBeInTheDocument();
+    expect(screen.queryByText("#-501")).toBeNull();
+    expect(screen.getByTestId("pr-reviewer-count-7001")).toHaveTextContent("4");
+    expect(screen.getByTestId("pr-unresolved-comments-7001")).toHaveTextContent("2");
+    expect(getRenderedCardSurface().style.backgroundImage).toContain("repeating-linear-gradient");
   });
 });
 

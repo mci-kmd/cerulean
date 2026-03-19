@@ -20,6 +20,8 @@ import { useCandidates } from "@/hooks/use-candidates";
 import { useCandidateBoardConfig } from "@/hooks/use-candidate-board-config";
 import { useStartWork } from "@/hooks/use-start-work";
 import { useReturnToCandidate } from "@/hooks/use-return-to-candidate";
+import { useReviewWorkItems } from "@/hooks/use-review-work-items";
+import { useReviewPullRequest } from "@/hooks/use-review-pull-request";
 import { createAdoClient, type AdoClient } from "@/api/ado-client";
 import { isReconcileReady } from "@/logic/reconcile-readiness";
 import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
@@ -29,6 +31,7 @@ import {
   isBoardColumnSplit,
   type CandidateBoardConfig,
 } from "@/lib/ado-board";
+import { isReviewWorkItem } from "@/types/board";
 
 function getTargetBoardColumnUpdate(
   boardConfig: CandidateBoardConfig | undefined,
@@ -128,10 +131,25 @@ export function App() {
       settings?.approvalBoardColumn,
       candidateBoardConfig,
     );
+  const {
+    workItems: reviewWorkItems,
+    newWorkIds: reviewNewWorkIds,
+    completedIds: reviewCompletedIds,
+    isLoading: isLoadingReviewWorkItems,
+    error: reviewWorkItemsError,
+  } = useReviewWorkItems(
+    client,
+    settings?.org ?? "",
+    settings?.project ?? "",
+    settings?.pollInterval ?? 30,
+    settings?.areaPath,
+    settings?.workItemTypes,
+  );
 
   const completeWorkItem = useCompleteWorkItem(client);
   const returnToCandidate = useReturnToCandidate(client);
   const startWork = useStartWork(client);
+  const reviewPullRequest = useReviewPullRequest(client);
   const canLoadCandidates =
     canResolveCandidateBoard;
   const { candidates, isLoading: isLoadingCandidates } = useCandidates(
@@ -152,8 +170,8 @@ export function App() {
   );
 
   const workItems = useMemo(
-    () => [...adoWorkItems, ...completedAdoItems, ...customWorkItems],
-    [adoWorkItems, completedAdoItems, customWorkItems],
+    () => [...adoWorkItems, ...completedAdoItems, ...customWorkItems, ...reviewWorkItems],
+    [adoWorkItems, completedAdoItems, customWorkItems, reviewWorkItems],
   );
   const boardWorkItems = useMemo(() => {
     const merged = new Map<number, (typeof workItems)[number]>();
@@ -168,12 +186,12 @@ export function App() {
     return [...merged.values()];
   }, [workItems, candidates]);
   const candidateIds = useMemo(
-    () => new Set(candidates.map((candidate) => candidate.id)),
-    [candidates],
+    () => new Set([...candidates.map((candidate) => candidate.id), ...reviewNewWorkIds]),
+    [candidates, reviewNewWorkIds],
   );
   const completedIds = useMemo(
-    () => new Set(completedAdoItems.map((item) => item.id)),
-    [completedAdoItems],
+    () => new Set([...completedAdoItems.map((item) => item.id), ...reviewCompletedIds]),
+    [completedAdoItems, reviewCompletedIds],
   );
   const reconcileReady = isReconcileReady(
     isSuccess,
@@ -256,6 +274,13 @@ export function App() {
     });
   }
 
+  if (reviewWorkItemsError) {
+    toast.error("Failed to fetch review pull requests", {
+      description: reviewWorkItemsError.message,
+      id: "review-fetch-error",
+    });
+  }
+
   const boardData = useBoard(boardWorkItems);
   const hasSettings = !!(settings?.pat && settings?.org && settings?.project);
   const hasColumns = columns.length > 0;
@@ -291,6 +316,95 @@ export function App() {
   const handleColumnChange = (workItemId: number, fromColumnId: string, toColumnId: string) => {
     if (fromColumnId === toColumnId) return;
 
+    const boardWorkItem = boardWorkItemMap.get(workItemId);
+
+    const movingToNewWork = toColumnId === NEW_WORK_COLUMN_ID;
+    const movingFromNewWork = fromColumnId === NEW_WORK_COLUMN_ID;
+    const movingToCompleted =
+      toColumnId === COMPLETED_COLUMN_ID &&
+      fromColumnId !== COMPLETED_COLUMN_ID;
+    const movingFromCompleted =
+      fromColumnId === COMPLETED_COLUMN_ID &&
+      toColumnId !== COMPLETED_COLUMN_ID;
+
+    if (isReviewWorkItem(boardWorkItem)) {
+      const { repositoryId, pullRequestId } = boardWorkItem.review;
+
+      if (movingToNewWork) {
+        reviewPullRequest.mutate(
+          {
+            repositoryId,
+            pullRequestId,
+            action: "remove-reviewer",
+          },
+          {
+            onError: (err) =>
+              toast.error("Failed to unassign review", {
+                description: err.message,
+                id: `review-remove-error-${pullRequestId}`,
+              }),
+          },
+        );
+        return;
+      }
+
+      if (movingToCompleted) {
+        reviewPullRequest.mutate(
+          {
+            repositoryId,
+            pullRequestId,
+            action: "approve-review",
+          },
+          {
+            onError: (err) =>
+              toast.error("Failed to approve pull request", {
+                description: err.message,
+                id: `review-approve-error-${pullRequestId}`,
+              }),
+          },
+        );
+        return;
+      }
+
+      if (movingFromNewWork) {
+        reviewPullRequest.mutate(
+          {
+            repositoryId,
+            pullRequestId,
+            action: "start-review",
+          },
+          {
+            onError: (err) =>
+              toast.error("Failed to assign reviewer", {
+                description: err.message,
+                id: `review-start-error-${pullRequestId}`,
+              }),
+          },
+        );
+        return;
+      }
+
+      if (movingFromCompleted) {
+        reviewPullRequest.mutate(
+          {
+            repositoryId,
+            pullRequestId,
+            action: "clear-vote",
+          },
+          {
+            onError: (err) =>
+              toast.error("Failed to reopen review", {
+                description: err.message,
+                id: `review-clear-error-${pullRequestId}`,
+              }),
+          },
+        );
+        return;
+      }
+
+      return;
+    }
+
     const customTask = collections.customTasks.toArray.find(
       (t) => t.workItemId === workItemId,
     );
@@ -317,15 +431,6 @@ export function App() {
       }
       return;
     }
-
-    const movingToNewWork = toColumnId === NEW_WORK_COLUMN_ID;
-    const movingFromNewWork = fromColumnId === NEW_WORK_COLUMN_ID;
-    const movingToCompleted =
-      toColumnId === COMPLETED_COLUMN_ID &&
-      fromColumnId !== COMPLETED_COLUMN_ID;
-    const movingFromCompleted =
-      fromColumnId === COMPLETED_COLUMN_ID &&
-      toColumnId !== COMPLETED_COLUMN_ID;
 
     if (movingToNewWork) {
       const transition = getBoardTransition(workItemId, candidateBoardConfig?.intakeColumnName);
@@ -440,7 +545,7 @@ export function App() {
             org={settings.org}
             project={settings.project}
           />
-        ) : isLoading && workItems.length === 0 ? (
+        ) : (isLoading || isLoadingReviewWorkItems) && workItems.length === 0 ? (
           <BoardSkeleton columnCount={columns.length} />
         ) : (
           <Board

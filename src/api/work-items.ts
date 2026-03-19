@@ -1,7 +1,9 @@
 import type { AdoClient } from "./ado-client";
 import type {
+  AdoCurrentUser,
   AdoPolicyEvaluationRecord,
   AdoPullRequest,
+  AdoResourceRef,
   AdoPullRequestThread,
   AdoWorkItem,
   AdoWorkItemRelation,
@@ -124,6 +126,7 @@ const WORK_ITEM_DETAIL_FIELDS = [
   "System.Title",
   "System.WorkItemType",
   "System.State",
+  "System.AreaPath",
   "System.AssignedTo",
   "System.Rev",
 ];
@@ -253,6 +256,39 @@ function getPullRequestApprovalCount(pr: AdoPullRequest): number | undefined {
       typeof reviewer.vote === "number" &&
       reviewer.vote >= 5,
   ).length;
+}
+
+function getPullRequestReviewerCount(pr: AdoPullRequest): number | undefined {
+  if (!pr.reviewers) return undefined;
+  return pr.reviewers.filter((reviewer) => reviewer.isContainer !== true).length;
+}
+
+function matchesCurrentUserIdentity(
+  identity: { id?: string; uniqueName?: string } | undefined,
+  currentUser: AdoCurrentUser,
+): boolean {
+  if (!identity) return false;
+  if (identity.id && currentUser.id && identity.id === currentUser.id) {
+    return true;
+  }
+  return (
+    typeof identity.uniqueName === "string" &&
+    identity.uniqueName.localeCompare(currentUser.email, undefined, {
+      sensitivity: "accent",
+    }) === 0
+  );
+}
+
+function getPullRequestReviewState(
+  pr: AdoPullRequest,
+  currentUser: AdoCurrentUser,
+): "new" | "active" | "completed" {
+  const reviewer = pr.reviewers?.find(
+    (candidate) =>
+      candidate.isContainer !== true && matchesCurrentUserIdentity(candidate, currentUser),
+  );
+  if (!reviewer) return "new";
+  return reviewer.vote === 10 ? "completed" : "active";
 }
 
 function isFailingPolicyStatus(status?: string): boolean {
@@ -573,6 +609,246 @@ async function enrichPullRequestDetails(
 export interface FetchResult {
   workItems: WorkItem[];
   revMap: Map<number, { rev: number }>;
+}
+
+export interface FetchReviewWorkItemsResult {
+  workItems: WorkItem[];
+  newWorkIds: Set<number>;
+  completedIds: Set<number>;
+}
+
+function createReviewWorkItemId(
+  repositoryId: string,
+  pullRequestId: number,
+  workItemId: number,
+): number {
+  const key = `${repositoryId}:${pullRequestId}:${workItemId}`;
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < key.length; index += 1) {
+    hash ^= key.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  const normalized = Math.abs(hash) + 1;
+  return -normalized;
+}
+
+function parseConfiguredWorkItemTypes(
+  workItemTypes?: string,
+): Set<string> | null {
+  const parsed = workItemTypes
+    ?.split(",")
+    .map((type) => type.trim())
+    .filter(Boolean);
+  if (!parsed || parsed.length === 0) return null;
+  return new Set(parsed);
+}
+
+function isWorkItemWithinAreaPath(item: AdoWorkItem, areaPath?: string): boolean {
+  if (!areaPath) return true;
+  const rawAreaPath = item.fields["System.AreaPath"];
+  if (typeof rawAreaPath !== "string") return false;
+  const normalizedAreaPath = areaPath.trim().toLowerCase();
+  const normalizedWorkItemAreaPath = rawAreaPath.trim().toLowerCase();
+  return (
+    normalizedWorkItemAreaPath === normalizedAreaPath ||
+    normalizedWorkItemAreaPath.startsWith(`${normalizedAreaPath}\\`)
+  );
+}
+
+function isAllowedReviewWorkItemType(
+  item: AdoWorkItem,
+  allowedTypes: Set<string> | null,
+): boolean {
+  if (!allowedTypes) return true;
+  const rawType = item.fields["System.WorkItemType"];
+  return typeof rawType === "string" && allowedTypes.has(rawType);
+}
+
+function getPullRequestRepositoryId(pr: AdoPullRequest): string {
+  const repositoryId = pr.repository?.id?.trim() ?? pr.repository?.name?.trim();
+  if (!repositoryId) {
+    throw new Error(`Pull request ${pr.pullRequestId} is missing repository id`);
+  }
+  return repositoryId;
+}
+
+function buildPullRequestUrl(
+  pr: AdoPullRequest,
+  org: string,
+  project: string,
+  repositoryId: string,
+): string {
+  const url = pr.url?.trim();
+  if (url && !url.includes("/_apis/")) return url;
+  return `https://dev.azure.com/${org}/${project}/_git/${repositoryId}/pullrequest/${pr.pullRequestId}`;
+}
+
+async function buildRelatedPullRequestDetails(
+  client: AdoClient,
+  pr: AdoPullRequest,
+  org: string,
+  project: string,
+  repositoryId: string,
+): Promise<RelatedPullRequest> {
+  const policyArtifactId = getPullRequestPolicyArtifactId(pr);
+  const approvalCount = getPullRequestApprovalCount(pr);
+  const reviewerCount = getPullRequestReviewerCount(pr);
+  const [failingStatusChecks, unresolvedCommentCount] = await Promise.all([
+    policyArtifactId
+      ? getPullRequestPoliciesSafe(client, policyArtifactId).then(getFailingStatusChecks)
+      : Promise.resolve<string[]>([]),
+    getPullRequestUnresolvedCommentCountSafe(
+      client,
+      repositoryId,
+      String(pr.pullRequestId),
+      pr.status,
+    ),
+  ]);
+
+  return {
+    id: String(pr.pullRequestId),
+    label: `PR #${pr.pullRequestId}`,
+    title: pr.title.trim(),
+    status: pr.status.trim(),
+    ...(pr.mergeStatus ? { mergeStatus: pr.mergeStatus.trim() } : {}),
+    ...(unresolvedCommentCount !== undefined && unresolvedCommentCount > 0
+      ? { unresolvedCommentCount }
+      : {}),
+    ...(approvalCount !== undefined && approvalCount > 0 ? { approvalCount } : {}),
+    ...(reviewerCount !== undefined && reviewerCount > 0 ? { reviewerCount } : {}),
+    ...getRequiredReviewerGate(pr),
+    ...(failingStatusChecks.length > 0 ? { failingStatusChecks } : {}),
+    ...(getCompletionFlag(pr.status) !== undefined
+      ? { isCompleted: getCompletionFlag(pr.status) }
+      : {}),
+    url: buildPullRequestUrl(pr, org, project, repositoryId),
+  };
+}
+
+export async function fetchReviewWorkItems(
+  client: AdoClient,
+  org: string,
+  project: string,
+  areaPath?: string,
+  workItemTypes?: string,
+): Promise<FetchReviewWorkItemsResult> {
+  const currentUser = await client.getCurrentUser();
+  const activePullRequests = await client.listPullRequests("active");
+  const reviewPullRequests = activePullRequests.filter(
+    (pr) => !matchesCurrentUserIdentity(pr.createdBy, currentUser) && pr.isDraft !== true,
+  );
+
+  if (reviewPullRequests.length === 0) {
+    return { workItems: [], newWorkIds: new Set(), completedIds: new Set() };
+  }
+
+  const workItemRefsByPullRequest = await Promise.all(
+    reviewPullRequests.map(async (pr) => {
+      const repositoryId = getPullRequestRepositoryId(pr);
+      const workItemRefs = await client.listPullRequestWorkItems(
+        repositoryId,
+        String(pr.pullRequestId),
+      );
+      return {
+        pr,
+        repositoryId,
+        workItemRefs,
+      };
+    }),
+  );
+
+  const linkedWorkItemIds = [
+    ...new Set(
+      workItemRefsByPullRequest.flatMap(({ workItemRefs }) =>
+        workItemRefs
+          .map((workItemRef) => Number(workItemRef.id))
+          .filter((id) => Number.isInteger(id) && id > 0),
+      ),
+    ),
+  ];
+
+  if (linkedWorkItemIds.length === 0) {
+    return { workItems: [], newWorkIds: new Set(), completedIds: new Set() };
+  }
+
+  const allowedTypes = parseConfiguredWorkItemTypes(workItemTypes);
+  const adoItems = await client.batchGetWorkItems(linkedWorkItemIds, getWorkItemDetailFields());
+  const filteredAdoItems = adoItems.filter(
+    (item) => isWorkItemWithinAreaPath(item, areaPath) && isAllowedReviewWorkItemType(item, allowedTypes),
+  );
+  const workItemsById = new Map(
+    filterRemovedWorkItems(filteredAdoItems.map((item) => mapAdoWorkItem(item, org, project))).map(
+      (workItem) => [workItem.id, workItem] as const,
+    ),
+  );
+
+  const detailedReviewPullRequests = await Promise.all(
+    workItemRefsByPullRequest.map(async ({ pr, repositoryId }) => ({
+      pr,
+      repositoryId,
+      relatedPullRequest: await buildRelatedPullRequestDetails(
+        client,
+        pr,
+        org,
+        project,
+        repositoryId,
+      ),
+    })),
+  );
+  const relatedPullRequestsByKey = new Map(
+    detailedReviewPullRequests.map(({ pr, repositoryId, relatedPullRequest }) => [
+      `${repositoryId}/${pr.pullRequestId}`,
+      relatedPullRequest,
+    ]),
+  );
+
+  const newWorkIds = new Set<number>();
+  const completedIds = new Set<number>();
+  const workItems: WorkItem[] = [];
+
+  for (const { pr, repositoryId, workItemRefs } of workItemRefsByPullRequest) {
+    const reviewState = getPullRequestReviewState(pr, currentUser);
+    const relatedPullRequest = relatedPullRequestsByKey.get(
+      `${repositoryId}/${pr.pullRequestId}`,
+    );
+    if (!relatedPullRequest) continue;
+
+    const uniqueRefs = new Map<string, AdoResourceRef>();
+    for (const workItemRef of workItemRefs) {
+      uniqueRefs.set(workItemRef.id, workItemRef);
+    }
+
+    for (const workItemRef of uniqueRefs.values()) {
+      const sourceWorkItem = workItemsById.get(Number(workItemRef.id));
+      if (!sourceWorkItem) continue;
+
+      const reviewWorkItemId = createReviewWorkItemId(
+        repositoryId,
+        pr.pullRequestId,
+        sourceWorkItem.id,
+      );
+      workItems.push({
+        ...sourceWorkItem,
+        id: reviewWorkItemId,
+        displayId: sourceWorkItem.id,
+        kind: "review",
+        relatedPullRequests: [relatedPullRequest],
+        review: {
+          repositoryId,
+          pullRequestId: pr.pullRequestId,
+          reviewState,
+        },
+      });
+
+      if (reviewState === "new") {
+        newWorkIds.add(reviewWorkItemId);
+      } else if (reviewState === "completed") {
+        completedIds.add(reviewWorkItemId);
+      }
+    }
+  }
+
+  return { workItems, newWorkIds, completedIds };
 }
 
 export async function fetchWorkItemsInitial(

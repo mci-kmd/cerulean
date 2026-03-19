@@ -5,6 +5,7 @@ import {
   fetchWorkItemsDelta,
   fetchCompletedWorkItems,
   fetchCandidateWorkItems,
+  fetchReviewWorkItems,
 } from "./work-items";
 import { MockAdoClient } from "./ado-client.mock";
 import { createAdoWorkItem } from "@/test/fixtures/work-items";
@@ -1230,5 +1231,282 @@ describe("fetchCompletedWorkItems", () => {
     const wiql = client.callLog[0]?.args[0];
     expect(wiql).toContain("[WEF_FAKE_Kanban.Column] = 'Approved'");
     expect(wiql).toContain("[System.AssignedTo] = @Me");
+  });
+});
+
+describe("fetchReviewWorkItems", () => {
+  it("creates review items for other dev PRs and buckets them by review state", async () => {
+    const client = new MockAdoClient();
+    client.myEmail = "me@test.com";
+    client.myUserId = "me-id";
+    client.pullRequests.set("repo-1/7001", {
+      pullRequestId: 7001,
+      title: "Review login flow",
+      status: "active",
+      mergeStatus: "succeeded",
+      createdBy: {
+        id: "other-id",
+        uniqueName: "other@test.com",
+      },
+      repository: {
+        id: "repo-1",
+        project: {
+          id: "proj-1",
+        },
+      },
+      reviewers: [
+        { id: "lead-id", uniqueName: "lead@test.com", vote: 5 },
+        { id: "me-id", uniqueName: "me@test.com", vote: 10 },
+      ],
+    });
+    client.pullRequests.set("repo-2/7002", {
+      pullRequestId: 7002,
+      title: "Review checkout flow",
+      status: "active",
+      mergeStatus: "succeeded",
+      createdBy: {
+        id: "other-id-2",
+        uniqueName: "other-2@test.com",
+      },
+      repository: {
+        id: "repo-2",
+        project: {
+          id: "proj-1",
+        },
+      },
+      reviewers: [{ id: "lead-id", uniqueName: "lead@test.com", vote: 0 }],
+    });
+    client.pullRequests.set("repo-3/7003", {
+      pullRequestId: 7003,
+      title: "My own PR",
+      status: "active",
+      createdBy: {
+        id: "me-id",
+        uniqueName: "me@test.com",
+      },
+      repository: {
+        id: "repo-3",
+        project: {
+          id: "proj-1",
+        },
+      },
+      reviewers: [],
+    });
+    client.pullRequestWorkItems.set("repo-1/7001", [{ id: "42", url: "" }]);
+    client.pullRequestWorkItems.set("repo-2/7002", [{ id: "43", url: "" }]);
+    client.pullRequestWorkItems.set("repo-3/7003", [{ id: "44", url: "" }]);
+    client.pullRequestThreads.set("repo-1/7001", [{ status: "active" }]);
+    client.pullRequestThreads.set("repo-2/7002", [{ status: "active" }, { status: "fixed" }]);
+    client.workItems = [
+      createAdoWorkItem({
+        id: 42,
+        fields: {
+          "System.Id": 42,
+          "System.Title": "Login bug",
+          "System.WorkItemType": "Bug",
+          "System.State": "Active",
+          "System.AreaPath": "Area\\Team",
+          "System.Rev": 1,
+        },
+      }),
+      createAdoWorkItem({
+        id: 43,
+        fields: {
+          "System.Id": 43,
+          "System.Title": "Checkout story",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.AreaPath": "Area\\Team",
+          "System.Rev": 1,
+        },
+      }),
+      createAdoWorkItem({
+        id: 44,
+        fields: {
+          "System.Id": 44,
+          "System.Title": "Excluded own PR item",
+          "System.WorkItemType": "Bug",
+          "System.State": "Active",
+          "System.AreaPath": "Area\\Team",
+          "System.Rev": 1,
+        },
+      }),
+    ];
+
+    const result = await fetchReviewWorkItems(
+      client,
+      "org",
+      "proj",
+      "Area",
+      "Bug, User Story",
+    );
+
+    expect(result.workItems).toHaveLength(2);
+
+    const completedReview = result.workItems.find(
+      (item) => item.review?.pullRequestId === 7001,
+    );
+    expect(completedReview).toMatchObject({
+      displayId: 42,
+      kind: "review",
+      review: {
+        repositoryId: "repo-1",
+        pullRequestId: 7001,
+        reviewState: "completed",
+      },
+    });
+    expect(completedReview?.relatedPullRequests?.[0]).toMatchObject({
+      id: "7001",
+      title: "Review login flow",
+      reviewerCount: 2,
+      unresolvedCommentCount: 1,
+    });
+    expect(result.completedIds.has(completedReview!.id)).toBe(true);
+
+    const newReview = result.workItems.find((item) => item.review?.pullRequestId === 7002);
+    expect(newReview).toMatchObject({
+      displayId: 43,
+      kind: "review",
+      review: {
+        repositoryId: "repo-2",
+        pullRequestId: 7002,
+        reviewState: "new",
+      },
+    });
+    expect(newReview?.relatedPullRequests?.[0]).toMatchObject({
+      id: "7002",
+      title: "Review checkout flow",
+      reviewerCount: 1,
+      unresolvedCommentCount: 1,
+    });
+    expect(result.newWorkIds.has(newReview!.id)).toBe(true);
+  });
+
+  it("filters review items by area path and configured work item types", async () => {
+    const client = new MockAdoClient();
+    client.pullRequests.set("repo-1/7100", {
+      pullRequestId: 7100,
+      title: "Area scoped PR",
+      status: "active",
+      createdBy: {
+        id: "other-id",
+        uniqueName: "other@test.com",
+      },
+      repository: {
+        id: "repo-1",
+        project: {
+          id: "proj-1",
+        },
+      },
+      reviewers: [],
+    });
+    client.pullRequestWorkItems.set("repo-1/7100", [
+      { id: "50", url: "" },
+      { id: "51", url: "" },
+    ]);
+    client.workItems = [
+      createAdoWorkItem({
+        id: 50,
+        fields: {
+          "System.Id": 50,
+          "System.Title": "Included bug",
+          "System.WorkItemType": "Bug",
+          "System.State": "Active",
+          "System.AreaPath": "Area\\Team",
+          "System.Rev": 1,
+        },
+      }),
+      createAdoWorkItem({
+        id: 51,
+        fields: {
+          "System.Id": 51,
+          "System.Title": "Wrong type task",
+          "System.WorkItemType": "Task",
+          "System.State": "Active",
+          "System.AreaPath": "OtherArea",
+          "System.Rev": 1,
+        },
+      }),
+    ];
+
+    const result = await fetchReviewWorkItems(client, "org", "proj", "Area", "Bug");
+
+    expect(result.workItems).toHaveLength(1);
+    expect(result.workItems[0]).toMatchObject({
+      displayId: 50,
+      title: "Included bug",
+    });
+  });
+
+  it("excludes completed and draft PRs from review items", async () => {
+    const client = new MockAdoClient();
+    client.myEmail = "me@test.com";
+    client.myUserId = "me-id";
+    client.pullRequests.set("repo-1/7200", {
+      pullRequestId: 7200,
+      title: "Closed PR",
+      status: "completed",
+      createdBy: {
+        id: "other-id",
+        uniqueName: "other@test.com",
+      },
+      repository: {
+        id: "repo-1",
+        project: {
+          id: "proj-1",
+        },
+      },
+      reviewers: [{ id: "me-id", uniqueName: "me@test.com", vote: 0 }],
+    });
+    client.pullRequests.set("repo-2/7201", {
+      pullRequestId: 7201,
+      title: "Draft PR",
+      status: "active",
+      isDraft: true,
+      createdBy: {
+        id: "other-id-2",
+        uniqueName: "other-2@test.com",
+      },
+      repository: {
+        id: "repo-2",
+        project: {
+          id: "proj-1",
+        },
+      },
+      reviewers: [{ id: "me-id", uniqueName: "me@test.com", vote: 0 }],
+    });
+    client.pullRequestWorkItems.set("repo-1/7200", [{ id: "60", url: "" }]);
+    client.pullRequestWorkItems.set("repo-2/7201", [{ id: "61", url: "" }]);
+    client.workItems = [
+      createAdoWorkItem({
+        id: 60,
+        fields: {
+          "System.Id": 60,
+          "System.Title": "Visible review bug",
+          "System.WorkItemType": "Bug",
+          "System.State": "Active",
+          "System.AreaPath": "Area\\Team",
+          "System.Rev": 1,
+        },
+      }),
+      createAdoWorkItem({
+        id: 61,
+        fields: {
+          "System.Id": 61,
+          "System.Title": "Hidden draft bug",
+          "System.WorkItemType": "Bug",
+          "System.State": "Active",
+          "System.AreaPath": "Area\\Team",
+          "System.Rev": 1,
+        },
+      }),
+    ];
+
+    const result = await fetchReviewWorkItems(client, "org", "proj", "Area", "Bug");
+
+    expect(client.callLog.find((call) => call.method === "listPullRequests")?.args[0]).toBe("active");
+    expect(result.workItems).toHaveLength(0);
+    expect(result.newWorkIds.size).toBe(0);
+    expect(result.completedIds.size).toBe(0);
   });
 });

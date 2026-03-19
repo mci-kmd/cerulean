@@ -1,9 +1,11 @@
 import { type AdoClient, WorkItemAlreadyAssignedError } from "./ado-client";
 import type {
+  AdoCurrentUser,
   AdoBoard,
   AdoBoardReference,
   AdoPolicyEvaluationRecord,
   AdoPullRequest,
+  AdoResourceRef,
   AdoPullRequestStatus,
   AdoPullRequestThread,
   AdoWorkItem,
@@ -19,7 +21,10 @@ export class MockAdoClient implements AdoClient {
   public shouldFailPullRequestThreads = false;
   public shouldFailPullRequestPolicyEvaluations = false;
   public myEmail = "me@test.com";
+  public myUserId = "me-id";
+  public myDisplayName = "Me";
   public pullRequests = new Map<string, AdoPullRequest>();
+  public pullRequestWorkItems = new Map<string, AdoResourceRef[]>();
   public pullRequestStatuses = new Map<string, AdoPullRequestStatus[]>();
   public pullRequestThreads = new Map<string, AdoPullRequestThread[]>();
   public pullRequestPolicyEvaluations = new Map<string, AdoPolicyEvaluationRecord[]>();
@@ -56,6 +61,29 @@ export class MockAdoClient implements AdoClient {
     return board;
   }
 
+  async getCurrentUser(): Promise<AdoCurrentUser> {
+    this.callLog.push({ method: "getCurrentUser", args: [] });
+    if (this.shouldFail) throw new Error("Mock current user error");
+    return {
+      id: this.myUserId,
+      email: this.myEmail,
+      displayName: this.myDisplayName,
+    };
+  }
+
+  async listPullRequests(_status = "active"): Promise<AdoPullRequest[]> {
+    this.callLog.push({ method: "listPullRequests", args: [_status] });
+    if (this.shouldFail || this.shouldFailPullRequest) {
+      throw new Error("Mock pull requests error");
+    }
+    const pullRequests = [...this.pullRequests.values()];
+    if (_status === "all") return pullRequests;
+    return pullRequests.filter(
+      (pullRequest) =>
+        pullRequest.status.trim().toLowerCase() === _status.trim().toLowerCase(),
+    );
+  }
+
   async getPullRequest(
     repositoryId: string,
     pullRequestId: string,
@@ -72,6 +100,17 @@ export class MockAdoClient implements AdoClient {
       title: `PR #${pullRequestId}`,
       status: "active",
     };
+  }
+
+  async listPullRequestWorkItems(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<AdoResourceRef[]> {
+    this.callLog.push({ method: "listPullRequestWorkItems", args: [repositoryId, pullRequestId] });
+    if (this.shouldFail || this.shouldFailPullRequest) {
+      throw new Error("Mock pull request work items error");
+    }
+    return this.pullRequestWorkItems.get(`${repositoryId}/${pullRequestId}`) ?? [];
   }
 
   async getPullRequestStatuses(
@@ -106,6 +145,50 @@ export class MockAdoClient implements AdoClient {
       throw new Error("Mock pull request policy evaluations error");
     }
     return this.pullRequestPolicyEvaluations.get(artifactId) ?? [];
+  }
+
+  async addCurrentUserAsPullRequestReviewer(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<void> {
+    this.callLog.push({
+      method: "addCurrentUserAsPullRequestReviewer",
+      args: [repositoryId, pullRequestId],
+    });
+    if (this.shouldFail) throw new Error("Mock add reviewer error");
+  }
+
+  async approvePullRequestAsCurrentUser(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<void> {
+    this.callLog.push({
+      method: "approvePullRequestAsCurrentUser",
+      args: [repositoryId, pullRequestId],
+    });
+    if (this.shouldFail) throw new Error("Mock approve reviewer error");
+  }
+
+  async clearPullRequestReviewVote(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<void> {
+    this.callLog.push({
+      method: "clearPullRequestReviewVote",
+      args: [repositoryId, pullRequestId],
+    });
+    if (this.shouldFail) throw new Error("Mock clear reviewer vote error");
+  }
+
+  async removeCurrentUserAsPullRequestReviewer(
+    repositoryId: string,
+    pullRequestId: string,
+  ): Promise<void> {
+    this.callLog.push({
+      method: "removeCurrentUserAsPullRequestReviewer",
+      args: [repositoryId, pullRequestId],
+    });
+    if (this.shouldFail) throw new Error("Mock remove reviewer error");
   }
 
   async updateWorkItemState(

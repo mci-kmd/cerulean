@@ -709,4 +709,111 @@ describe("HttpAdoClient", () => {
       await expect(client.returnWorkItemToCandidate(99, "New")).rejects.toThrow("400");
     });
   });
+
+  describe("pull request reviewer mutations", () => {
+    it("adds current user as optional reviewer with vote 0", async () => {
+      const reviewClient = new HttpAdoClient({
+        pat: "test-pat",
+        org: "test-org",
+        project: "test-project",
+      });
+      let capturedBody: unknown = null;
+      server.use(
+        http.get("https://dev.azure.com/test-org/_apis/connectiondata*", () => {
+          return HttpResponse.json({
+            authenticatedUser: {
+              id: "user-id",
+              properties: { Account: { $value: "user@test.com" } },
+            },
+          });
+        }),
+        http.put(
+          `${BASE}/_apis/git/repositories/repo-1/pullRequests/77/reviewers/user-id`,
+          async ({ request }) => {
+            capturedBody = await request.json();
+            return HttpResponse.json({
+              id: "user-id",
+              vote: 0,
+            });
+          },
+        ),
+      );
+
+      await expect(
+        reviewClient.addCurrentUserAsPullRequestReviewer("repo-1", "77"),
+      ).resolves.toBeUndefined();
+      expect(capturedBody).toEqual({
+        id: "user-id",
+        vote: 0,
+      });
+    });
+
+    it("approves a pull request as the current user", async () => {
+      const reviewClient = new HttpAdoClient({
+        pat: "test-pat",
+        org: "test-org",
+        project: "test-project",
+      });
+      let capturedBody: unknown = null;
+      server.use(
+        http.get("https://dev.azure.com/test-org/_apis/connectiondata*", () => {
+          return HttpResponse.json({
+            authenticatedUser: {
+              id: "user-id",
+              properties: { Account: { $value: "user@test.com" } },
+            },
+          });
+        }),
+        http.put(
+          `${BASE}/_apis/git/repositories/repo-1/pullRequests/78/reviewers/user-id`,
+          async ({ request }) => {
+            capturedBody = await request.json();
+            return HttpResponse.json({
+              id: "user-id",
+              vote: 10,
+            });
+          },
+        ),
+      );
+
+      await expect(
+        reviewClient.approvePullRequestAsCurrentUser("repo-1", "78"),
+      ).resolves.toBeUndefined();
+      expect(capturedBody).toEqual({
+        id: "user-id",
+        vote: 10,
+      });
+    });
+
+    it("removes the current user as reviewer", async () => {
+      const reviewClient = new HttpAdoClient({
+        pat: "test-pat",
+        org: "test-org",
+        project: "test-project",
+      });
+      let deleteCalled = false;
+      server.use(
+        http.get("https://dev.azure.com/test-org/_apis/connectiondata*", () => {
+          return HttpResponse.json({
+            authenticatedUser: {
+              id: "user-id",
+              properties: { Account: { $value: "user@test.com" } },
+            },
+          });
+        }),
+        http.delete(
+          `${BASE}/_apis/git/repositories/repo-1/pullRequests/79/reviewers/user-id`,
+          () => {
+            deleteCalled = true;
+            return new HttpResponse(null, { status: 204 });
+          },
+        ),
+      );
+
+      await expect(
+        reviewClient.removeCurrentUserAsPullRequestReviewer("repo-1", "79"),
+      ).resolves.toBeUndefined();
+      expect(deleteCalled).toBe(true);
+    });
+  });
 });

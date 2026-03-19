@@ -71,6 +71,21 @@ export interface AdoWorkItemRelation {
   };
 }
 
+export interface AdoIdentityRef {
+  id?: string;
+  displayName?: string;
+  uniqueName?: string;
+  isContainer?: boolean;
+  isRequired?: boolean;
+  vote?: number;
+}
+
+export interface AdoCurrentUser {
+  id?: string;
+  email: string;
+  displayName?: string;
+}
+
 export interface AdoBatchResponse {
   count: number;
   value: AdoWorkItem[];
@@ -81,18 +96,20 @@ export interface AdoPullRequest {
   codeReviewId?: number;
   title: string;
   status: string;
+  isDraft?: boolean;
   mergeStatus?: string;
   artifactId?: string;
+  createdBy?: AdoIdentityRef;
   repository?: {
+    id?: string;
+    name?: string;
     project?: {
       id?: string;
+      name?: string;
     };
   };
-  reviewers?: {
-    isContainer?: boolean;
-    isRequired?: boolean;
-    vote?: number;
-  }[];
+  reviewers?: AdoIdentityRef[];
+  url?: string;
 }
 
 export interface AdoPullRequestStatus {
@@ -123,4 +140,9 @@ export interface AdoPolicyEvaluationRecord {
       displayName?: string;
     };
   };
+}
+
+export interface AdoResourceRef {
+  id: string;
+  url: string;
 }

@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { getTypeStyle, getTypeIcon, CUSTOM_TASK_TYPE } from "@/lib/work-item-types";
 import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
 import { TaskDialog } from "./task-dialog";
-import type { RelatedPullRequest, WorkItem } from "@/types/board";
+import { isReviewWorkItem, type RelatedPullRequest, type WorkItem } from "@/types/board";
 
 interface BoardCardProps {
   workItem: WorkItem;
@@ -149,9 +149,11 @@ export function BoardCard({
   const [editOpen, setEditOpen] = useState(false);
   const statusRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const isReviewCard = isReviewWorkItem(workItem);
   const isCustomTask = workItem.type === CUSTOM_TASK_TYPE && !workItem.url;
+  const displayId = workItem.displayId ?? workItem.id;
   const relatedPullRequests =
-    workItem.type === "Bug" || workItem.type === "User Story"
+    isReviewCard || workItem.type === "Bug" || workItem.type === "User Story"
       ? workItem.relatedPullRequests ?? []
       : [];
   const sortedPullRequests = [...relatedPullRequests].sort(
@@ -201,6 +203,11 @@ export function BoardCard({
 
   const style = getTypeStyle(workItem.type);
   const typeIcon = getTypeIcon(workItem.type);
+  const reviewSurfaceStyle = isReviewCard
+    ? {
+        backgroundImage: `repeating-linear-gradient(45deg, transparent 0px, transparent 12px, ${style.stripe} 12px, ${style.stripe} 24px)`,
+      }
+    : undefined;
 
   return (
     <>
@@ -214,13 +221,22 @@ export function BoardCard({
         <div
           data-testid="board-card-surface"
           aria-hidden="true"
-          className={`pointer-events-none absolute inset-x-0 top-0 -bottom-px rounded-lg border-l-[3px] border border-border bg-card shadow-sm transition-[background-color] group-hover/card:bg-accent/30 ${style.border}`}
+          style={reviewSurfaceStyle}
+          className={`pointer-events-none absolute inset-x-0 top-0 -bottom-px rounded-lg border-l-[3px] border border-border shadow-sm ${isReviewCard ? `${style.bg} transition-[filter] group-hover/card:brightness-[0.985]` : "bg-card transition-[background-color] group-hover/card:bg-accent/30"} ${style.border}`}
         />
         <div className="relative z-10 p-3">
           <div className="flex items-center gap-1.5 mb-1.5">
             {createElement(typeIcon, {
               className: `h-3.5 w-3.5 shrink-0 ${style.text}`,
             })}
+            {isReviewCard && (
+              <span
+                data-testid="review-label"
+                className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[9px] font-semibold tracking-[0.2em] ${style.badge}`}
+              >
+                REVIEW
+              </span>
+            )}
             <span className="flex-1" />
             {isCustomTask ? (
               <button
@@ -236,7 +252,7 @@ export function BoardCard({
                 <Pencil className="h-3 w-3" />
               </button>
             ) : (
-              <CopyableId id={workItem.id} className="text-[10px]" />
+              <CopyableId id={displayId} className="text-[10px]" />
             )}
           </div>
           {isCustomTask ? (
@@ -303,7 +319,17 @@ export function BoardCard({
                             <span>{pr.unresolvedCommentCount}</span>
                           </span>
                         )}
-                        {!isCompleted && (pr.approvalCount ?? 0) > 0 && (
+                        {!isCompleted && isReviewCard && (pr.reviewerCount ?? 0) > 0 && (
+                          <span
+                            data-testid={`pr-reviewer-count-${pr.id}`}
+                            className="inline-flex items-center gap-0.5"
+                            aria-hidden="true"
+                          >
+                            <User className="h-3 w-3" />
+                            <span>{pr.reviewerCount}</span>
+                          </span>
+                        )}
+                        {!isCompleted && !isReviewCard && (pr.approvalCount ?? 0) > 0 && (
                           <span
                             data-testid={`pr-approval-count-${pr.id}`}
                             className="inline-flex items-center gap-0.5"
