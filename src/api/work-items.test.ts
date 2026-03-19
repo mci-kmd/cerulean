@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { mapAdoWorkItem, fetchWorkItemsInitial, fetchWorkItemsDelta, fetchCandidateWorkItems } from "./work-items";
+import {
+  mapAdoWorkItem,
+  fetchWorkItemsInitial,
+  fetchWorkItemsDelta,
+  fetchCompletedWorkItems,
+  fetchCandidateWorkItems,
+} from "./work-items";
 import { MockAdoClient } from "./ado-client.mock";
 import { createAdoWorkItem } from "@/test/fixtures/work-items";
 
@@ -130,10 +136,121 @@ describe("fetchWorkItemsInitial", () => {
     expect(result.revMap.size).toBe(2);
   });
 
+  it("filters removed items from initial results", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = {
+      workItems: [{ id: 1, url: "" }, { id: 2, url: "" }],
+    };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Keep me",
+          "System.WorkItemType": "Task",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+      }),
+      createAdoWorkItem({
+        id: 2,
+        fields: {
+          "System.Id": 2,
+          "System.Title": "Drop me",
+          "System.WorkItemType": "Task",
+          "System.State": "Removed",
+          "System.Rev": 2,
+        },
+      }),
+    ];
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+
+    expect(result.workItems).toHaveLength(1);
+    expect(result.workItems[0]?.id).toBe(1);
+    expect(result.revMap.has(1)).toBe(true);
+    expect(result.revMap.has(2)).toBe(false);
+  });
+
   it("returns empty for no WIQL results", async () => {
     const client = new MockAdoClient();
     const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
     expect(result.workItems).toHaveLength(0);
+  });
+
+  it("queries source items by board column when configured", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [] };
+
+    await fetchWorkItemsInitial(
+      client,
+      "Active",
+      "org",
+      "proj",
+      "",
+      "Bug, User Story",
+      "Approved",
+      {
+        team: "My Team",
+        boardId: "board-1",
+        boardName: "Stories",
+        intakeColumnName: "Incoming",
+        intakeColumnIsSplit: false,
+        columnFieldReferenceName: "WEF_FAKE_Kanban.Column",
+        intakeStateMappings: {},
+        boardColumnsByName: {
+          approved: {
+            isSplit: false,
+            stateMappings: {
+              Bug: "Active",
+              "User Story": "Committed",
+            },
+          },
+        },
+      },
+    );
+
+    const wiql = client.callLog[0]?.args[0];
+    expect(wiql).toContain("[WEF_FAKE_Kanban.Column] = 'Approved'");
+    expect(wiql).toContain("[System.AssignedTo] = @Me");
+    expect(wiql).toContain("[System.WorkItemType] IN ('Bug', 'User Story')");
+  });
+
+  it("queries source items by split board column on the active side", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [] };
+
+    await fetchWorkItemsInitial(
+      client,
+      "Active",
+      "org",
+      "proj",
+      "",
+      "Bug",
+      "Approved",
+      {
+        team: "My Team",
+        boardId: "board-1",
+        boardName: "Stories",
+        intakeColumnName: "Incoming",
+        intakeColumnIsSplit: false,
+        columnFieldReferenceName: "WEF_FAKE_Kanban.Column",
+        doneFieldReferenceName: "WEF_FAKE_Kanban.Column.Done",
+        intakeStateMappings: {},
+        boardColumnsByName: {
+          approved: {
+            isSplit: true,
+            stateMappings: {
+              Bug: "Active",
+            },
+          },
+        },
+      },
+    );
+
+    const wiql = client.callLog[0]?.args[0];
+    expect(wiql).toContain("[WEF_FAKE_Kanban.Column] = 'Approved'");
+    expect(wiql).toContain("[System.AssignedTo] = @Me");
   });
 
   it("enriches related pull requests with fetched title/status/merge status", async () => {
@@ -851,6 +968,40 @@ describe("fetchWorkItemsDelta", () => {
       client.callLog.filter((call) => call.method === "getPullRequestPolicyEvaluations"),
     ).toHaveLength(1);
   });
+
+  it("drops changed items that became removed instead of keeping cached values", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Rev": 2,
+          "System.Title": "Removed item",
+          "System.WorkItemType": "Task",
+          "System.State": "Removed",
+        },
+      }),
+    ];
+
+    const cachedRevMap = new Map([[1, { rev: 1 }]]);
+    const cachedItems = [
+      { id: 1, title: "Still cached", type: "Task", state: "Active", rev: 1, url: "" },
+    ];
+
+    const result = await fetchWorkItemsDelta(
+      client,
+      "Active",
+      "org",
+      "proj",
+      cachedRevMap,
+      cachedItems,
+    );
+
+    expect(result.workItems).toEqual([]);
+    expect(result.revMap.size).toBe(0);
+  });
 });
 
 describe("fetchCandidateWorkItems", () => {
@@ -884,5 +1035,200 @@ describe("fetchCandidateWorkItems", () => {
     const client = new MockAdoClient();
     const items = await fetchCandidateWorkItems(client, "New", "org", "proj");
     expect(items).toHaveLength(0);
+  });
+
+  it("filters removed items from candidate results", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }, { id: 2, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Candidate",
+          "System.WorkItemType": "Task",
+          "System.State": "New",
+          "System.Rev": 1,
+        },
+      }),
+      createAdoWorkItem({
+        id: 2,
+        fields: {
+          "System.Id": 2,
+          "System.Title": "Removed candidate",
+          "System.WorkItemType": "Task",
+          "System.State": "Removed",
+          "System.Rev": 2,
+        },
+      }),
+    ];
+
+    const items = await fetchCandidateWorkItems(client, "New", "org", "proj");
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.id).toBe(1);
+  });
+
+  it("queries grouped candidate states by work item type", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [] };
+
+    await fetchCandidateWorkItems(
+      client,
+      "Approved",
+      "org",
+      "proj",
+      "",
+      "Bug, User Story",
+      "Bug=New; User Story=Approved",
+    );
+
+    expect(client.callLog[0]?.method).toBe("queryWorkItems");
+    const wiql = client.callLog[0]?.args[0];
+    expect(wiql).toContain("[System.State] = 'New'");
+    expect(wiql).toContain("[System.State] = 'Approved'");
+    expect(wiql).toContain("[System.WorkItemType] IN ('Bug')");
+    expect(wiql).toContain("[System.WorkItemType] IN ('User Story')");
+  });
+
+  it("queries candidates by board column when board config is provided", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [] };
+
+    await fetchCandidateWorkItems(
+      client,
+      "",
+      "org",
+      "proj",
+      "",
+      "Bug, User Story",
+      "",
+      {
+        team: "My Team",
+        boardId: "board-1",
+        boardName: "Stories",
+        intakeColumnName: "New",
+        intakeColumnIsSplit: true,
+        columnFieldReferenceName: "WEF_FAKE_Kanban.Column",
+        doneFieldReferenceName: "WEF_FAKE_Kanban.Column.Done",
+        intakeStateMappings: {
+          Bug: "New",
+          "User Story": "Approved",
+        },
+      },
+    );
+
+    const wiql = client.callLog[0]?.args[0];
+    expect(wiql).toContain("[WEF_FAKE_Kanban.Column] = 'New'");
+    expect(wiql).toContain("[System.AssignedTo] = ''");
+    expect(wiql).toContain("[System.WorkItemType] IN ('Bug', 'User Story')");
+  });
+});
+
+describe("fetchCompletedWorkItems", () => {
+  it("filters removed items from completed results", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }, { id: 2, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Completed",
+          "System.WorkItemType": "Bug",
+          "System.State": "Resolved",
+          "System.Rev": 1,
+        },
+      }),
+      createAdoWorkItem({
+        id: 2,
+        fields: {
+          "System.Id": 2,
+          "System.Title": "Removed completed",
+          "System.WorkItemType": "Bug",
+          "System.State": "Removed",
+          "System.Rev": 2,
+        },
+      }),
+    ];
+
+    const items = await fetchCompletedWorkItems(client, "Resolved", "org", "proj");
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.id).toBe(1);
+  });
+
+  it("queries completed items by board column when configured", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [] };
+
+    await fetchCompletedWorkItems(
+      client,
+      "Resolved",
+      "org",
+      "proj",
+      "",
+      "Bug",
+      "Approved",
+      {
+        team: "My Team",
+        boardId: "board-1",
+        boardName: "Stories",
+        intakeColumnName: "Incoming",
+        intakeColumnIsSplit: false,
+        columnFieldReferenceName: "WEF_FAKE_Kanban.Column",
+        intakeStateMappings: {},
+        boardColumnsByName: {
+          approved: {
+            isSplit: false,
+            stateMappings: {
+              Bug: "Resolved",
+            },
+          },
+        },
+      },
+    );
+
+    const wiql = client.callLog[0]?.args[0];
+    expect(wiql).toContain("[WEF_FAKE_Kanban.Column] = 'Approved'");
+    expect(wiql).toContain("[System.AssignedTo] = @Me");
+    expect(wiql).toContain("[System.WorkItemType] IN ('Bug')");
+  });
+
+  it("queries completed items by split board column on the active side", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [] };
+
+    await fetchCompletedWorkItems(
+      client,
+      "Resolved",
+      "org",
+      "proj",
+      "",
+      "Bug",
+      "Approved",
+      {
+        team: "My Team",
+        boardId: "board-1",
+        boardName: "Stories",
+        intakeColumnName: "Incoming",
+        intakeColumnIsSplit: false,
+        columnFieldReferenceName: "WEF_FAKE_Kanban.Column",
+        doneFieldReferenceName: "WEF_FAKE_Kanban.Column.Done",
+        intakeStateMappings: {},
+        boardColumnsByName: {
+          approved: {
+            isSplit: true,
+            stateMappings: {
+              Bug: "Resolved",
+            },
+          },
+        },
+      },
+    );
+
+    const wiql = client.callLog[0]?.args[0];
+    expect(wiql).toContain("[WEF_FAKE_Kanban.Column] = 'Approved'");
+    expect(wiql).toContain("[System.AssignedTo] = @Me");
   });
 });

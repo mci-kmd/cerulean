@@ -2,10 +2,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 interface SourceStateInputProps {
-  sourceState: string;
-  approvalState: string;
+  sourceBoardColumn: string;
+  candidateBoardColumn: string;
+  approvalBoardColumn: string;
   closedState: string;
-  candidateState: string;
   areaPath: string;
   workItemTypes: string;
   pollInterval: number;
@@ -13,10 +13,10 @@ interface SourceStateInputProps {
 }
 
 export function SourceStateInput({
-  sourceState,
-  approvalState,
+  sourceBoardColumn,
+  candidateBoardColumn,
+  approvalBoardColumn,
   closedState,
-  candidateState,
   areaPath,
   workItemTypes,
   pollInterval,
@@ -25,27 +25,47 @@ export function SourceStateInput({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="sourceState">Source State</Label>
-        <Input
-          id="sourceState"
-          value={sourceState}
-          onChange={(e) => onChange("sourceState", e.target.value)}
-          placeholder="Active"
-        />
         <p className="text-xs text-muted-foreground">
-          ADO work item state to pull from (e.g. Active, New, In Progress)
+          Current-work items are loaded from one configured source-board column. Your local columns are Cerulean-only.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          New Work can come from a configured source-board column. Leave it empty to use the source board&apos;s incoming column.
         </p>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="approvalState">Approval State</Label>
+        <Label htmlFor="sourceBoardColumn">Active Work Board Column</Label>
         <Input
-          id="approvalState"
-          value={approvalState}
-          onChange={(e) => onChange("approvalState", e.target.value)}
-          placeholder="Resolved"
+          id="sourceBoardColumn"
+          value={sourceBoardColumn}
+          onChange={(e) => onChange("sourceBoardColumn", e.target.value)}
+          placeholder="Approved"
         />
         <p className="text-xs text-muted-foreground">
-          State for items pending approval in demo mode (e.g. Resolved)
+          Required source-board column for all current-work items.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="candidateBoardColumn">New Work Board Column</Label>
+        <Input
+          id="candidateBoardColumn"
+          value={candidateBoardColumn}
+          onChange={(e) => onChange("candidateBoardColumn", e.target.value)}
+          placeholder="New"
+        />
+        <p className="text-xs text-muted-foreground">
+          Optional. Overrides the source-board incoming column used for New Work candidates.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="approvalBoardColumn">Approval Board Column</Label>
+        <Input
+          id="approvalBoardColumn"
+          value={approvalBoardColumn}
+          onChange={(e) => onChange("approvalBoardColumn", e.target.value)}
+          placeholder="Approved"
+        />
+        <p className="text-xs text-muted-foreground">
+          Optional source-board column to mirror into Completed.
         </p>
       </div>
       <div className="space-y-2">
@@ -57,19 +77,7 @@ export function SourceStateInput({
           placeholder="Closed"
         />
         <p className="text-xs text-muted-foreground">
-          State to set when approving items in demo mode (e.g. Closed)
-        </p>
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="candidateState">Candidate State</Label>
-        <Input
-          id="candidateState"
-          value={candidateState}
-          onChange={(e) => onChange("candidateState", e.target.value)}
-          placeholder="New"
-        />
-        <p className="text-xs text-muted-foreground">
-          State for unassigned items in the candidate tray (e.g. New, Proposed). Leave empty to disable.
+          Used only by demo approval actions.
         </p>
       </div>
       <div className="space-y-2">

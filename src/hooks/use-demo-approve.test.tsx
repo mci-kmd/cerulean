@@ -37,7 +37,7 @@ describe("useDemoApprove", () => {
       (c) => c.method === "updateWorkItemState",
     );
     expect(call).toBeDefined();
-    expect(call?.args).toEqual([42, "Closed"]);
+    expect(call?.args).toEqual([42, "Closed", undefined, undefined, undefined, undefined]);
   });
 
   it("reports error on failure", async () => {

@@ -37,7 +37,7 @@ describe("useReturnToCandidate", () => {
       (c) => c.method === "returnWorkItemToCandidate",
     );
     expect(call).toBeDefined();
-    expect(call?.args).toEqual([42, "New"]);
+    expect(call?.args).toEqual([42, "New", undefined, undefined, undefined]);
   });
 
   it("errors when client is null", async () => {

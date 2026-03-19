@@ -6,6 +6,27 @@ import { createAdoWorkItem } from "@/test/fixtures/work-items";
 
 describe("fetchDemoWorkItems", () => {
   let client: MockAdoClient;
+  const boardConfig = {
+    team: "My Team",
+    boardId: "board-1",
+    boardName: "Stories",
+    intakeColumnName: "New",
+    intakeColumnIsSplit: false,
+    columnFieldReferenceName: "WEF_FAKE_Kanban.Column",
+    intakeStateMappings: {
+      Bug: "New",
+      "User Story": "New",
+    },
+    boardColumnsByName: {
+      approved: {
+        isSplit: false,
+        stateMappings: {
+          Bug: "Resolved",
+          "User Story": "Resolved",
+        },
+      },
+    },
+  };
 
   beforeEach(() => {
     client = new MockAdoClient();
@@ -13,7 +34,7 @@ describe("fetchDemoWorkItems", () => {
 
   it("returns empty array when no items match", async () => {
     client.wiqlResult = { workItems: [] };
-    const result = await fetchDemoWorkItems(client, "Resolved", "org", "proj");
+    const result = await fetchDemoWorkItems(client, "Approved", boardConfig, "org", "proj");
     expect(result).toEqual([]);
   });
 
@@ -34,10 +55,11 @@ describe("fetchDemoWorkItems", () => {
       }),
     ];
 
-    const result = await fetchDemoWorkItems(client, "Resolved", "org", "proj");
+    const result = await fetchDemoWorkItems(client, "Approved", boardConfig, "org", "proj");
     expect(result).toHaveLength(1);
     expect(result[0].description).toBe("<p>Desc</p>");
     expect(result[0].acceptanceCriteria).toBe("<p>AC</p>");
+    expect(client.callLog[0]?.args[0]).toContain("[WEF_FAKE_Kanban.Column] = 'Approved'");
 
     // Verify correct fields were requested
     const batchCall = client.callLog.find(

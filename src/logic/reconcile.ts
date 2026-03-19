@@ -12,14 +12,17 @@ export function reconcile(
   currentAssignments: ColumnAssignment[],
   freshWorkItems: WorkItem[],
   columns: BoardColumn[],
-  approvalState?: string,
-  candidateState?: string,
+  _approvalState?: string,
+  _candidateState?: string,
+  _candidateStatesByType?: string,
+  candidateIds?: Set<number>,
+  completedIds?: Set<number>,
 ): ReconcileResult {
   const freshIds = new Set(freshWorkItems.map((w) => w.id));
   const assignedIds = new Set(currentAssignments.map((a) => a.workItemId));
 
-  const firstColumn = columns.sort((a, b) => a.order - b.order)[0];
-  if (!firstColumn) {
+  const sortedColumns = [...columns].sort((a, b) => a.order - b.order);
+  if (sortedColumns.length === 0) {
     return { added: [], removed: [], updated: freshWorkItems };
   }
 
@@ -29,18 +32,18 @@ export function reconcile(
   const added: ColumnAssignment[] = [];
 
   // Split new items: candidate (new work), completed, active
-  const candidateItems = candidateState
-    ? newItems.filter((w) => w.state === candidateState)
+  const candidateItems = candidateIds
+    ? newItems.filter((workItem) => candidateIds.has(workItem.id))
     : [];
-  const nonCandidateItems = candidateState
-    ? newItems.filter((w) => w.state !== candidateState)
-    : newItems;
-  const completedItems = approvalState
-    ? nonCandidateItems.filter((w) => w.state === approvalState)
+  const nonCandidateItems = newItems.filter(
+    (workItem) => !candidateIds?.has(workItem.id),
+  );
+  const completedItems = completedIds
+    ? nonCandidateItems.filter((workItem) => completedIds.has(workItem.id))
     : [];
-  const activeItems = approvalState
-    ? nonCandidateItems.filter((w) => w.state !== approvalState)
-    : nonCandidateItems;
+  const activeItems = nonCandidateItems.filter(
+    (workItem) => !completedIds?.has(workItem.id),
+  );
 
   // Add candidate items to New Work
   if (candidateItems.length > 0) {
@@ -58,17 +61,24 @@ export function reconcile(
     }
   }
 
-  // Add active items to first column
-  const existingInFirstCol = currentAssignments
-    .filter((a) => a.columnId === firstColumn.id)
-    .reduce((max, a) => Math.max(max, a.position), 0);
+  const existingMaxPositionByColumnId = new Map<string, number>();
+  for (const assignment of currentAssignments) {
+    existingMaxPositionByColumnId.set(
+      assignment.columnId,
+      Math.max(existingMaxPositionByColumnId.get(assignment.columnId) ?? 0, assignment.position),
+    );
+  }
 
-  for (let i = 0; i < activeItems.length; i++) {
+  const firstColumnId = sortedColumns[0]?.id;
+  for (const workItem of activeItems) {
+    if (!firstColumnId) continue;
+    const nextPosition = (existingMaxPositionByColumnId.get(firstColumnId) ?? 0) + 1;
+    existingMaxPositionByColumnId.set(firstColumnId, nextPosition);
     added.push({
       id: nanoid(),
-      workItemId: activeItems[i].id,
-      columnId: firstColumn.id,
-      position: existingInFirstCol + i + 1,
+      workItemId: workItem.id,
+      columnId: firstColumnId,
+      position: nextPosition,
     });
   }
 

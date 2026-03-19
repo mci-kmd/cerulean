@@ -26,12 +26,12 @@ export function useCustomTasks(): CustomTask[] {
   }, [all, now]);
 }
 
-export function customTasksToWorkItems(tasks: CustomTask[], approvalState?: string): WorkItem[] {
+export function customTasksToWorkItems(tasks: CustomTask[], completedLabel?: string): WorkItem[] {
   return tasks.map((t) => ({
     id: t.workItemId,
     title: t.title,
     type: CUSTOM_TASK_TYPE,
-    state: t.completedAt ? (approvalState || "Completed") : "Active",
+    state: t.completedAt ? (completedLabel || "Completed") : "Active",
     rev: 0,
     url: "",
   }));

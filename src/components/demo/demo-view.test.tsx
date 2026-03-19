@@ -43,7 +43,28 @@ function setupHandlers(items: ReturnType<typeof createAdoWorkItem>[]) {
 let client: AdoClient | null = null;
 
 const defaultProps = {
-  approvalState: "Resolved",
+  approvalBoardColumn: "Approved",
+  boardConfig: {
+    team: "test-project",
+    boardId: "board-1",
+    boardName: "Stories",
+    intakeColumnName: "New",
+    intakeColumnIsSplit: false,
+    columnFieldReferenceName: "WEF_FAKE_Kanban.Column",
+    intakeStateMappings: {
+      Bug: "New",
+      "User Story": "New",
+    },
+    boardColumnsByName: {
+      approved: {
+        isSplit: false,
+        stateMappings: {
+          Bug: "Resolved",
+          "User Story": "Resolved",
+        },
+      },
+    },
+  },
   closedState: "Closed",
   org: "test-org",
   project: "test-project",
@@ -83,9 +104,7 @@ describe("DemoView", () => {
     renderWithProviders(<DemoView client={getClient()} {...defaultProps} />);
 
     await waitFor(() => {
-      expect(
-        screen.getByText(/No items in "Resolved" state/),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/No items in "Approved" column/)).toBeInTheDocument();
     });
   });
 

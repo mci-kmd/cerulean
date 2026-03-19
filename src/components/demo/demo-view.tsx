@@ -9,6 +9,10 @@ import { useDemoWorkItems } from "@/hooks/use-demo-work-items";
 import { useDemoApprove } from "@/hooks/use-demo-approve";
 import { useDemoOrder } from "@/hooks/use-demo-order";
 import {
+  getBoardColumnTargetState,
+  type CandidateBoardConfig,
+} from "@/lib/ado-board";
+import {
   resolveDndManagerSettled,
   scheduleDndMutation,
   setDndRenderSettledResolver,
@@ -18,7 +22,9 @@ import type { AdoClient } from "@/api/ado-client";
 
 interface DemoViewProps {
   client: AdoClient;
-  approvalState: string;
+  approvalBoardColumn?: string;
+  approvalState?: string;
+  boardConfig?: CandidateBoardConfig;
   closedState: string;
   org: string;
   project: string;
@@ -33,17 +39,21 @@ type DemoDragEndManager = Parameters<
 
 export function DemoView({
   client,
+  approvalBoardColumn,
   approvalState,
+  boardConfig,
   closedState,
   org,
   project,
 }: DemoViewProps) {
+  const resolvedApprovalBoardColumn = approvalBoardColumn ?? approvalState ?? "";
   const { items, isLoading, error } = useDemoWorkItems(
     client,
-    approvalState,
+    resolvedApprovalBoardColumn,
     org,
     project,
     true,
+    boardConfig,
   );
   const approveMutation = useDemoApprove(client);
   const [activeId, setActiveId] = useState<number | null>(null);
@@ -90,8 +100,22 @@ export function DemoView({
         next.delete(workItemId);
         return next;
       });
+      const workItem = items.find((item) => item.id === workItemId);
+      const targetState = getBoardColumnTargetState(
+        boardConfig!,
+        resolvedApprovalBoardColumn,
+        workItem?.type,
+      );
+      if (!targetState) {
+        toast.error("Failed to unapprove", {
+          description: workItem?.type
+            ? `${resolvedApprovalBoardColumn} has no mapped source-board state for ${workItem.type}.`
+            : "Unable to resolve the source-board state for this item.",
+        });
+        return;
+      }
       approveMutation.mutate(
-        { workItemId, targetState: approvalState },
+        { workItemId, targetState },
         {
           onError: (err) => {
             setApprovedIds((prev) => new Set(prev).add(workItemId));
@@ -102,7 +126,7 @@ export function DemoView({
         },
       );
     },
-    [approveMutation, approvalState],
+    [approveMutation, boardConfig, items, resolvedApprovalBoardColumn],
   );
 
   const handleDragEnd = useCallback(
@@ -145,11 +169,11 @@ export function DemoView({
   }
 
   if (items.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 text-muted-foreground">
-        No items in &quot;{approvalState}&quot; state
-      </div>
-    );
+      return (
+        <div className="flex items-center justify-center h-64 text-muted-foreground">
+          No items in &quot;{resolvedApprovalBoardColumn}&quot; column
+        </div>
+      );
   }
 
   const unapproved = sortedItems.filter((i) => !approvedIds.has(i.id));

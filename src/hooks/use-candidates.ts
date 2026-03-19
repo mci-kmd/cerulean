@@ -1,20 +1,46 @@
 import { useQuery } from "@tanstack/react-query";
 import type { AdoClient } from "@/api/ado-client";
 import { fetchCandidateWorkItems } from "@/api/work-items";
+import type { CandidateBoardConfig } from "@/lib/ado-board";
 
 export function useCandidates(
   client: AdoClient | null,
-  candidateState: string,
+  _candidateState: string,
   org: string,
   project: string,
   enabled: boolean,
   areaPath?: string,
   workItemTypes?: string,
+  _candidateStatesByType?: string,
+  boardConfig?: CandidateBoardConfig,
 ) {
   const query = useQuery({
-    queryKey: ["candidates", org, project, candidateState, areaPath, workItemTypes],
-    queryFn: () => fetchCandidateWorkItems(client!, candidateState, org, project, areaPath, workItemTypes),
-    enabled: enabled && !!client && !!candidateState,
+    queryKey: [
+      "candidates",
+      org,
+      project,
+      _candidateState,
+      areaPath,
+      workItemTypes,
+      _candidateStatesByType,
+      boardConfig?.boardId,
+      boardConfig?.intakeColumnName,
+    ],
+    queryFn: () =>
+      fetchCandidateWorkItems(
+        client!,
+        _candidateState,
+        org,
+        project,
+        areaPath,
+        workItemTypes,
+        _candidateStatesByType,
+        boardConfig,
+      ),
+    enabled:
+      enabled &&
+      !!client &&
+      (boardConfig !== undefined || !!_candidateState || !!_candidateStatesByType),
     refetchInterval: 60_000,
     staleTime: 30_000,
   });

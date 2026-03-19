@@ -7,7 +7,17 @@ import type {
   AdoWorkItemRelation,
 } from "@/types/ado";
 import type { RelatedPullRequest, WorkItem } from "@/types/board";
-import { buildWiqlQuery, buildCompletedWiqlQuery, buildCandidateWiqlQuery } from "./wiql";
+import {
+  buildWiqlQuery,
+  buildCompletedWiqlQuery,
+  buildCandidateWiqlQuery,
+  buildCandidateBoardWiqlQuery,
+  buildBoardColumnWiqlQuery,
+  buildBoardColumnsWiqlQuery,
+} from "./wiql";
+import {
+  type CandidateBoardConfig,
+} from "@/lib/ado-board";
 import { detectChanges } from "@/logic/detect-changes";
 
 const prLookupUnavailableClients = new WeakSet<AdoClient>();
@@ -109,14 +119,49 @@ function mapRelatedPullRequests(
   return [...byUrl.values()];
 }
 
-export function mapAdoWorkItem(item: AdoWorkItem, org: string, project: string): WorkItem {
+const WORK_ITEM_DETAIL_FIELDS = [
+  "System.Id",
+  "System.Title",
+  "System.WorkItemType",
+  "System.State",
+  "System.AssignedTo",
+  "System.Rev",
+];
+
+function getWorkItemDetailFields(boardConfig?: CandidateBoardConfig): string[] {
+  if (!boardConfig) return WORK_ITEM_DETAIL_FIELDS;
+  return [...WORK_ITEM_DETAIL_FIELDS, boardConfig.columnFieldReferenceName];
+}
+
+function isRemovedState(state: string | undefined): boolean {
+  return state?.trim().toLowerCase() === "removed";
+}
+
+function filterRemovedWorkItems(workItems: WorkItem[]): WorkItem[] {
+  return workItems.filter((workItem) => !isRemovedState(workItem.state));
+}
+
+export function mapAdoWorkItem(
+  item: AdoWorkItem,
+  org: string,
+  project: string,
+  boardConfig?: CandidateBoardConfig,
+): WorkItem {
   const f = item.fields;
   const relatedPullRequests = mapRelatedPullRequests(item, org, project);
+  const rawBoardColumnName = boardConfig
+    ? f[boardConfig.columnFieldReferenceName]
+    : undefined;
+  const boardColumnName =
+    typeof rawBoardColumnName === "string" && rawBoardColumnName.trim()
+      ? rawBoardColumnName.trim()
+      : undefined;
   return {
     id: f["System.Id"],
     title: f["System.Title"],
     type: f["System.WorkItemType"],
     state: f["System.State"],
+    ...(boardColumnName ? { boardColumnName } : {}),
     rev: f["System.Rev"],
     url:
       item._links?.html?.href ??
@@ -532,13 +577,38 @@ export interface FetchResult {
 
 export async function fetchWorkItemsInitial(
   client: AdoClient,
-  sourceState: string,
+  _sourceState: string,
   org: string,
   project: string,
   areaPath?: string,
   workItemTypes?: string,
+  sourceBoardColumnOrBoardConfig?: string | CandidateBoardConfig,
+  boardConfigOrBoardColumnNames?: CandidateBoardConfig | string[],
+  boardColumnNamesArg: string[] = [],
 ): Promise<FetchResult> {
-  const wiql = buildWiqlQuery(sourceState, areaPath, workItemTypes);
+  const boardConfig = Array.isArray(boardConfigOrBoardColumnNames)
+    ? (typeof sourceBoardColumnOrBoardConfig === "object"
+        ? sourceBoardColumnOrBoardConfig
+        : undefined)
+    : boardConfigOrBoardColumnNames;
+  const boardColumnNames = Array.isArray(boardConfigOrBoardColumnNames)
+    ? boardConfigOrBoardColumnNames
+    : boardColumnNamesArg.length > 0
+      ? boardColumnNamesArg
+      : typeof sourceBoardColumnOrBoardConfig === "string" && sourceBoardColumnOrBoardConfig
+        ? [sourceBoardColumnOrBoardConfig]
+        : [];
+
+  const wiql =
+    boardConfig && boardColumnNames.length > 0
+      ? buildBoardColumnsWiqlQuery({
+          boardConfig,
+          columnNames: boardColumnNames,
+          assignedTo: "@Me",
+          areaPath,
+          workItemTypes,
+        })
+      : buildWiqlQuery(_sourceState, areaPath, workItemTypes);
   const wiqlResult = await client.queryWorkItems(wiql);
   const ids = wiqlResult.workItems.map((w) => w.id);
 
@@ -546,8 +616,10 @@ export async function fetchWorkItemsInitial(
     return { workItems: [], revMap: new Map() };
   }
 
-  const adoItems = await client.batchGetWorkItems(ids);
-  const mappedItems = adoItems.map((i) => mapAdoWorkItem(i, org, project));
+  const adoItems = await client.batchGetWorkItems(ids, getWorkItemDetailFields(boardConfig));
+  const mappedItems = filterRemovedWorkItems(
+    adoItems.map((i) => mapAdoWorkItem(i, org, project, boardConfig)),
+  );
   const workItems = await enrichPullRequestDetails(client, mappedItems);
   const revMap = new Map(workItems.map((w) => [w.id, { rev: w.rev }]));
 
@@ -556,15 +628,40 @@ export async function fetchWorkItemsInitial(
 
 export async function fetchWorkItemsDelta(
   client: AdoClient,
-  sourceState: string,
+  _sourceState: string,
   org: string,
   project: string,
   cachedRevMap: Map<number, { rev: number }>,
   cachedItems: WorkItem[],
   areaPath?: string,
   workItemTypes?: string,
+  sourceBoardColumnOrBoardConfig?: string | CandidateBoardConfig,
+  boardConfigOrBoardColumnNames?: CandidateBoardConfig | string[],
+  boardColumnNamesArg: string[] = [],
 ): Promise<FetchResult> {
-  const wiql = buildWiqlQuery(sourceState, areaPath, workItemTypes);
+  const boardConfig = Array.isArray(boardConfigOrBoardColumnNames)
+    ? (typeof sourceBoardColumnOrBoardConfig === "object"
+        ? sourceBoardColumnOrBoardConfig
+        : undefined)
+    : boardConfigOrBoardColumnNames;
+  const boardColumnNames = Array.isArray(boardConfigOrBoardColumnNames)
+    ? boardConfigOrBoardColumnNames
+    : boardColumnNamesArg.length > 0
+      ? boardColumnNamesArg
+      : typeof sourceBoardColumnOrBoardConfig === "string" && sourceBoardColumnOrBoardConfig
+        ? [sourceBoardColumnOrBoardConfig]
+        : [];
+
+  const wiql =
+    boardConfig && boardColumnNames.length > 0
+      ? buildBoardColumnsWiqlQuery({
+          boardConfig,
+          columnNames: boardColumnNames,
+          assignedTo: "@Me",
+          areaPath,
+          workItemTypes,
+        })
+      : buildWiqlQuery(_sourceState, areaPath, workItemTypes);
   const wiqlResult = await client.queryWorkItems(wiql);
   const freshIds = wiqlResult.workItems.map((w) => w.id);
 
@@ -586,10 +683,16 @@ export async function fetchWorkItemsDelta(
 
   // Full-fetch only new + changed items
   const toFetch = [...changes.added, ...changes.changed];
+  const fetchedIdSet = new Set(toFetch);
   let fetchedItems: WorkItem[] = [];
   if (toFetch.length > 0) {
-    const adoItems = await client.batchGetWorkItems(toFetch);
-    const mappedItems = adoItems.map((i) => mapAdoWorkItem(i, org, project));
+    const adoItems = await client.batchGetWorkItems(
+      toFetch,
+      getWorkItemDetailFields(boardConfig),
+    );
+    const mappedItems = filterRemovedWorkItems(
+      adoItems.map((i) => mapAdoWorkItem(i, org, project, boardConfig)),
+    );
     fetchedItems = await enrichPullRequestDetails(client, mappedItems);
   }
 
@@ -598,12 +701,14 @@ export async function fetchWorkItemsDelta(
   const cachedMap = new Map(cachedItems.map((w) => [w.id, w]));
 
   const workItems: WorkItem[] = freshIds
-    .map((id) => fetchedMap.get(id) ?? cachedMap.get(id))
+    .map((id) => (fetchedIdSet.has(id) ? fetchedMap.get(id) : cachedMap.get(id)))
     .filter((w): w is WorkItem => w !== undefined);
 
-  const refreshedWorkItems = await enrichPullRequestDetails(client, workItems, {
-    refreshActivePullRequests: true,
-  });
+  const refreshedWorkItems = filterRemovedWorkItems(
+    await enrichPullRequestDetails(client, workItems, {
+      refreshActivePullRequests: true,
+    }),
+  );
 
   const revMap = new Map(refreshedWorkItems.map((w) => [w.id, { rev: w.rev }]));
 
@@ -612,20 +717,33 @@ export async function fetchWorkItemsDelta(
 
 export async function fetchCompletedWorkItems(
   client: AdoClient,
-  approvalState: string,
+  _approvalState: string,
   org: string,
   project: string,
   areaPath?: string,
   workItemTypes?: string,
+  approvalBoardColumn?: string,
+  boardConfig?: CandidateBoardConfig,
 ): Promise<WorkItem[]> {
-  const wiql = buildCompletedWiqlQuery(approvalState, areaPath, workItemTypes);
+  const wiql =
+    approvalBoardColumn && boardConfig
+      ? buildBoardColumnWiqlQuery({
+          boardConfig,
+          columnName: approvalBoardColumn,
+          assignedTo: "@Me",
+          areaPath,
+          workItemTypes,
+        })
+      : buildCompletedWiqlQuery(_approvalState, areaPath, workItemTypes);
   const wiqlResult = await client.queryWorkItems(wiql);
   const ids = wiqlResult.workItems.map((w) => w.id);
 
   if (ids.length === 0) return [];
 
-  const adoItems = await client.batchGetWorkItems(ids);
-  const mappedItems = adoItems.map((i) => mapAdoWorkItem(i, org, project));
+  const adoItems = await client.batchGetWorkItems(ids, getWorkItemDetailFields(boardConfig));
+  const mappedItems = filterRemovedWorkItems(
+    adoItems.map((i) => mapAdoWorkItem(i, org, project, boardConfig)),
+  );
   return enrichPullRequestDetails(client, mappedItems);
 }
 
@@ -633,19 +751,25 @@ const CANDIDATE_CAP = 50;
 
 export async function fetchCandidateWorkItems(
   client: AdoClient,
-  candidateState: string,
+  _candidateState: string,
   org: string,
   project: string,
   areaPath?: string,
   workItemTypes?: string,
+  _candidateStatesByType?: string,
+  boardConfig?: CandidateBoardConfig,
 ): Promise<WorkItem[]> {
-  const wiql = buildCandidateWiqlQuery(candidateState, areaPath, workItemTypes);
+  const wiql = boardConfig
+    ? buildCandidateBoardWiqlQuery(boardConfig, areaPath, workItemTypes)
+    : buildCandidateWiqlQuery(_candidateState, areaPath, workItemTypes, _candidateStatesByType);
   const wiqlResult = await client.queryWorkItems(wiql);
   const ids = wiqlResult.workItems.slice(0, CANDIDATE_CAP).map((w) => w.id);
 
   if (ids.length === 0) return [];
 
-  const adoItems = await client.batchGetWorkItems(ids);
-  const mappedItems = adoItems.map((i) => mapAdoWorkItem(i, org, project));
+  const adoItems = await client.batchGetWorkItems(ids, getWorkItemDetailFields(boardConfig));
+  const mappedItems = filterRemovedWorkItems(
+    adoItems.map((i) => mapAdoWorkItem(i, org, project, boardConfig)),
+  );
   return enrichPullRequestDetails(client, mappedItems);
 }

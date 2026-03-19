@@ -15,7 +15,7 @@ describe("SettingsDialog", () => {
     expect(screen.getByLabelText("Personal Access Token")).toBeInTheDocument();
     expect(screen.getByLabelText("Organization")).toBeInTheDocument();
     expect(screen.getByLabelText("Project")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Team (optional)")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Team")).toBeInTheDocument();
   });
 
   it("shows connection, source, and columns sections", () => {
@@ -61,6 +61,36 @@ describe("SettingsDialog", () => {
     expect(settings?.org).toBe("my-org");
   });
 
+  it("saves team to collection", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderWithProviders(
+      <SettingsDialog open={true} onOpenChange={() => {}} />,
+    );
+
+    await user.type(screen.getByLabelText("Team"), "my-team");
+    await user.click(screen.getByText("Save"));
+
+    const settings = collections.settings.get("settings");
+    expect(settings?.team).toBe("my-team");
+  });
+
+  it("saves source, new-work, and approval board columns to collection", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderWithProviders(
+      <SettingsDialog open={true} onOpenChange={() => {}} />,
+    );
+
+    await user.type(screen.getByLabelText("Active Work Board Column"), "Approved");
+    await user.type(screen.getByLabelText("New Work Board Column"), "Ideas");
+    await user.type(screen.getByLabelText("Approval Board Column"), "Approved");
+    await user.click(screen.getByText("Save"));
+
+    const settings = collections.settings.get("settings");
+    expect(settings?.sourceBoardColumn).toBe("Approved");
+    expect(settings?.candidateBoardColumn).toBe("Ideas");
+    expect(settings?.approvalBoardColumn).toBe("Approved");
+  });
+
   it("normalizes connection settings before saving", async () => {
     const user = userEvent.setup();
     const { collections } = renderWithProviders(
@@ -101,10 +131,18 @@ describe("SettingsDialog", () => {
     expect(settings?.areaPath).toBe("MyProject\\MyTeam");
   });
 
-  it("drops legacy team data when saving", async () => {
+  it("clears legacy state query fields on save", async () => {
     const user = userEvent.setup();
     const collections = createTestCollections();
-    const legacySettings = { ...DEFAULT_SETTINGS, team: "legacy-team" };
+    const legacySettings = {
+      ...DEFAULT_SETTINGS,
+      team: "legacy-team",
+      sourceState: "Active",
+      sourceBoardColumn: "Old Column",
+      approvalState: "Resolved",
+      candidateState: "New",
+      candidateStatesByType: "Bug=New",
+    };
     collections.settings.insert(legacySettings);
 
     renderWithProviders(
@@ -115,6 +153,12 @@ describe("SettingsDialog", () => {
     await user.click(screen.getByText("Save"));
 
     const settings = collections.settings.get("settings");
-    expect(Object.hasOwn(settings ?? {}, "team")).toBe(false);
+    expect(settings?.team).toBe("legacy-team");
+    expect(settings?.sourceState).toBe("");
+    expect(settings?.sourceBoardColumn).toBe("Old Column");
+    expect(settings?.candidateBoardColumn).toBe("");
+    expect(settings?.approvalState).toBe("");
+    expect(settings?.candidateState).toBe("");
+    expect(settings?.candidateStatesByType).toBe("");
   });
 });

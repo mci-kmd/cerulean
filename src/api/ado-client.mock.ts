@@ -1,5 +1,7 @@
 import { type AdoClient, WorkItemAlreadyAssignedError } from "./ado-client";
 import type {
+  AdoBoard,
+  AdoBoardReference,
   AdoPolicyEvaluationRecord,
   AdoPullRequest,
   AdoPullRequestStatus,
@@ -21,6 +23,8 @@ export class MockAdoClient implements AdoClient {
   public pullRequestStatuses = new Map<string, AdoPullRequestStatus[]>();
   public pullRequestThreads = new Map<string, AdoPullRequestThread[]>();
   public pullRequestPolicyEvaluations = new Map<string, AdoPolicyEvaluationRecord[]>();
+  public boards: AdoBoardReference[] = [];
+  public boardDetails = new Map<string, AdoBoard>();
   public callLog: { method: string; args: unknown[] }[] = [];
 
   async queryWorkItems(wiql: string): Promise<WiqlResponse> {
@@ -36,6 +40,20 @@ export class MockAdoClient implements AdoClient {
     this.callLog.push({ method: "batchGetWorkItems", args: [ids, fields] });
     if (this.shouldFail) throw new Error("Mock batch error");
     return this.workItems.filter((w) => ids.includes(w.id));
+  }
+
+  async listBoards(team?: string): Promise<AdoBoardReference[]> {
+    this.callLog.push({ method: "listBoards", args: [team] });
+    if (this.shouldFail) throw new Error("Mock boards error");
+    return this.boards;
+  }
+
+  async getBoard(boardId: string, team?: string): Promise<AdoBoard> {
+    this.callLog.push({ method: "getBoard", args: [boardId, team] });
+    if (this.shouldFail) throw new Error("Mock board error");
+    const board = this.boardDetails.get(boardId);
+    if (!board) throw new Error(`Board ${boardId} not found`);
+    return board;
   }
 
   async getPullRequest(
@@ -93,19 +111,59 @@ export class MockAdoClient implements AdoClient {
   async updateWorkItemState(
     id: number,
     state: string,
+    targetBoardColumnField?: string,
+    targetBoardColumnName?: string,
+    targetBoardDoneField?: string,
+    targetBoardDoneValue?: boolean,
   ): Promise<import("@/types/ado").AdoWorkItem> {
-    this.callLog.push({ method: "updateWorkItemState", args: [id, state] });
+    this.callLog.push({
+      method: "updateWorkItemState",
+      args: [
+        id,
+        state,
+        targetBoardColumnField,
+        targetBoardColumnName,
+        targetBoardDoneField,
+        targetBoardDoneValue,
+      ],
+    });
     if (this.shouldFail) throw new Error("Mock update error");
     const item = this.workItems.find((w) => w.id === id);
     if (!item) throw new Error(`Work item ${id} not found`);
-    return { ...item, fields: { ...item.fields, "System.State": state } };
+    return {
+      ...item,
+      fields: {
+        ...item.fields,
+        "System.State": state,
+        ...(targetBoardColumnField && targetBoardColumnName
+          ? { [targetBoardColumnField]: targetBoardColumnName }
+          : {}),
+        ...(targetBoardDoneField && targetBoardDoneValue !== undefined
+          ? { [targetBoardDoneField]: targetBoardDoneValue }
+          : {}),
+      },
+    };
   }
 
   async startWorkItem(
     id: number,
     targetState: string,
+    targetBoardColumnField?: string,
+    targetBoardColumnName?: string,
+    targetBoardDoneField?: string,
+    targetBoardDoneValue?: boolean,
   ): Promise<import("@/types/ado").AdoWorkItem> {
-    this.callLog.push({ method: "startWorkItem", args: [id, targetState] });
+    this.callLog.push({
+      method: "startWorkItem",
+      args: [
+        id,
+        targetState,
+        targetBoardColumnField,
+        targetBoardColumnName,
+        targetBoardDoneField,
+        targetBoardDoneValue,
+      ],
+    });
     if (this.shouldFail) throw new Error("Mock start error");
     const item = this.workItems.find((w) => w.id === id);
     if (!item) throw new Error(`Work item ${id} not found`);
@@ -119,6 +177,12 @@ export class MockAdoClient implements AdoClient {
         ...item.fields,
         "System.State": targetState,
         "System.AssignedTo": { displayName: "Me", uniqueName: "me@test.com" },
+        ...(targetBoardColumnField && targetBoardColumnName
+          ? { [targetBoardColumnField]: targetBoardColumnName }
+          : {}),
+        ...(targetBoardDoneField && targetBoardDoneValue !== undefined
+          ? { [targetBoardDoneField]: targetBoardDoneValue }
+          : {}),
       },
     };
   }
@@ -126,8 +190,14 @@ export class MockAdoClient implements AdoClient {
   async returnWorkItemToCandidate(
     id: number,
     targetState: string,
+    targetBoardColumnField?: string,
+    targetBoardColumnName?: string,
+    targetBoardDoneField?: string,
   ): Promise<import("@/types/ado").AdoWorkItem> {
-    this.callLog.push({ method: "returnWorkItemToCandidate", args: [id, targetState] });
+    this.callLog.push({
+      method: "returnWorkItemToCandidate",
+      args: [id, targetState, targetBoardColumnField, targetBoardColumnName, targetBoardDoneField],
+    });
     if (this.shouldFail) throw new Error("Mock return error");
     const item = this.workItems.find((w) => w.id === id);
     if (!item) throw new Error(`Work item ${id} not found`);

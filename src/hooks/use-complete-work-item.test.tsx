@@ -37,7 +37,34 @@ describe("useCompleteWorkItem", () => {
       (c) => c.method === "updateWorkItemState",
     );
     expect(call).toBeDefined();
-    expect(call?.args).toEqual([42, "Resolved"]);
+    expect(call?.args).toEqual([42, "Resolved", undefined, undefined, undefined, undefined]);
+  });
+
+  it("passes optional board column args", async () => {
+    const { result } = renderHook(() => useCompleteWorkItem(client), { wrapper });
+
+    act(() => {
+      result.current.mutate({
+        workItemId: 42,
+        targetState: "Resolved",
+        targetBoardColumnField: "WEF_FAKE_Kanban.Column",
+        targetBoardColumnName: "Approved",
+      });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const call = client.callLog.find(
+      (c) => c.method === "updateWorkItemState",
+    );
+    expect(call?.args).toEqual([
+      42,
+      "Resolved",
+      "WEF_FAKE_Kanban.Column",
+      "Approved",
+      undefined,
+      undefined,
+    ]);
   });
 
   it("calls updateWorkItemState to uncomplete", async () => {
@@ -52,7 +79,7 @@ describe("useCompleteWorkItem", () => {
     const call = client.callLog.find(
       (c) => c.method === "updateWorkItemState",
     );
-    expect(call?.args).toEqual([42, "Active"]);
+    expect(call?.args).toEqual([42, "Active", undefined, undefined, undefined, undefined]);
   });
 
   it("errors when client is null", async () => {

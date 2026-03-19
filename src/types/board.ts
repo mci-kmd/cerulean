@@ -3,10 +3,15 @@ export interface AdoSettings {
   pat: string;
   org: string;
   project: string;
+  team: string;
   sourceState: string;
+  sourceBoardColumn: string;
+  candidateBoardColumn: string;
   approvalState: string;
+  approvalBoardColumn: string;
   closedState: string;
   candidateState: string;
+  candidateStatesByType: string;
   areaPath: string;
   workItemTypes: string;
   pollInterval: number;
@@ -17,10 +22,15 @@ export const DEFAULT_SETTINGS: AdoSettings = {
   pat: "",
   org: "",
   project: "",
+  team: "",
   sourceState: "Active",
+  sourceBoardColumn: "",
+  candidateBoardColumn: "",
   approvalState: "",
+  approvalBoardColumn: "",
   closedState: "",
   candidateState: "",
+  candidateStatesByType: "",
   areaPath: "",
   workItemTypes: "",
   pollInterval: 30,
@@ -45,6 +55,7 @@ export interface WorkItem {
   title: string;
   type: string;
   state: string;
+  boardColumnName?: string;
   rev: number;
   url: string;
   relatedPullRequests?: RelatedPullRequest[];

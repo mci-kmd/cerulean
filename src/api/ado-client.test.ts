@@ -84,6 +84,44 @@ describe("HttpAdoClient", () => {
     await expect(client.queryWorkItems("SELECT ...")).rejects.toThrow("401");
   });
 
+  it("lists boards without duplicating the default team path", async () => {
+    let capturedPathname = "";
+    server.use(
+      http.get(`${BASE}/_apis/work/boards`, ({ request }) => {
+        capturedPathname = new URL(request.url).pathname;
+        return HttpResponse.json({
+          value: [{ id: "board-1", name: "Stories", url: `${BASE}/_apis/work/boards/board-1` }],
+        });
+      }),
+    );
+
+    const boards = await client.listBoards("test-project");
+    expect(capturedPathname).toBe("/test-org/test-project/_apis/work/boards");
+    expect(boards).toHaveLength(1);
+  });
+
+  it("gets board without duplicating the default team path", async () => {
+    let capturedPathname = "";
+    server.use(
+      http.get(`${BASE}/_apis/work/boards/board-1`, ({ request }) => {
+        capturedPathname = new URL(request.url).pathname;
+        return HttpResponse.json({
+          id: "board-1",
+          name: "Stories",
+          url: `${BASE}/_apis/work/boards/board-1`,
+          fields: {
+            columnField: { referenceName: "WEF_FAKE_Kanban.Column" },
+          },
+          columns: [],
+        });
+      }),
+    );
+
+    const board = await client.getBoard("board-1", "test-project");
+    expect(capturedPathname).toBe("/test-org/test-project/_apis/work/boards/board-1");
+    expect(board.id).toBe("board-1");
+  });
+
   it("throws a clear error when WIQL returns HTML instead of JSON", async () => {
     server.use(
       http.post(`${BASE}/_apis/wit/wiql`, () => {
@@ -467,6 +505,33 @@ describe("HttpAdoClient", () => {
     await expect(client.updateWorkItemState(42, "Bad")).rejects.toThrow("400");
   });
 
+  it("includes board column ops on state update when configured", async () => {
+    let capturedBody: unknown = null;
+    server.use(
+      http.patch(`${BASE}/_apis/wit/workitems/42`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({
+          id: 42,
+          rev: 2,
+          fields: { "System.Id": 42, "System.State": "Closed" },
+          url: `${BASE}/_apis/wit/workItems/42`,
+        });
+      }),
+    );
+
+    await client.updateWorkItemState(
+      42,
+      "Closed",
+      "WEF_FAKE_Kanban.Column",
+      "Approved",
+    );
+
+    expect(capturedBody).toEqual([
+      { op: "replace", path: "/fields/System.State", value: "Closed" },
+      { op: "add", path: "/fields/WEF_FAKE_Kanban.Column", value: "Approved" },
+    ]);
+  });
+
   describe("startWorkItem", () => {
     it("sends PATCH with state + assignedTo ops", async () => {
       let capturedBody: unknown = null;
@@ -537,6 +602,47 @@ describe("HttpAdoClient", () => {
       );
 
       await expect(client.startWorkItem(99, "Active")).rejects.toThrow("400");
+    });
+
+    it("includes board column ops when configured", async () => {
+      let capturedBody: unknown = null;
+      server.use(
+        http.get("https://dev.azure.com/test-org/_apis/connectiondata*", () => {
+          return HttpResponse.json({
+            authenticatedUser: {
+              properties: { Account: { $value: "user@test.com" } },
+            },
+          });
+        }),
+        http.post(`${BASE}/_apis/wit/workitemsbatch`, () => {
+          return HttpResponse.json({
+            count: 1,
+            value: [{ id: 99, rev: 1, fields: { "System.Id": 99, "System.State": "New", "System.Rev": 1 }, url: `${BASE}/_apis/wit/workItems/99` }],
+          });
+        }),
+        http.patch(`${BASE}/_apis/wit/workitems/99`, async ({ request }) => {
+          capturedBody = await request.json();
+          return HttpResponse.json({
+            id: 99,
+            rev: 2,
+            fields: { "System.Id": 99, "System.State": "Active" },
+            url: `${BASE}/_apis/wit/workItems/99`,
+          });
+        }),
+      );
+
+      await client.startWorkItem(
+        99,
+        "Active",
+        "WEF_FAKE_Kanban.Column",
+        "Approved",
+      );
+
+      expect(capturedBody).toEqual([
+        { op: "replace", path: "/fields/System.State", value: "Active" },
+        { op: "replace", path: "/fields/System.AssignedTo", value: "user@test.com" },
+        { op: "add", path: "/fields/WEF_FAKE_Kanban.Column", value: "Approved" },
+      ]);
     });
 
     it("throws WorkItemAlreadyAssignedError when assigned to someone else", async () => {

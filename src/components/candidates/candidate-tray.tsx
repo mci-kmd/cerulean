@@ -13,6 +13,7 @@ interface CandidateTrayProps {
   project: string;
   areaPath?: string;
   workItemTypes?: string;
+  candidateStatesByType?: string;
   onExpandChange?: (expanded: boolean) => void;
 }
 
@@ -24,6 +25,7 @@ export function CandidateTray({
   project,
   areaPath,
   workItemTypes,
+  candidateStatesByType,
   onExpandChange,
 }: CandidateTrayProps) {
   const [expanded, setExpanded] = useState(false);
@@ -35,6 +37,7 @@ export function CandidateTray({
     expanded,
     areaPath,
     workItemTypes,
+    candidateStatesByType,
   );
   const startWork = useStartWork(client);
 

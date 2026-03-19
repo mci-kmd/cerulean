@@ -2,6 +2,39 @@ export interface WiqlResponse {
   workItems: { id: number; url: string }[];
 }
 
+export interface AdoBoardReference {
+  id: string;
+  name: string;
+  url: string;
+}
+
+export interface AdoBoardColumn {
+  id: string;
+  name: string;
+  isSplit?: boolean;
+  columnType?: "incoming" | "inProgress" | "outgoing";
+  stateMappings?: Record<string, string>;
+}
+
+export interface AdoFieldReference {
+  referenceName: string;
+  url?: string;
+}
+
+export interface AdoBoardFields {
+  columnField?: AdoFieldReference;
+  doneField?: AdoFieldReference;
+  rowField?: AdoFieldReference;
+}
+
+export interface AdoBoard {
+  id: string;
+  name: string;
+  url: string;
+  columns?: AdoBoardColumn[];
+  fields?: AdoBoardFields;
+}
+
 export interface AdoWorkItemFields {
   "System.Id": number;
   "System.Title": string;

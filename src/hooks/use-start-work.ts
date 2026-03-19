@@ -2,6 +2,16 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { AdoClient } from "@/api/ado-client";
 import type { WorkItem } from "@/types/board";
 
+interface StartWorkParams {
+  workItemId: number;
+  targetState: string;
+  targetBoardColumnField?: string;
+  targetBoardColumnName?: string;
+  targetBoardDoneField?: string;
+  targetBoardDoneValue?: boolean;
+  optimisticRemoveFromCandidates?: boolean;
+}
+
 export function useStartWork(client: AdoClient | null) {
   const queryClient = useQueryClient();
 
@@ -9,22 +19,25 @@ export function useStartWork(client: AdoClient | null) {
     mutationFn: async ({
       workItemId,
       targetState,
-    }: {
-      workItemId: number;
-      targetState: string;
-      optimisticRemoveFromCandidates?: boolean;
-    }) => {
+      targetBoardColumnField,
+      targetBoardColumnName,
+      targetBoardDoneField,
+      targetBoardDoneValue,
+    }: StartWorkParams) => {
       if (!client) throw new Error("No ADO client");
-      return client.startWorkItem(workItemId, targetState);
+      return client.startWorkItem(
+        workItemId,
+        targetState,
+        targetBoardColumnField,
+        targetBoardColumnName,
+        targetBoardDoneField,
+        targetBoardDoneValue,
+      );
     },
     onMutate: async ({
       workItemId,
       optimisticRemoveFromCandidates = true,
-    }: {
-      workItemId: number;
-      targetState: string;
-      optimisticRemoveFromCandidates?: boolean;
-    }) => {
+    }: StartWorkParams) => {
       if (!optimisticRemoveFromCandidates) {
         return { prev: undefined, removedOptimistically: false };
       }

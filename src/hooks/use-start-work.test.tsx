@@ -51,7 +51,32 @@ describe("useStartWork", () => {
 
     const call = client.callLog.find((c) => c.method === "startWorkItem");
     expect(call).toBeDefined();
-    expect(call?.args).toEqual([42, "Active"]);
+    expect(call?.args).toEqual([42, "Active", undefined, undefined, undefined, undefined]);
+  });
+
+  it("passes optional board column args", async () => {
+    const { result } = renderHook(() => useStartWork(client), { wrapper });
+
+    act(() => {
+      result.current.mutate({
+        workItemId: 42,
+        targetState: "Active",
+        targetBoardColumnField: "WEF_FAKE_Kanban.Column",
+        targetBoardColumnName: "Approved",
+      });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const call = client.callLog.find((c) => c.method === "startWorkItem");
+    expect(call?.args).toEqual([
+      42,
+      "Active",
+      "WEF_FAKE_Kanban.Column",
+      "Approved",
+      undefined,
+      undefined,
+    ]);
   });
 
   it("invalidates queries on success", async () => {

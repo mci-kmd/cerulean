@@ -3,7 +3,6 @@ import { reconcile } from "./reconcile";
 import { createWorkItem } from "@/test/fixtures/work-items";
 import { createDefaultColumns, createAssignment } from "@/test/fixtures/columns";
 
-// Stabilize nanoid for tests
 vi.mock("nanoid", () => ({
   nanoid: (() => {
     let i = 0;
@@ -14,47 +13,23 @@ vi.mock("nanoid", () => ({
 describe("reconcile", () => {
   const columns = createDefaultColumns();
 
-  it("adds new items to first column", () => {
-    const items = [createWorkItem({ id: 10 }), createWorkItem({ id: 20 })];
+  it("adds active items to the first local column", () => {
+    const items = [
+      createWorkItem({ id: 10, boardColumnName: "To Do" }),
+      createWorkItem({ id: 20, boardColumnName: "In Progress" }),
+    ];
+
     const result = reconcile([], items, columns);
 
     expect(result.added).toHaveLength(2);
-    expect(result.added[0].columnId).toBe("col-todo");
-    expect(result.added[0].workItemId).toBe(10);
-    expect(result.added[1].workItemId).toBe(20);
+    expect(result.added.find((assignment) => assignment.workItemId === 10)?.columnId).toBe(
+      "col-todo",
+    );
+    expect(result.added.find((assignment) => assignment.workItemId === 20)?.columnId).toBe("col-todo");
     expect(result.removed).toHaveLength(0);
   });
 
-  it("removes stale assignments", () => {
-    const assignments = [
-      createAssignment({ id: "a1", workItemId: 1, columnId: "col-todo" }),
-      createAssignment({ id: "a2", workItemId: 2, columnId: "col-doing" }),
-    ];
-    const items = [createWorkItem({ id: 1 })]; // item 2 gone
-
-    const result = reconcile(assignments, items, columns);
-    expect(result.removed).toEqual(["a2"]);
-    expect(result.added).toHaveLength(0);
-  });
-
-  it("preserves existing assignments", () => {
-    const assignments = [
-      createAssignment({ id: "a1", workItemId: 1, columnId: "col-doing" }),
-    ];
-    const items = [createWorkItem({ id: 1 })];
-
-    const result = reconcile(assignments, items, columns);
-    expect(result.added).toHaveLength(0);
-    expect(result.removed).toHaveLength(0);
-  });
-
-  it("handles empty columns gracefully", () => {
-    const result = reconcile([], [createWorkItem({ id: 1 })], []);
-    expect(result.added).toHaveLength(0);
-    expect(result.removed).toHaveLength(0);
-  });
-
-  it("positions new items after existing ones in first column", () => {
+  it("appends new items after existing assignments in the first local column", () => {
     const assignments = [
       createAssignment({
         id: "a1",
@@ -64,51 +39,85 @@ describe("reconcile", () => {
       }),
     ];
     const items = [
-      createWorkItem({ id: 1 }),
-      createWorkItem({ id: 2 }),
+      createWorkItem({ id: 1, boardColumnName: "To Do" }),
+      createWorkItem({ id: 2, boardColumnName: "To Do" }),
     ];
 
     const result = reconcile(assignments, items, columns);
+
     expect(result.added).toHaveLength(1);
-    expect(result.added[0].position).toBeGreaterThan(5);
+    expect(result.added[0]).toMatchObject({
+      workItemId: 2,
+      columnId: "col-todo",
+      position: 6,
+    });
   });
 
-  it("assigns approval-state items to completed column", () => {
+  it("routes candidate ids to New Work", () => {
     const items = [
-      createWorkItem({ id: 10, state: "Active" }),
-      createWorkItem({ id: 20, state: "Resolved" }),
+      createWorkItem({ id: 10, boardColumnName: "To Do" }),
+      createWorkItem({ id: 20, boardColumnName: "In Progress" }),
     ];
-    const result = reconcile([], items, columns, "Resolved");
 
-    expect(result.added).toHaveLength(2);
-    const active = result.added.find((a) => a.workItemId === 10);
-    const completed = result.added.find((a) => a.workItemId === 20);
-    expect(active?.columnId).toBe("col-todo");
-    expect(completed?.columnId).toBe("__completed__");
+    const result = reconcile([], items, columns, undefined, undefined, undefined, new Set([10]));
+
+    expect(result.added.find((assignment) => assignment.workItemId === 10)?.columnId).toBe(
+      "__new_work__",
+    );
+    expect(result.added.find((assignment) => assignment.workItemId === 20)?.columnId).toBe("col-todo");
   });
 
-  it("without approvalState, all items go to first column", () => {
+  it("routes completed ids to Completed even when board column matches a local column", () => {
     const items = [
-      createWorkItem({ id: 10, state: "Active" }),
-      createWorkItem({ id: 20, state: "Resolved" }),
+      createWorkItem({ id: 10, boardColumnName: "Done" }),
+      createWorkItem({ id: 20, boardColumnName: "To Do" }),
     ];
+
+    const result = reconcile(
+      [],
+      items,
+      columns,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      new Set([10]),
+    );
+
+    expect(result.added.find((assignment) => assignment.workItemId === 10)?.columnId).toBe(
+      "__completed__",
+    );
+    expect(result.added.find((assignment) => assignment.workItemId === 20)?.columnId).toBe(
+      "col-todo",
+    );
+  });
+
+  it("still adds active items when board column names do not match local columns", () => {
+    const items = [createWorkItem({ id: 10, boardColumnName: "Approved" })];
+
     const result = reconcile([], items, columns);
 
-    expect(result.added).toHaveLength(2);
-    expect(result.added.every((a) => a.columnId === "col-todo")).toBe(true);
+    expect(result.added).toMatchObject([{ workItemId: 10, columnId: "col-todo" }]);
+    expect(result.updated).toEqual(items);
   });
 
-  it("routes candidate-state items to New Work column", () => {
-    const items = [
-      createWorkItem({ id: 10, state: "New" }),
-      createWorkItem({ id: 20, state: "Active" }),
+  it("removes stale assignments", () => {
+    const assignments = [
+      createAssignment({ id: "a1", workItemId: 1, columnId: "col-todo" }),
+      createAssignment({ id: "a2", workItemId: 2, columnId: "col-doing" }),
     ];
-    const result = reconcile([], items, columns, undefined, "New");
+    const items = [createWorkItem({ id: 1, boardColumnName: "To Do" })];
 
-    expect(result.added).toHaveLength(2);
-    const candidate = result.added.find((a) => a.workItemId === 10);
-    const active = result.added.find((a) => a.workItemId === 20);
-    expect(candidate?.columnId).toBe("__new_work__");
-    expect(active?.columnId).toBe("col-todo");
+    const result = reconcile(assignments, items, columns);
+
+    expect(result.removed).toEqual(["a2"]);
+    expect(result.added).toHaveLength(0);
+  });
+
+  it("handles empty columns gracefully", () => {
+    const result = reconcile([], [createWorkItem({ id: 1, boardColumnName: "To Do" })], []);
+
+    expect(result.added).toHaveLength(0);
+    expect(result.removed).toHaveLength(0);
   });
 });

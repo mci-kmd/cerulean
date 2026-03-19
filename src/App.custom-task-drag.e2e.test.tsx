@@ -91,6 +91,14 @@ vi.mock("@/hooks/use-candidates", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-candidate-board-config", () => ({
+  useCandidateBoardConfig: () => ({
+    boardConfig: undefined,
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 describe("App custom-task drag E2E", () => {
   beforeEach(() => {
     dndMocks.onDragEnd = null;

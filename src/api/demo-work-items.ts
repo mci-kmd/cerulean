@@ -2,6 +2,8 @@ import type { AdoClient } from "./ado-client";
 import { DEMO_DETAIL_FIELDS } from "./ado-client";
 import type { DemoWorkItem } from "@/types/demo";
 import type { AdoWorkItem } from "@/types/ado";
+import type { CandidateBoardConfig } from "@/lib/ado-board";
+import { buildBoardColumnWiqlQuery } from "./wiql";
 
 function stringOrEmpty(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -29,12 +31,22 @@ export function mapAdoDemoWorkItem(
 
 export async function fetchDemoWorkItems(
   client: AdoClient,
-  approvalState: string,
-  org: string,
-  project: string,
+  approvalBoardColumn: string,
+  boardConfigOrOrg: CandidateBoardConfig | string | undefined,
+  orgOrProject?: string,
+  projectMaybe?: string,
 ): Promise<DemoWorkItem[]> {
-  const escaped = approvalState.replace(/'/g, "''");
-  const wiql = `SELECT [System.Id] FROM WorkItems WHERE [System.State] = '${escaped}' AND [System.AssignedTo] = @Me`;
+  const boardConfig =
+    typeof boardConfigOrOrg === "object" ? boardConfigOrOrg : undefined;
+  const org = typeof boardConfigOrOrg === "string" ? boardConfigOrOrg : (orgOrProject ?? "");
+  const project = typeof boardConfigOrOrg === "string" ? (orgOrProject ?? "") : (projectMaybe ?? "");
+  const wiql = boardConfig
+    ? buildBoardColumnWiqlQuery({
+        boardConfig,
+        columnName: approvalBoardColumn,
+        assignedTo: "@Me",
+      })
+    : `SELECT [System.Id] FROM WorkItems WHERE [System.State] = '${approvalBoardColumn.replace(/'/g, "''")}' AND [System.AssignedTo] = @Me`;
   const wiqlResult = await client.queryWorkItems(wiql);
   const ids = wiqlResult.workItems.map((w) => w.id);
 

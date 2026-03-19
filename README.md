@@ -69,22 +69,13 @@ When the app opens, click **Settings** and fill in these sections.
 - **Personal Access Token**: your Azure DevOps PAT
 - **Organization**: your org name, for example `my-org`
 - **Project**: your project name, for example `my-project`
+- **Team**: the Azure DevOps team whose board Cerulean should treat as the source of `New Work`. Required for board-column-based behavior.
 
 Notes:
 
 - Organization input can be just the org name or a full Azure DevOps URL.
 - Project input can be the project name or a URL containing the project.
 - Use **Test Connection** before saving.
-
-### Source
-
-- **Source State**: work item state to load into the board, default `Active`
-- **Approval State**: optional review state, for example `Resolved`
-- **Closed State**: optional done state used by demo mode, for example `Closed`
-- **Candidate State**: optional unassigned intake state, for example `New`
-- **Area Path**: optional ADO area filter, for example `Project\Team`
-- **Work Item Types**: optional comma-separated filter, for example `Bug, Task, User Story`
-- **Poll Interval (seconds)**: refresh cadence, default `30`
 
 ### Board Columns
 
@@ -100,39 +91,43 @@ Save when done.
 
 ### Main board
 
-- Cerulean loads work items in the configured **Source State**
+- Cerulean loads current work from **Source Board Column**
 - Board layout and settings are saved in browser `localStorage`
 - Use the refresh button in the header to force a refetch
 
 ### Candidate tray
 
-If **Candidate State** is set, Cerulean shows a **New Work** column for candidate items.
+If Cerulean can resolve the selected team's requirement board, it loads **New Work** from that board's incoming column for unassigned items.
 
 Dragging an item:
 
 - from **New Work** into a board column:
   - assigns the item to the current Azure DevOps user
-  - changes the work item state to **Source State**
+  - moves the item to **Source Board Column**
+  - changes the work item state to **Source Board Column**'s mapped state for the work item type
 - from a board column back into **New Work**:
   - clears the assignee
-  - changes the work item state back to **Candidate State**
+  - moves the item back to the selected team's intake column
+  - changes the work item state to that intake column's mapped state for the work item type
 
 ### Completed column
 
-If **Approval State** is set, Cerulean adds a **Completed** column.
+If **Approval Board Column** is set, Cerulean adds a **Completed** column.
 
-Dragging an item into **Completed** changes the Azure DevOps work item state to **Approval State**.
+Cerulean loads completed items from **Approval Board Column**.
 
-Dragging an item back out of **Completed** changes the state back to **Source State**.
+Dragging an item into **Completed** changes the Azure DevOps work item state to that source-board column's mapped state and moves it to **Approval Board Column**.
+
+Dragging an item back out of **Completed** changes the state to **Source Board Column**'s mapped source-board state and moves it to **Source Board Column**.
 
 ### Demo mode
 
-If **Approval State** is configured, the header shows a **Demo** toggle.
+If **Approval Board Column** and **Closed State** are configured, the header shows a **Demo** toggle.
 
-Demo mode loads items in the approval state into a review list:
+Demo mode loads items from the approval board column into a review list:
 
 - **Approve** moves an item to **Closed State**
-- **Unapprove** moves it back to **Approval State**
+- **Unapprove** moves it back to the mapped state for **Approval Board Column**
 
 ### Custom tasks
 

@@ -1,4 +1,6 @@
 import type {
+  AdoBoard,
+  AdoBoardReference,
   AdoBatchResponse,
   AdoPolicyEvaluationRecord,
   AdoPullRequest,
@@ -23,13 +25,35 @@ export class WorkItemAlreadyAssignedError extends Error {
 export interface AdoClient {
   queryWorkItems(wiql: string): Promise<WiqlResponse>;
   batchGetWorkItems(ids: number[], fields?: string[]): Promise<AdoWorkItem[]>;
+  listBoards(team?: string): Promise<AdoBoardReference[]>;
+  getBoard(boardId: string, team?: string): Promise<AdoBoard>;
   getPullRequest(repositoryId: string, pullRequestId: string): Promise<AdoPullRequest>;
   getPullRequestStatuses(repositoryId: string, pullRequestId: string): Promise<AdoPullRequestStatus[]>;
   getPullRequestThreads(repositoryId: string, pullRequestId: string): Promise<AdoPullRequestThread[]>;
   getPullRequestPolicyEvaluations(artifactId: string): Promise<AdoPolicyEvaluationRecord[]>;
-  updateWorkItemState(id: number, state: string): Promise<AdoWorkItem>;
-  startWorkItem(id: number, targetState: string): Promise<AdoWorkItem>;
-  returnWorkItemToCandidate(id: number, targetState: string): Promise<AdoWorkItem>;
+  updateWorkItemState(
+    id: number,
+    state: string,
+    targetBoardColumnField?: string,
+    targetBoardColumnName?: string,
+    targetBoardDoneField?: string,
+    targetBoardDoneValue?: boolean,
+  ): Promise<AdoWorkItem>;
+  startWorkItem(
+    id: number,
+    targetState: string,
+    targetBoardColumnField?: string,
+    targetBoardColumnName?: string,
+    targetBoardDoneField?: string,
+    targetBoardDoneValue?: boolean,
+  ): Promise<AdoWorkItem>;
+  returnWorkItemToCandidate(
+    id: number,
+    targetState: string,
+    targetBoardColumnField?: string,
+    targetBoardColumnName?: string,
+    targetBoardDoneField?: string,
+  ): Promise<AdoWorkItem>;
   testConnection(): Promise<boolean>;
 }
 
@@ -158,6 +182,7 @@ class AdoBatchFetchError extends Error {
 
 export class HttpAdoClient implements AdoClient {
   private org: string;
+  private project: string;
   private baseUrl: string;
   private authHeader: string;
   private cachedEmail: string | null = null;
@@ -165,8 +190,22 @@ export class HttpAdoClient implements AdoClient {
   constructor(config: AdoClientConfig) {
     const normalized = normalizeAdoClientConfig(config);
     this.org = normalized.org;
+    this.project = normalized.project;
     this.baseUrl = `https://dev.azure.com/${encodeURIComponent(normalized.org)}/${encodeURIComponent(normalized.project)}`;
     this.authHeader = `Basic ${btoa(":" + normalized.pat)}`;
+  }
+
+  private workTeamBaseUrl(team?: string): string {
+    const resolvedTeam = team?.trim() ?? "";
+    if (!resolvedTeam) {
+      return `${this.baseUrl}/_apis/work`;
+    }
+
+    if (resolvedTeam.localeCompare(this.project, undefined, { sensitivity: "accent" }) === 0) {
+      return `${this.baseUrl}/_apis/work`;
+    }
+
+    return `${this.baseUrl}/${encodeURIComponent(resolvedTeam)}/_apis/work`;
   }
 
   private authHeaders(contentType?: string): HeadersInit {
@@ -292,6 +331,34 @@ export class HttpAdoClient implements AdoClient {
     return results;
   }
 
+  async listBoards(team?: string): Promise<AdoBoardReference[]> {
+    const res = await fetch(
+      `${this.workTeamBaseUrl(team)}/boards?api-version=7.1`,
+      {
+        method: "GET",
+        headers: this.jsonHeaders(),
+      },
+    );
+    if (!res.ok) throw new Error(`Boards fetch failed: ${res.status}`);
+    const data = await this.readJson<{ value?: AdoBoardReference[] } | AdoBoardReference[]>(
+      res,
+      "Boards fetch",
+    );
+    return Array.isArray(data) ? data : (data.value ?? []);
+  }
+
+  async getBoard(boardId: string, team?: string): Promise<AdoBoard> {
+    const res = await fetch(
+      `${this.workTeamBaseUrl(team)}/boards/${encodeURIComponent(boardId)}?api-version=7.1`,
+      {
+        method: "GET",
+        headers: this.jsonHeaders(),
+      },
+    );
+    if (!res.ok) throw new Error(`Board fetch failed: ${res.status}`);
+    return this.readJson<AdoBoard>(res, "Board fetch");
+  }
+
   async getPullRequest(
     repositoryId: string,
     pullRequestId: string,
@@ -363,7 +430,38 @@ export class HttpAdoClient implements AdoClient {
     return data.value ?? [];
   }
 
-  async updateWorkItemState(id: number, state: string): Promise<AdoWorkItem> {
+  private buildBoardColumnPatch(
+    targetBoardColumnField?: string,
+    targetBoardColumnName?: string,
+    targetBoardDoneField?: string,
+    targetBoardDoneValue?: boolean,
+  ): { op: "add" | "replace"; path: string; value: string | boolean }[] {
+    const patch: { op: "add" | "replace"; path: string; value: string | boolean }[] = [];
+    if (targetBoardColumnField && targetBoardColumnName) {
+      patch.push({
+        op: "add",
+        path: `/fields/${targetBoardColumnField}`,
+        value: targetBoardColumnName,
+      });
+    }
+    if (targetBoardDoneField && targetBoardDoneValue !== undefined) {
+      patch.push({
+        op: "add",
+        path: `/fields/${targetBoardDoneField}`,
+        value: targetBoardDoneValue,
+      });
+    }
+    return patch;
+  }
+
+  async updateWorkItemState(
+    id: number,
+    state: string,
+    targetBoardColumnField?: string,
+    targetBoardColumnName?: string,
+    targetBoardDoneField?: string,
+    targetBoardDoneValue?: boolean,
+  ): Promise<AdoWorkItem> {
     const res = await fetch(
       `${this.baseUrl}/_apis/wit/workitems/${id}?api-version=7.1`,
       {
@@ -371,6 +469,12 @@ export class HttpAdoClient implements AdoClient {
         headers: this.patchHeaders(),
         body: JSON.stringify([
           { op: "replace", path: "/fields/System.State", value: state },
+          ...this.buildBoardColumnPatch(
+            targetBoardColumnField,
+            targetBoardColumnName,
+            targetBoardDoneField,
+            targetBoardDoneValue,
+          ),
         ]),
       },
     );
@@ -394,7 +498,14 @@ export class HttpAdoClient implements AdoClient {
     return this.cachedEmail;
   }
 
-  async startWorkItem(id: number, targetState: string): Promise<AdoWorkItem> {
+  async startWorkItem(
+    id: number,
+    targetState: string,
+    targetBoardColumnField?: string,
+    targetBoardColumnName?: string,
+    targetBoardDoneField?: string,
+    targetBoardDoneValue?: boolean,
+  ): Promise<AdoWorkItem> {
     const email = await this.getMyEmail();
 
     const [current] = await this.batchGetWorkItems([id]);
@@ -413,6 +524,12 @@ export class HttpAdoClient implements AdoClient {
         body: JSON.stringify([
           { op: "replace", path: "/fields/System.State", value: targetState },
           { op: "replace", path: "/fields/System.AssignedTo", value: email },
+          ...this.buildBoardColumnPatch(
+            targetBoardColumnField,
+            targetBoardColumnName,
+            targetBoardDoneField,
+            targetBoardDoneValue,
+          ),
         ]),
       },
     );
@@ -420,16 +537,31 @@ export class HttpAdoClient implements AdoClient {
     return this.readJson<AdoWorkItem>(res, "Start work item");
   }
 
-  async returnWorkItemToCandidate(id: number, targetState: string): Promise<AdoWorkItem> {
+  async returnWorkItemToCandidate(
+    id: number,
+    targetState: string,
+    targetBoardColumnField?: string,
+    targetBoardColumnName?: string,
+    targetBoardDoneField?: string,
+  ): Promise<AdoWorkItem> {
+    const patch: { op: "add" | "replace"; path: string; value: string | boolean }[] = [
+      { op: "add", path: "/fields/System.State", value: targetState },
+      { op: "add", path: "/fields/System.AssignedTo", value: "" },
+    ];
+    patch.push(
+      ...this.buildBoardColumnPatch(
+        targetBoardColumnField,
+        targetBoardColumnName,
+        targetBoardDoneField,
+        targetBoardDoneField ? false : undefined,
+      ),
+    );
     const res = await fetch(
       `${this.baseUrl}/_apis/wit/workitems/${id}?api-version=7.1`,
       {
         method: "PATCH",
         headers: this.patchHeaders(),
-        body: JSON.stringify([
-          { op: "add", path: "/fields/System.State", value: targetState },
-          { op: "add", path: "/fields/System.AssignedTo", value: "" },
-        ]),
+        body: JSON.stringify(patch),
       },
     );
     if (!res.ok) throw new Error(`Return work item failed: ${res.status}`);

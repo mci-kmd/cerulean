@@ -71,10 +71,15 @@ function SettingsDialogContent({
       pat: normalizedConnection.pat,
       org: normalizedConnection.org,
       project: normalizedConnection.project,
-      sourceState: draft.sourceState,
-      approvalState: draft.approvalState,
+      team: draft.team.trim(),
+      sourceState: "",
+      sourceBoardColumn: draft.sourceBoardColumn.trim(),
+      candidateBoardColumn: draft.candidateBoardColumn.trim(),
+      approvalState: "",
+      approvalBoardColumn: draft.approvalBoardColumn.trim(),
       closedState: draft.closedState,
-      candidateState: draft.candidateState,
+      candidateState: "",
+      candidateStatesByType: "",
       areaPath: draft.areaPath,
       workItemTypes: draft.workItemTypes,
       pollInterval: draft.pollInterval,
@@ -129,6 +134,7 @@ function SettingsDialogContent({
             pat={draft.pat}
             org={draft.org}
             project={draft.project}
+            team={draft.team}
             onChange={handleFieldChange}
           />
         </div>
@@ -141,10 +147,10 @@ function SettingsDialogContent({
             <h3 className="text-sm font-medium">Source</h3>
           </div>
           <SourceStateInput
-            sourceState={draft.sourceState}
-            approvalState={draft.approvalState}
+            sourceBoardColumn={draft.sourceBoardColumn}
+            candidateBoardColumn={draft.candidateBoardColumn}
+            approvalBoardColumn={draft.approvalBoardColumn}
             closedState={draft.closedState}
-            candidateState={draft.candidateState}
             areaPath={draft.areaPath}
             workItemTypes={draft.workItemTypes}
             pollInterval={draft.pollInterval}

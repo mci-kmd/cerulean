@@ -36,9 +36,12 @@ describe("useReconcile", () => {
     });
   });
 
-  it("adds new work items to first column", async () => {
+  it("adds new work items to the first local column", async () => {
     const columns = createDefaultColumns();
-    const workItems = [createWorkItem({ id: 100 }), createWorkItem({ id: 200 })];
+    const workItems = [
+      createWorkItem({ id: 100, boardColumnName: "To Do" }),
+      createWorkItem({ id: 200, boardColumnName: "In Progress" }),
+    ];
 
     renderHook(
       () => useReconcile(workItems, [], columns, collections),
@@ -48,6 +51,8 @@ describe("useReconcile", () => {
     await waitFor(() => {
       const arr = collections.assignments.toArray;
       expect(arr.length).toBe(2);
+      expect(arr.find((assignment) => assignment.workItemId === 100)?.columnId).toBe("col-todo");
+      expect(arr.find((assignment) => assignment.workItemId === 200)?.columnId).toBe("col-todo");
     });
   });
 

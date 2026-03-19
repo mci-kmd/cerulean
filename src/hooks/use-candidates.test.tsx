@@ -55,4 +55,43 @@ describe("useCandidates", () => {
     expect(result.current.candidates).toHaveLength(0);
     expect(result.current.isLoading).toBe(false);
   });
+
+  it("fetches when per-type candidate states are configured", async () => {
+    const { result } = renderHook(
+      () => useCandidates(client, "", "org", "proj", true, undefined, undefined, "Bug=New"),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
+    expect(result.current.candidates[0].id).toBe(1);
+  });
+
+  it("fetches when board config is provided", async () => {
+    const { result } = renderHook(
+      () =>
+        useCandidates(
+          client,
+          "",
+          "org",
+          "proj",
+          true,
+          undefined,
+          undefined,
+          undefined,
+          {
+            team: "My Team",
+            boardId: "board-1",
+            boardName: "Stories",
+            intakeColumnName: "New",
+            intakeColumnIsSplit: false,
+            columnFieldReferenceName: "WEF_FAKE_Kanban.Column",
+            intakeStateMappings: {},
+          },
+        ),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
+    expect(result.current.candidates[0].id).toBe(1);
+  });
 });

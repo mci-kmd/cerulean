@@ -9,8 +9,11 @@ export function useReconcile(
   columns: BoardColumn[],
   collections: BoardCollections,
   isReady = true,
-  approvalState?: string,
-  candidateState?: string,
+  _approvalState?: string,
+  _candidateState?: string,
+  _candidateStatesByType?: string,
+  candidateIds?: Set<number>,
+  completedIds?: Set<number>,
 ) {
   useEffect(() => {
     if (!isReady) return;
@@ -21,8 +24,11 @@ export function useReconcile(
       assignments,
       workItems,
       columns,
-      approvalState,
-      candidateState,
+      _approvalState,
+      _candidateState,
+      _candidateStatesByType,
+      candidateIds,
+      completedIds,
     );
 
     if (added.length > 0) {
@@ -37,5 +43,16 @@ export function useReconcile(
         collections.assignments.delete(existing);
       }
     }
-  }, [workItems, assignments, columns, collections, isReady, approvalState, candidateState]);
+  }, [
+    workItems,
+    assignments,
+    columns,
+    collections,
+    isReady,
+    _approvalState,
+    _candidateState,
+    _candidateStatesByType,
+    candidateIds,
+    completedIds,
+  ]);
 }

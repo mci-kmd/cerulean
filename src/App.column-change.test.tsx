@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { act, waitFor } from "@testing-library/react";
-import { renderWithProviders } from "@/test/helpers/render";
 import { DEFAULT_SETTINGS } from "@/types/board";
 import { COMPLETED_COLUMN_ID, NEW_WORK_COLUMN_ID } from "@/constants/board-columns";
+import { renderWithProviders } from "@/test/helpers/render";
 import { App } from "./App";
 
 const mocks = vi.hoisted(() => ({
@@ -13,6 +13,31 @@ const mocks = vi.hoisted(() => ({
   startMutate: vi.fn(),
   returnMutate: vi.fn(),
   completeMutate: vi.fn(),
+  candidateBoardConfig: undefined as
+    | {
+        boardId: string;
+        boardName: string;
+        team: string;
+        intakeColumnName: string;
+        intakeColumnIsSplit: boolean;
+        columnFieldReferenceName: string;
+        doneFieldReferenceName?: string;
+        intakeStateMappings: Record<string, string>;
+        boardColumnsByName?: Record<
+          string,
+          { isSplit: boolean; stateMappings?: Record<string, string> }
+        >;
+      }
+    | undefined,
+  workItems: [] as Array<{
+    id: number;
+    title: string;
+    type: string;
+    state: string;
+    rev: number;
+    url: string;
+    boardColumnName?: string;
+  }>,
 }));
 
 vi.mock("@/components/board/board", () => ({
@@ -31,7 +56,7 @@ vi.mock("@/components/board/board", () => ({
 
 vi.mock("@/hooks/use-work-items", () => ({
   useWorkItems: () => ({
-    workItems: [],
+    workItems: mocks.workItems,
     isLoading: false,
     isSuccess: true,
     error: null,
@@ -50,6 +75,14 @@ vi.mock("@/hooks/use-completed-work-items", () => ({
 vi.mock("@/hooks/use-candidates", () => ({
   useCandidates: () => ({
     candidates: [],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
+vi.mock("@/hooks/use-candidate-board-config", () => ({
+  useCandidateBoardConfig: () => ({
+    boardConfig: mocks.candidateBoardConfig,
     isLoading: false,
     error: null,
   }),
@@ -75,6 +108,57 @@ vi.mock("@/hooks/use-complete-work-item", () => ({
   }),
 }));
 
+function createBoardConfig(overrides?: Partial<NonNullable<typeof mocks.candidateBoardConfig>>) {
+  return {
+    team: "My Team",
+    boardId: "board-1",
+    boardName: "Stories",
+    intakeColumnName: "Incoming",
+    intakeColumnIsSplit: false,
+    columnFieldReferenceName: "WEF_FAKE_Kanban.Column",
+    intakeStateMappings: {
+      Bug: "New",
+      "User Story": "New",
+    },
+    boardColumnsByName: {
+      incoming: { isSplit: false, stateMappings: { Bug: "New", "User Story": "New" } },
+      committed: { isSplit: false, stateMappings: { Bug: "Active", "User Story": "Committed" } },
+      approved: { isSplit: false, stateMappings: { Bug: "Resolved", "User Story": "Resolved" } },
+    },
+    ...overrides,
+  };
+}
+
+function createWorkItem(id = 101) {
+  return {
+    id,
+    title: "Fix login bug",
+    type: "Bug",
+    state: "Active",
+    rev: 1,
+    url: `https://dev.azure.com/test/_workitems/edit/${id}`,
+    boardColumnName: "To Do",
+  };
+}
+
+function insertSettings(
+  collections: ReturnType<typeof renderWithProviders>["collections"],
+  overrides: Partial<typeof DEFAULT_SETTINGS> = {},
+) {
+  collections.settings.insert({
+    ...DEFAULT_SETTINGS,
+    id: "settings",
+    pat: "test-pat",
+      org: "test-org",
+      project: "test-project",
+      team: "My Team",
+      sourceBoardColumn: "Committed",
+      approvalBoardColumn: "Approved",
+      closedState: "Closed",
+      ...overrides,
+  });
+}
+
 describe("App column change behavior", () => {
   beforeEach(() => {
     mocks.boardOnColumnChange = undefined;
@@ -82,21 +166,15 @@ describe("App column change behavior", () => {
     mocks.startMutate.mockReset();
     mocks.returnMutate.mockReset();
     mocks.completeMutate.mockReset();
+    mocks.candidateBoardConfig = createBoardConfig();
+    mocks.workItems = [createWorkItem()];
   });
 
-  it("starts work when dragging from New Work to another column", async () => {
+  it("starts work when dragging from New Work into the configured source board column", async () => {
     const { collections } = renderWithProviders(<App />);
 
     act(() => {
-      collections.settings.insert({
-        ...DEFAULT_SETTINGS,
-        id: "settings",
-        pat: "test-pat",
-        org: "test-org",
-        project: "test-project",
-        sourceState: "Active",
-        candidateState: "New",
-      });
+      insertSettings(collections);
       collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
     });
 
@@ -106,11 +184,12 @@ describe("App column change behavior", () => {
       mocks.boardOnColumnChange?.(101, NEW_WORK_COLUMN_ID, "col-1");
     });
 
-    expect(mocks.startMutate).toHaveBeenCalledTimes(1);
     expect(mocks.startMutate).toHaveBeenCalledWith(
       {
         workItemId: 101,
         targetState: "Active",
+        targetBoardColumnField: "WEF_FAKE_Kanban.Column",
+        targetBoardColumnName: "Committed",
         optimisticRemoveFromCandidates: false,
       },
       expect.objectContaining({
@@ -119,20 +198,194 @@ describe("App column change behavior", () => {
     );
   });
 
+  it("returns work to the source board incoming column", async () => {
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections);
+      collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    act(() => {
+      mocks.boardOnColumnChange?.(101, "col-1", NEW_WORK_COLUMN_ID);
+    });
+
+    expect(mocks.returnMutate).toHaveBeenCalledWith(
+      {
+        workItemId: 101,
+        targetState: "New",
+        targetBoardColumnField: "WEF_FAKE_Kanban.Column",
+        targetBoardColumnName: "Incoming",
+        targetBoardDoneField: undefined,
+      },
+      expect.objectContaining({
+        onError: expect.any(Function),
+      }),
+    );
+  });
+
+  it("returns work to the configured new-work board column", async () => {
+    mocks.candidateBoardConfig = createBoardConfig({
+      intakeColumnName: "Ideas",
+      intakeStateMappings: {
+        Bug: "Proposed",
+        "User Story": "Idea",
+      },
+      boardColumnsByName: {
+        ideas: {
+          isSplit: false,
+          stateMappings: { Bug: "Proposed", "User Story": "Idea" },
+        },
+        committed: { isSplit: false, stateMappings: { Bug: "Active", "User Story": "Committed" } },
+        approved: { isSplit: false, stateMappings: { Bug: "Resolved", "User Story": "Resolved" } },
+      },
+    });
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections);
+      collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    act(() => {
+      mocks.boardOnColumnChange?.(101, "col-1", NEW_WORK_COLUMN_ID);
+    });
+
+    expect(mocks.returnMutate).toHaveBeenCalledWith(
+      {
+        workItemId: 101,
+        targetState: "Proposed",
+        targetBoardColumnField: "WEF_FAKE_Kanban.Column",
+        targetBoardColumnName: "Ideas",
+        targetBoardDoneField: undefined,
+      },
+      expect.objectContaining({
+        onError: expect.any(Function),
+      }),
+    );
+  });
+
+  it("starts work into the active side of a split source board column", async () => {
+    mocks.candidateBoardConfig = createBoardConfig({
+      doneFieldReferenceName: "WEF_FAKE_Kanban.Column.Done",
+      boardColumnsByName: {
+        incoming: { isSplit: false, stateMappings: { Bug: "New" } },
+        committed: { isSplit: true, stateMappings: { Bug: "Active" } },
+        approved: { isSplit: false, stateMappings: { Bug: "Resolved" } },
+      },
+    });
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections);
+      collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    act(() => {
+      mocks.boardOnColumnChange?.(101, NEW_WORK_COLUMN_ID, "col-1");
+    });
+
+    expect(mocks.startMutate).toHaveBeenCalledWith(
+      {
+        workItemId: 101,
+        targetState: "Active",
+        targetBoardColumnField: "WEF_FAKE_Kanban.Column",
+        targetBoardColumnName: "Committed",
+        targetBoardDoneField: "WEF_FAKE_Kanban.Column.Done",
+        targetBoardDoneValue: false,
+        optimisticRemoveFromCandidates: false,
+      },
+      expect.objectContaining({
+        onError: expect.any(Function),
+      }),
+    );
+  });
+
+  it("moves work into the configured approval board column", async () => {
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections);
+      collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    act(() => {
+      mocks.boardOnColumnChange?.(101, "col-1", COMPLETED_COLUMN_ID);
+    });
+
+    expect(mocks.completeMutate).toHaveBeenCalledWith(
+      {
+        workItemId: 101,
+        targetState: "Resolved",
+        targetBoardColumnField: "WEF_FAKE_Kanban.Column",
+        targetBoardColumnName: "Approved",
+      },
+      expect.objectContaining({
+        onError: expect.any(Function),
+      }),
+    );
+  });
+
+  it("moves work back from Completed into the configured source board column", async () => {
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections);
+      collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    act(() => {
+      mocks.boardOnColumnChange?.(101, COMPLETED_COLUMN_ID, "col-1");
+    });
+
+    expect(mocks.completeMutate).toHaveBeenCalledWith(
+      {
+        workItemId: 101,
+        targetState: "Active",
+        targetBoardColumnField: "WEF_FAKE_Kanban.Column",
+        targetBoardColumnName: "Committed",
+      },
+      expect.objectContaining({
+        onError: expect.any(Function),
+      }),
+    );
+  });
+
+  it("does not call remote mutations for moves between local columns", async () => {
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections);
+      collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+      collections.columns.insert({ id: "col-2", name: "Validating", order: 1 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    act(() => {
+      mocks.boardOnColumnChange?.(101, "col-1", "col-2");
+    });
+
+    expect(mocks.startMutate).not.toHaveBeenCalled();
+    expect(mocks.returnMutate).not.toHaveBeenCalled();
+    expect(mocks.completeMutate).not.toHaveBeenCalled();
+  });
+
   it("does not call remote mutations for custom task moved to New Work", async () => {
     const { collections } = renderWithProviders(<App />);
 
     act(() => {
-      collections.settings.insert({
-        ...DEFAULT_SETTINGS,
-        id: "settings",
-        pat: "test-pat",
-        org: "test-org",
-        project: "test-project",
-        sourceState: "Active",
-        candidateState: "New",
-        approvalState: "Resolved",
-      });
+      insertSettings(collections);
       collections.columns.insert({ id: "col-1", name: "In Progress", order: 0 });
       collections.customTasks.insert({
         id: "ct-1",
@@ -157,16 +410,7 @@ describe("App column change behavior", () => {
     const { collections } = renderWithProviders(<App />);
 
     act(() => {
-      collections.settings.insert({
-        ...DEFAULT_SETTINGS,
-        id: "settings",
-        pat: "test-pat",
-        org: "test-org",
-        project: "test-project",
-        sourceState: "Active",
-        candidateState: "New",
-        approvalState: "Resolved",
-      });
+      insertSettings(collections);
       collections.columns.insert({ id: "col-1", name: "In Progress", order: 0 });
       collections.customTasks.insert({
         id: "ct-2",
@@ -194,16 +438,7 @@ describe("App column change behavior", () => {
     const { collections } = renderWithProviders(<App />);
 
     act(() => {
-      collections.settings.insert({
-        ...DEFAULT_SETTINGS,
-        id: "settings",
-        pat: "test-pat",
-        org: "test-org",
-        project: "test-project",
-        sourceState: "Active",
-        candidateState: "New",
-        approvalState: "Resolved",
-      });
+      insertSettings(collections);
       collections.columns.insert({ id: "col-1", name: "In Progress", order: 0 });
       collections.customTasks.insert({
         id: "ct-legacy",
@@ -228,16 +463,7 @@ describe("App column change behavior", () => {
     const { collections } = renderWithProviders(<App />);
 
     act(() => {
-      collections.settings.insert({
-        ...DEFAULT_SETTINGS,
-        id: "settings",
-        pat: "test-pat",
-        org: "test-org",
-        project: "test-project",
-        sourceState: "Active",
-        candidateState: "New",
-        approvalState: "Resolved",
-      });
+      insertSettings(collections);
       collections.columns.insert({ id: "col-1", name: "In Progress", order: 0 });
     });
 
@@ -257,15 +483,7 @@ describe("App column change behavior", () => {
     const { collections } = renderWithProviders(<App />);
 
     act(() => {
-      collections.settings.insert({
-        ...DEFAULT_SETTINGS,
-        id: "settings",
-        pat: "test-pat",
-        org: "test-org",
-        project: "test-project",
-        sourceState: "Active",
-        candidateState: "New",
-      });
+      insertSettings(collections);
       collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
     });
 

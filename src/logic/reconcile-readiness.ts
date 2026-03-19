@@ -1,7 +1,7 @@
 export function isReconcileReady(
   sourceLoaded: boolean,
   completedLoaded: boolean,
-  approvalState?: string,
+  approvalFilter?: string,
 ): boolean {
-  return sourceLoaded && (!approvalState || completedLoaded);
+  return sourceLoaded && (!approvalFilter || completedLoaded);
 }

@@ -7,6 +7,7 @@ interface ConnectionFormProps {
   pat: string;
   org: string;
   project: string;
+  team: string;
   onChange: (field: string, value: string) => void;
 }
 
@@ -14,6 +15,7 @@ export function ConnectionForm({
   pat,
   org,
   project,
+  team,
   onChange,
 }: ConnectionFormProps) {
   const testConn = useAdoConnection();
@@ -47,6 +49,18 @@ export function ConnectionForm({
           onChange={(e) => onChange("project", e.target.value)}
           placeholder="my-project"
         />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="team">Team</Label>
+        <Input
+          id="team"
+          value={team}
+          onChange={(e) => onChange("team", e.target.value)}
+          placeholder="my-team"
+        />
+        <p className="text-xs text-muted-foreground">
+          Required for team-board column behavior.
+        </p>
       </div>
       <div className="flex items-center gap-2">
         <Button
