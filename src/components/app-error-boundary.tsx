@@ -6,16 +6,35 @@ interface AppErrorBoundaryProps {
 
 interface AppErrorBoundaryState {
   hasError: boolean;
+  ignoredError: boolean;
+}
+
+const REMOVE_CHILD_ERROR_TEXT = "The node to be removed is not a child of this node";
+
+function shouldIgnoreAppError(error: unknown) {
+  if (typeof DOMException === "undefined" || !(error instanceof DOMException)) {
+    return false;
+  }
+
+  return (
+    error.message.includes(REMOVE_CHILD_ERROR_TEXT) &&
+    (error.message.includes("Node.removeChild") || error.name === "NotFoundError")
+  );
 }
 
 export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundaryState> {
-  state: AppErrorBoundaryState = { hasError: false };
+  state: AppErrorBoundaryState = { hasError: false, ignoredError: false };
 
-  static getDerivedStateFromError(): AppErrorBoundaryState {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error): AppErrorBoundaryState {
+    return { hasError: true, ignoredError: shouldIgnoreAppError(error) };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    if (shouldIgnoreAppError(error)) {
+      this.setState({ hasError: false, ignoredError: false });
+      return;
+    }
+
     console.error("Uncaught app error", error, errorInfo);
   }
 
@@ -24,7 +43,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
   }
 
   render() {
-    if (this.state.hasError) {
+    if (this.state.hasError && !this.state.ignoredError) {
       return (
         <div className="min-h-screen p-6 flex items-center justify-center">
           <div role="alert" className="max-w-md text-center space-y-3">
