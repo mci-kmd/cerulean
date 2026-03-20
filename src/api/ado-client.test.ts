@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { HttpAdoClient, WorkItemAlreadyAssignedError } from "./ado-client";
 import { server } from "@/test/msw/server";
 import { http, HttpResponse } from "msw";
@@ -842,6 +842,78 @@ describe("HttpAdoClient", () => {
       });
     });
 
+    it("adds PAT scope guidance when reviewer update is unauthorized", async () => {
+      const reviewClient = new HttpAdoClient({
+        pat: "test-pat",
+        org: "test-org",
+        project: "test-project",
+      });
+      server.use(
+        http.get("https://dev.azure.com/test-org/_apis/connectiondata*", () => {
+          return HttpResponse.json({
+            authenticatedUser: {
+              id: "user-id",
+              properties: { Account: { $value: "user@test.com" } },
+            },
+          });
+        }),
+        http.put(`${BASE}/_apis/git/repositories/repo-1/pullRequests/79/reviewers/user-id`, () => {
+          return new HttpResponse(null, { status: 401 });
+        }),
+      );
+
+      await expect(
+        reviewClient.addCurrentUserAsPullRequestReviewer("repo-1", "79"),
+      ).rejects.toThrow("Code (Read & write)");
+    });
+
+    it("adds PAT scope guidance when the browser blocks reviewer update requests", async () => {
+      const reviewClient = new HttpAdoClient({
+        pat: "test-pat",
+        org: "test-org",
+        project: "test-project",
+      });
+      const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+        const url =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.toString()
+              : input.url;
+
+        if (url.startsWith("https://dev.azure.com/test-org/_apis/connectiondata")) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                authenticatedUser: {
+                  id: "user-id",
+                  properties: { Account: { $value: "user@test.com" } },
+                },
+              }),
+              {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              },
+            ),
+          );
+        }
+
+        if (url.includes("/pullRequests/80/reviewers/user-id")) {
+          return Promise.reject(new TypeError("Failed to fetch"));
+        }
+
+        return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+      });
+
+      try {
+        await expect(
+          reviewClient.addCurrentUserAsPullRequestReviewer("repo-1", "80"),
+        ).rejects.toThrow("browser can block this when the PAT is missing Code (Read & write)");
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    });
+
     it("removes the current user as reviewer", async () => {
       const reviewClient = new HttpAdoClient({
         pat: "test-pat",
@@ -859,7 +931,7 @@ describe("HttpAdoClient", () => {
           });
         }),
         http.delete(
-          `${BASE}/_apis/git/repositories/repo-1/pullRequests/79/reviewers/user-id`,
+          `${BASE}/_apis/git/repositories/repo-1/pullRequests/81/reviewers/user-id`,
           () => {
             deleteCalled = true;
             return new HttpResponse(null, { status: 204 });
@@ -868,7 +940,7 @@ describe("HttpAdoClient", () => {
       );
 
       await expect(
-        reviewClient.removeCurrentUserAsPullRequestReviewer("repo-1", "79"),
+        reviewClient.removeCurrentUserAsPullRequestReviewer("repo-1", "81"),
       ).resolves.toBeUndefined();
       expect(deleteCalled).toBe(true);
     });

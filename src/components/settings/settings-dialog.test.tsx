@@ -18,6 +18,7 @@ describe("SettingsDialog", () => {
     expect(screen.getByLabelText("Team")).toBeInTheDocument();
     expect(screen.getByLabelText("GitHub Username")).toBeInTheDocument();
     expect(screen.getByLabelText("GitHub Repository")).toBeInTheDocument();
+    expect(screen.getAllByText(/Code \(Read & write\)/i).length).toBeGreaterThan(0);
   });
 
   it("shows connection, source, and columns sections", () => {

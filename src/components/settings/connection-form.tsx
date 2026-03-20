@@ -35,6 +35,10 @@ export function ConnectionForm({
           onChange={(e) => onChange("pat", e.target.value)}
           placeholder="Enter your ADO PAT"
         />
+        <p className="text-xs text-muted-foreground">
+          For full ADO support use Work Items (Read, write, & manage), Code (Read &
+          write), and User profile (Read).
+        </p>
       </div>
       <div className="space-y-2">
         <Label htmlFor="org">Organization</Label>
@@ -118,6 +122,10 @@ export function ConnectionForm({
           </span>
         )}
       </div>
+      <p className="text-xs text-muted-foreground">
+        Test Connection checks basic work-item access only. Dragging ADO PR review cards
+        also needs Code (Read & write).
+      </p>
     </div>
   );
 }

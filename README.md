@@ -20,14 +20,16 @@ This app uses an **Azure DevOps PAT** to access Azure DevOps.
 Create the PAT with these scopes:
 
 - **Work Items (Read, write, & manage)** — OAuth scope `vso.work_write`
-- **Code (Read)** — OAuth scope `vso.code`
+- **Code (Read & write)** — OAuth scope `vso.code_write`
 - **User profile (Read)** — OAuth scope `vso.profile`
 
 Why those scopes:
 
 - Cerulean queries and updates work items.
-- Cerulean reads linked pull requests, statuses, threads, and policy evaluations.
+- Cerulean reads linked pull requests, statuses, threads, and policy evaluations, and dragging Azure DevOps PR review cards updates reviewers and votes.
 - Cerulean reads your Azure DevOps identity from `/_apis/connectiondata` so it can assign work items to you.
+
+If you only want read-only PR metadata, `Code (Read)` is enough. Full PR drag/review actions need `Code (Read & write)`.
 
 ### How to create the PAT
 

@@ -109,6 +109,8 @@ const FEDAUTH_REDIRECT_HEADER = "X-TFS-FedAuthRedirect";
 const FEDAUTH_REDIRECT_SUPPRESS = "Suppress";
 const FORCE_MSA_PASSTHROUGH_HEADER = "X-VSS-ForceMsaPassThrough";
 const FORCE_MSA_PASSTHROUGH_VALUE = "true";
+const PR_REVIEW_WRITE_SCOPE_HINT =
+  "Check that the PAT includes Azure DevOps Code (Read & write).";
 
 const DETAIL_FIELDS = [
   "System.Id",
@@ -571,16 +573,40 @@ export class HttpAdoClient implements AdoClient {
     reviewerId: string,
     vote: number,
   ): Promise<void> {
-    const res = await fetch(
+    const res = await this.fetchPullRequestReviewerMutation(
       `${this.baseUrl}/_apis/git/repositories/${repositoryId}/pullRequests/${pullRequestId}/reviewers/${reviewerId}?api-version=7.1`,
       {
         method: "PUT",
         headers: this.jsonHeaders(),
         body: JSON.stringify({ id: reviewerId, vote }),
       },
+      "Pull request reviewer update",
     );
-    if (!res.ok) throw new Error(`Pull request reviewer update failed: ${res.status}`);
     await this.readJson(res, "Pull request reviewer update");
+  }
+
+  private async fetchPullRequestReviewerMutation(
+    url: string,
+    init: RequestInit,
+    operation: string,
+  ): Promise<Response> {
+    let res: Response;
+    try {
+      res = await fetch(url, init);
+    } catch (error) {
+      const reason = error instanceof Error && error.message ? ` Original error: ${error.message}` : "";
+      throw new Error(
+        `${operation} request failed before Azure DevOps returned a response. The browser can block this when the PAT is missing Code (Read & write). ${PR_REVIEW_WRITE_SCOPE_HINT}${reason}`,
+      );
+    }
+
+    if (!res.ok) {
+      const scopeHint =
+        res.status === 401 || res.status === 403 ? ` ${PR_REVIEW_WRITE_SCOPE_HINT}` : "";
+      throw new Error(`${operation} failed: ${res.status}.${scopeHint}`);
+    }
+
+    return res;
   }
 
   async addCurrentUserAsPullRequestReviewer(
@@ -612,14 +638,14 @@ export class HttpAdoClient implements AdoClient {
     pullRequestId: string,
   ): Promise<void> {
     const reviewerId = await this.getRequiredCurrentUserId();
-    const res = await fetch(
+    await this.fetchPullRequestReviewerMutation(
       `${this.baseUrl}/_apis/git/repositories/${repositoryId}/pullRequests/${pullRequestId}/reviewers/${reviewerId}?api-version=7.1`,
       {
         method: "DELETE",
         headers: this.authHeaders(),
       },
+      "Pull request reviewer delete",
     );
-    if (!res.ok) throw new Error(`Pull request reviewer delete failed: ${res.status}`);
   }
 
   private buildBoardColumnPatch(
