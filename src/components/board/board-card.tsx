@@ -435,7 +435,7 @@ export function BoardCard({
                 >
                   <Pencil className="h-3 w-3" />
                 </button>
-              ) : isUiReviewCard ? null : (
+              ) : (
                 <div className="flex items-center gap-1">
                   {canCreateAdoPullRequest && (
                     <Tooltip>

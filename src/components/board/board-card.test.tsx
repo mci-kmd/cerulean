@@ -137,7 +137,7 @@ describe("BoardCard custom task", () => {
 });
 
 describe("BoardCard UI review task", () => {
-  it("renders a linked title without task-edit or ADO controls", async () => {
+  it("renders a linked title with the copyable work item id but without task-edit or ADO PR controls", async () => {
     const { collections } = renderCard({
       workItemOverrides: {
         id: -1200,
@@ -161,7 +161,7 @@ describe("BoardCard UI review task", () => {
       "https://dev.azure.com/test-org/test-project/_workitems/edit/42",
     );
     expect(screen.queryByRole("button", { name: "Edit task" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Copy ID 42" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Copy ID 42" })).toBeInTheDocument();
     await waitFor(() => {
       expect(
         screen.queryByRole("button", {
