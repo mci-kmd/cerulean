@@ -26,6 +26,7 @@ import { useReviewPullRequest } from "@/hooks/use-review-pull-request";
 import { createAdoClient, type AdoClient } from "@/api/ado-client";
 import { isReconcileReady } from "@/logic/reconcile-readiness";
 import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
+import { getGithubReviewPlacement } from "@/lib/github-review-placement";
 import { COMPLETED_COLUMN_ID, NEW_WORK_COLUMN_ID } from "@/constants/board-columns";
 import {
   getBoardColumnTargetState,
@@ -148,8 +149,6 @@ export function App() {
   );
   const {
     workItems: githubReviewWorkItems,
-    newWorkIds: githubReviewNewWorkIds,
-    completedIds: githubReviewCompletedIds,
     isLoading: isLoadingGithubReviewWorkItems,
     error: githubReviewWorkItemsError,
     refetch: refetchGithubReviewWorkItems,
@@ -204,23 +203,27 @@ export function App() {
     }
     return [...merged.values()];
   }, [workItems, candidates]);
+  const githubReviewPlacement = useMemo(
+    () => getGithubReviewPlacement(githubReviewWorkItems, assignments),
+    [assignments, githubReviewWorkItems],
+  );
   const candidateIds = useMemo(
     () =>
       new Set([
         ...candidates.map((candidate) => candidate.id),
         ...reviewNewWorkIds,
-        ...githubReviewNewWorkIds,
+        ...githubReviewPlacement.candidateIds,
       ]),
-    [candidates, reviewNewWorkIds, githubReviewNewWorkIds],
+    [candidates, githubReviewPlacement, reviewNewWorkIds],
   );
   const completedIds = useMemo(
     () =>
       new Set([
         ...completedAdoItems.map((item) => item.id),
         ...reviewCompletedIds,
-        ...githubReviewCompletedIds,
+        ...githubReviewPlacement.completedIds,
       ]),
-    [completedAdoItems, reviewCompletedIds, githubReviewCompletedIds],
+    [completedAdoItems, githubReviewPlacement, reviewCompletedIds],
   );
   const reconcileReady = isReconcileReady(
     isSuccess,

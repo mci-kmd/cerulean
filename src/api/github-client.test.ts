@@ -56,6 +56,15 @@ describe("fetchGithubReviewWorkItems", () => {
             assignees: [],
           },
           {
+            number: 17,
+            title: "Reviewed but no longer requested",
+            html_url: "https://github.com/octo-org/widgets/pull/17",
+            state: "open",
+            user: { login: "someone-else" },
+            requested_reviewers: [],
+            assignees: [],
+          },
+          {
             number: 15,
             title: "My own PR",
             html_url: "https://github.com/octo-org/widgets/pull/15",
@@ -95,11 +104,22 @@ describe("fetchGithubReviewWorkItems", () => {
           },
         ]),
       ),
+      http.get(`${GITHUB_REPO_API}/pulls/15/reviews`, () => HttpResponse.json([])),
+      http.get(`${GITHUB_REPO_API}/pulls/16/reviews`, () => HttpResponse.json([])),
+      http.get(`${GITHUB_REPO_API}/pulls/17/reviews`, () =>
+        HttpResponse.json([
+          {
+            user: { login: "octocat" },
+            state: "APPROVED",
+            submitted_at: "2026-03-20T08:35:00Z",
+          },
+        ]),
+      ),
     );
 
     const result = await fetchGithubReviewWorkItems("octocat", "octo-org/widgets");
 
-    expect(result.workItems).toHaveLength(3);
+    expect(result.workItems).toHaveLength(4);
     expect(result.workItems).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -121,6 +141,13 @@ describe("fetchGithubReviewWorkItems", () => {
         }),
         expect.objectContaining({
           displayId: 14,
+          review: expect.objectContaining({
+            reviewState: "completed",
+          }),
+        }),
+        expect.objectContaining({
+          displayId: 17,
+          title: "Reviewed but no longer requested",
           review: expect.objectContaining({
             reviewState: "completed",
           }),

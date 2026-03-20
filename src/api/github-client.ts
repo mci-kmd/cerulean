@@ -127,6 +127,13 @@ function getGithubReviewState(
   return "new";
 }
 
+function hasGithubReviewActivity(
+  reviews: GithubPullRequestReview[],
+  username: string,
+): boolean {
+  return reviews.some((review) => matchesGithubUser(review.user?.login, username));
+}
+
 async function githubFetch<T>(path: string): Promise<T> {
   const response = await fetch(`${GITHUB_API_BASE_URL}${path}`, {
     headers: {
@@ -182,20 +189,19 @@ export async function fetchGithubReviewWorkItems(
 
   const { owner, repo } = parseGithubRepository(normalized.repository);
   const pullRequests = await listOpenPullRequests(owner, repo);
-  const assignedPullRequests = pullRequests.filter(
+  const eligiblePullRequests = pullRequests.filter(
     (pr) =>
       pr.draft !== true &&
-      !matchesGithubUser(pr.user?.login, normalized.username) &&
-      isAssignedToGithubUser(pr, normalized.username),
+      !matchesGithubUser(pr.user?.login, normalized.username),
   );
 
-  if (assignedPullRequests.length === 0) {
+  if (eligiblePullRequests.length === 0) {
     return { workItems: [], newWorkIds: new Set(), completedIds: new Set() };
   }
 
   const reviewsByPullRequestNumber = new Map(
     await Promise.all(
-      assignedPullRequests.map(async (pr) => [
+      eligiblePullRequests.map(async (pr) => [
         pr.number,
         await listPullRequestReviews(owner, repo, pr.number),
       ] as const),
@@ -206,11 +212,20 @@ export async function fetchGithubReviewWorkItems(
   const newWorkIds = new Set<number>();
   const completedIds = new Set<number>();
 
-  for (const pr of assignedPullRequests) {
+  for (const pr of eligiblePullRequests) {
+    const reviews = reviewsByPullRequestNumber.get(pr.number) ?? [];
     const reviewState = getGithubReviewState(
-      reviewsByPullRequestNumber.get(pr.number) ?? [],
+      reviews,
       normalized.username,
     );
+    const includePullRequest =
+      isAssignedToGithubUser(pr, normalized.username) ||
+      hasGithubReviewActivity(reviews, normalized.username);
+
+    if (!includePullRequest) {
+      continue;
+    }
+
     const workItemId = createGithubReviewWorkItemId(normalized.repository, pr.number);
 
     workItems.push({
