@@ -9,6 +9,7 @@ import type {
   AdoWorkItemRelation,
 } from "@/types/ado";
 import type { RelatedPullRequest, WorkItem } from "@/types/board";
+import { createSyntheticNegativeId } from "@/lib/create-synthetic-id";
 import {
   buildWiqlQuery,
   buildCompletedWiqlQuery,
@@ -622,14 +623,7 @@ function createReviewWorkItemId(
   pullRequestId: number,
   workItemId: number,
 ): number {
-  const key = `${repositoryId}:${pullRequestId}:${workItemId}`;
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < key.length; index += 1) {
-    hash ^= key.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  const normalized = Math.abs(hash) + 1;
-  return -normalized;
+  return createSyntheticNegativeId(`${repositoryId}:${pullRequestId}:${workItemId}`);
 }
 
 function parseConfiguredWorkItemTypes(
@@ -834,6 +828,7 @@ export async function fetchReviewWorkItems(
         kind: "review",
         relatedPullRequests: [relatedPullRequest],
         review: {
+          provider: "ado",
           repositoryId,
           pullRequestId: pr.pullRequestId,
           reviewState,

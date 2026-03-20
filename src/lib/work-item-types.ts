@@ -1,4 +1,4 @@
-import { Bug, BookOpen, ClipboardList, CircleDot, type LucideIcon } from "lucide-react";
+import { Bug, BookOpen, ClipboardList, CircleDot, GitPullRequest, type LucideIcon } from "lucide-react";
 
 export interface TypeStyle {
   border: string;
@@ -44,12 +44,14 @@ const TYPE_STYLES: Record<string, TypeStyle> = {
   Bug: BUG_STYLE,
   "User Story": USER_STORY_STYLE,
   Task: TASK_STYLE,
+  "Pull Request": USER_STORY_STYLE,
 };
 
 const TYPE_ICONS: Record<string, LucideIcon> = {
   Bug: Bug,
   "User Story": BookOpen,
   Task: ClipboardList,
+  "Pull Request": GitPullRequest,
 };
 
 export function getTypeStyle(type: string): TypeStyle {

@@ -4,6 +4,8 @@ export interface AdoSettings {
   org: string;
   project: string;
   team: string;
+  githubUsername: string;
+  githubRepository: string;
   sourceState: string;
   sourceBoardColumn: string;
   candidateBoardColumn: string;
@@ -23,6 +25,8 @@ export const DEFAULT_SETTINGS: AdoSettings = {
   org: "",
   project: "",
   team: "",
+  githubUsername: "",
+  githubRepository: "",
   sourceState: "Active",
   sourceBoardColumn: "",
   candidateBoardColumn: "",
@@ -51,6 +55,7 @@ export interface ColumnAssignment {
 }
 
 export interface ReviewWorkItem {
+  provider?: "ado" | "github";
   repositoryId: string;
   pullRequestId: number;
   reviewState: "new" | "active" | "completed";

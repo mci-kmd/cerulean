@@ -21,6 +21,7 @@ import { useCandidateBoardConfig } from "@/hooks/use-candidate-board-config";
 import { useStartWork } from "@/hooks/use-start-work";
 import { useReturnToCandidate } from "@/hooks/use-return-to-candidate";
 import { useReviewWorkItems } from "@/hooks/use-review-work-items";
+import { useGithubReviewWorkItems } from "@/hooks/use-github-review-work-items";
 import { useReviewPullRequest } from "@/hooks/use-review-pull-request";
 import { createAdoClient, type AdoClient } from "@/api/ado-client";
 import { isReconcileReady } from "@/logic/reconcile-readiness";
@@ -145,6 +146,18 @@ export function App() {
     settings?.areaPath,
     settings?.workItemTypes,
   );
+  const {
+    workItems: githubReviewWorkItems,
+    newWorkIds: githubReviewNewWorkIds,
+    completedIds: githubReviewCompletedIds,
+    isLoading: isLoadingGithubReviewWorkItems,
+    error: githubReviewWorkItemsError,
+    refetch: refetchGithubReviewWorkItems,
+  } = useGithubReviewWorkItems(
+    settings?.githubUsername ?? "",
+    settings?.githubRepository ?? "",
+    settings?.pollInterval ?? 30,
+  );
 
   const completeWorkItem = useCompleteWorkItem(client);
   const returnToCandidate = useReturnToCandidate(client);
@@ -170,8 +183,14 @@ export function App() {
   );
 
   const workItems = useMemo(
-    () => [...adoWorkItems, ...completedAdoItems, ...customWorkItems, ...reviewWorkItems],
-    [adoWorkItems, completedAdoItems, customWorkItems, reviewWorkItems],
+    () => [
+      ...adoWorkItems,
+      ...completedAdoItems,
+      ...customWorkItems,
+      ...reviewWorkItems,
+      ...githubReviewWorkItems,
+    ],
+    [adoWorkItems, completedAdoItems, customWorkItems, reviewWorkItems, githubReviewWorkItems],
   );
   const boardWorkItems = useMemo(() => {
     const merged = new Map<number, (typeof workItems)[number]>();
@@ -186,12 +205,22 @@ export function App() {
     return [...merged.values()];
   }, [workItems, candidates]);
   const candidateIds = useMemo(
-    () => new Set([...candidates.map((candidate) => candidate.id), ...reviewNewWorkIds]),
-    [candidates, reviewNewWorkIds],
+    () =>
+      new Set([
+        ...candidates.map((candidate) => candidate.id),
+        ...reviewNewWorkIds,
+        ...githubReviewNewWorkIds,
+      ]),
+    [candidates, reviewNewWorkIds, githubReviewNewWorkIds],
   );
   const completedIds = useMemo(
-    () => new Set([...completedAdoItems.map((item) => item.id), ...reviewCompletedIds]),
-    [completedAdoItems, reviewCompletedIds],
+    () =>
+      new Set([
+        ...completedAdoItems.map((item) => item.id),
+        ...reviewCompletedIds,
+        ...githubReviewCompletedIds,
+      ]),
+    [completedAdoItems, reviewCompletedIds, githubReviewCompletedIds],
   );
   const reconcileReady = isReconcileReady(
     isSuccess,
@@ -281,6 +310,13 @@ export function App() {
     });
   }
 
+  if (githubReviewWorkItemsError) {
+    toast.error("Failed to fetch GitHub review pull requests", {
+      description: githubReviewWorkItemsError.message,
+      id: "github-review-fetch-error",
+    });
+  }
+
   const boardData = useBoard(boardWorkItems);
   const hasSettings = !!(settings?.pat && settings?.org && settings?.project);
   const hasColumns = columns.length > 0;
@@ -328,6 +364,14 @@ export function App() {
       toColumnId !== COMPLETED_COLUMN_ID;
 
     if (isReviewWorkItem(boardWorkItem)) {
+      if (boardWorkItem.review.provider === "github") {
+        toast.error("GitHub review cards are read-only", {
+          description: "Public GitHub review cards do not support board mutations yet.",
+          id: `github-review-readonly-${boardWorkItem.id}`,
+        });
+        return;
+      }
+
       const { repositoryId, pullRequestId } = boardWorkItem.review;
 
       if (movingToNewWork) {
@@ -527,8 +571,11 @@ export function App() {
     <TooltipProvider>
       <div className="min-h-screen">
         <Header
-          onRefresh={() => refetch()}
-          isRefreshing={isLoading}
+          onRefresh={() => {
+            void refetch();
+            void refetchGithubReviewWorkItems();
+          }}
+          isRefreshing={isLoading || isLoadingReviewWorkItems || isLoadingGithubReviewWorkItems}
           lastUpdated={dataUpdatedAt}
           hasError={!!error}
           demoMode={demoMode}
@@ -545,7 +592,8 @@ export function App() {
             org={settings.org}
             project={settings.project}
           />
-        ) : (isLoading || isLoadingReviewWorkItems) && workItems.length === 0 ? (
+        ) : (isLoading || isLoadingReviewWorkItems || isLoadingGithubReviewWorkItems) &&
+          workItems.length === 0 ? (
           <BoardSkeleton columnCount={columns.length} />
         ) : (
           <Board

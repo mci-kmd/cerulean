@@ -401,4 +401,61 @@ describe("App integration", () => {
       expect(screen.queryByText(/No items in "Approved" column/)).not.toBeInTheDocument();
     });
   });
+
+  it("renders GitHub review cards from configured public repo settings", async () => {
+    installBoardHandlers();
+    server.use(
+      http.post(`${BASE}/_apis/wit/wiql`, () => HttpResponse.json({ workItems: [] })),
+      http.post(`${BASE}/_apis/wit/workitemsbatch`, () =>
+        HttpResponse.json({
+          count: 0,
+          value: [],
+        }),
+      ),
+      http.get("https://dev.azure.com/test-org/_apis/connectiondata", () =>
+        HttpResponse.json({
+          authenticatedUser: {
+            id: "me-id",
+            providerDisplayName: "Me",
+            uniqueName: "me@test.com",
+          },
+        }),
+      ),
+      http.get(`${BASE}/_apis/git/pullrequests`, () => HttpResponse.json({ value: [] })),
+      http.get("https://api.github.com/repos/octo-org/widgets/pulls", () =>
+        HttpResponse.json([
+          {
+            number: 77,
+            title: "Review the GitHub queue",
+            html_url: "https://github.com/octo-org/widgets/pull/77",
+            state: "open",
+            user: { login: "someone-else" },
+            requested_reviewers: [{ login: "octocat" }],
+            assignees: [],
+          },
+        ]),
+      ),
+      http.get("https://api.github.com/repos/octo-org/widgets/pulls/77/reviews", () =>
+        HttpResponse.json([]),
+      ),
+    );
+
+    const { collections } = renderWithProviders(<App />);
+
+    collections.settings.insert(
+      createSettings({
+        id: "settings",
+        githubUsername: "octocat",
+        githubRepository: "octo-org/widgets",
+        pollInterval: 60,
+      }),
+    );
+    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+
+    await waitFor(() => {
+      expect(screen.getByText("Review the GitHub queue")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("review-label")).toBeInTheDocument();
+  });
 });

@@ -16,6 +16,8 @@ describe("SettingsDialog", () => {
     expect(screen.getByLabelText("Organization")).toBeInTheDocument();
     expect(screen.getByLabelText("Project")).toBeInTheDocument();
     expect(screen.getByLabelText("Team")).toBeInTheDocument();
+    expect(screen.getByLabelText("GitHub Username")).toBeInTheDocument();
+    expect(screen.getByLabelText("GitHub Repository")).toBeInTheDocument();
   });
 
   it("shows connection, source, and columns sections", () => {
@@ -72,6 +74,24 @@ describe("SettingsDialog", () => {
 
     const settings = collections.settings.get("settings");
     expect(settings?.team).toBe("my-team");
+  });
+
+  it("saves normalized GitHub review settings to collection", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderWithProviders(
+      <SettingsDialog open={true} onOpenChange={() => {}} />,
+    );
+
+    await user.type(screen.getByLabelText("GitHub Username"), "@octocat");
+    await user.type(
+      screen.getByLabelText("GitHub Repository"),
+      "https://github.com/octo-org/widgets/",
+    );
+    await user.click(screen.getByText("Save"));
+
+    const settings = collections.settings.get("settings");
+    expect(settings?.githubUsername).toBe("octocat");
+    expect(settings?.githubRepository).toBe("octo-org/widgets");
   });
 
   it("saves source, new-work, and approval board columns to collection", async () => {

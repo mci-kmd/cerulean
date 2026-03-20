@@ -49,6 +49,30 @@ const mocks = vi.hoisted(() => ({
     url: string;
     kind?: "review";
     review?: {
+      provider?: "ado" | "github";
+      repositoryId: string;
+      pullRequestId: number;
+      reviewState: "new" | "active" | "completed";
+    };
+    relatedPullRequests?: Array<{
+      id: string;
+      label: string;
+      title?: string;
+      status?: string;
+      url: string;
+    }>;
+  }>,
+  githubReviewWorkItems: [] as Array<{
+    id: number;
+    displayId?: number;
+    title: string;
+    type: string;
+    state: string;
+    rev: number;
+    url: string;
+    kind?: "review";
+    review?: {
+      provider?: "ado" | "github";
       repositoryId: string;
       pullRequestId: number;
       reviewState: "new" | "active" | "completed";
@@ -129,6 +153,25 @@ vi.mock("@/hooks/use-review-work-items", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-github-review-work-items", () => ({
+  useGithubReviewWorkItems: () => ({
+    workItems: mocks.githubReviewWorkItems,
+    newWorkIds: new Set(
+      mocks.githubReviewWorkItems
+        .filter((item) => item.review?.reviewState === "new")
+        .map((item) => item.id),
+    ),
+    completedIds: new Set(
+      mocks.githubReviewWorkItems
+        .filter((item) => item.review?.reviewState === "completed")
+        .map((item) => item.id),
+    ),
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}));
+
 vi.mock("@/hooks/use-review-pull-request", () => ({
   useReviewPullRequest: () => ({
     mutate: mocks.reviewMutate,
@@ -191,6 +234,7 @@ function createWorkItem(id = 101) {
 function createReviewWorkItem(
   id = -501,
   reviewState: "new" | "active" | "completed" = "new",
+  provider: "ado" | "github" = "ado",
 ) {
   return {
     id,
@@ -202,6 +246,7 @@ function createReviewWorkItem(
     url: "https://dev.azure.com/test/_workitems/edit/101",
     kind: "review" as const,
     review: {
+      provider,
       repositoryId: "repo-1",
       pullRequestId: 7001,
       reviewState,
@@ -247,6 +292,7 @@ describe("App column change behavior", () => {
     mocks.candidateBoardConfig = createBoardConfig();
     mocks.workItems = [createWorkItem()];
     mocks.reviewWorkItems = [];
+    mocks.githubReviewWorkItems = [];
   });
 
   it("starts work when dragging from New Work into the configured source board column", async () => {
@@ -679,5 +725,29 @@ describe("App column change behavior", () => {
         onError: expect.any(Function),
       }),
     );
+  });
+
+  it("does not call ADO review mutations for GitHub review cards", async () => {
+    mocks.workItems = [];
+    mocks.githubReviewWorkItems = [createReviewWorkItem(-901, "new", "github")];
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections, {
+        githubUsername: "octocat",
+        githubRepository: "octo-org/widgets",
+      });
+      collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    expect(() => {
+      act(() => {
+        mocks.boardOnColumnChange?.(-901, NEW_WORK_COLUMN_ID, "col-1");
+      });
+    }).not.toThrow();
+
+    expect(mocks.reviewMutate).not.toHaveBeenCalled();
   });
 });

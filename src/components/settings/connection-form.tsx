@@ -8,6 +8,8 @@ interface ConnectionFormProps {
   org: string;
   project: string;
   team: string;
+  githubUsername: string;
+  githubRepository: string;
   onChange: (field: string, value: string) => void;
 }
 
@@ -16,6 +18,8 @@ export function ConnectionForm({
   org,
   project,
   team,
+  githubUsername,
+  githubRepository,
   onChange,
 }: ConnectionFormProps) {
   const testConn = useAdoConnection();
@@ -60,6 +64,30 @@ export function ConnectionForm({
         />
         <p className="text-xs text-muted-foreground">
           Required for team-board column behavior.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="github-username">GitHub Username</Label>
+        <Input
+          id="github-username"
+          value={githubUsername}
+          onChange={(e) => onChange("githubUsername", e.target.value)}
+          placeholder="@octocat"
+        />
+        <p className="text-xs text-muted-foreground">
+          Optional. Used to show assigned GitHub PRs from a public repo.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="github-repository">GitHub Repository</Label>
+        <Input
+          id="github-repository"
+          value={githubRepository}
+          onChange={(e) => onChange("githubRepository", e.target.value)}
+          placeholder="owner/repo"
+        />
+        <p className="text-xs text-muted-foreground">
+          Optional. Public repo only for now.
         </p>
       </div>
       <div className="flex items-center gap-2">

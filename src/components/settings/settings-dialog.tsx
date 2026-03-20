@@ -16,6 +16,7 @@ import { ColumnsEditor } from "./columns-editor";
 import { useBoardCollections } from "@/db/use-board-collections";
 import { useSettings, useColumns } from "@/hooks/use-board";
 import { normalizeAdoClientConfig } from "@/api/ado-client";
+import { normalizeGithubReviewConfig } from "@/api/github-client";
 import { DEFAULT_SETTINGS, type BoardColumn, type AdoSettings } from "@/types/board";
 
 interface SettingsDialogProps {
@@ -66,12 +67,18 @@ function SettingsDialogContent({
       org: draft.org,
       project: draft.project,
     });
+    const normalizedGithubReview = normalizeGithubReviewConfig({
+      username: draft.githubUsername,
+      repository: draft.githubRepository,
+    });
     const nextDraft: AdoSettings = {
       id: "settings",
       pat: normalizedConnection.pat,
       org: normalizedConnection.org,
       project: normalizedConnection.project,
       team: draft.team.trim(),
+      githubUsername: normalizedGithubReview.username,
+      githubRepository: normalizedGithubReview.repository,
       sourceState: "",
       sourceBoardColumn: draft.sourceBoardColumn.trim(),
       candidateBoardColumn: draft.candidateBoardColumn.trim(),
@@ -120,7 +127,7 @@ function SettingsDialogContent({
       <DialogHeader>
         <DialogTitle className="font-heading">Settings</DialogTitle>
         <DialogDescription>
-          Configure your Azure DevOps connection and board layout.
+          Configure your Azure DevOps connection, optional GitHub review source, and board layout.
         </DialogDescription>
       </DialogHeader>
 
@@ -135,6 +142,8 @@ function SettingsDialogContent({
             org={draft.org}
             project={draft.project}
             team={draft.team}
+            githubUsername={draft.githubUsername}
+            githubRepository={draft.githubRepository}
             onChange={handleFieldChange}
           />
         </div>

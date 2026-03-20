@@ -2,6 +2,8 @@
 
 Cerulean is a local Vite + React app for working Azure DevOps items in a drag-and-drop board.
 
+It can also show assigned pull requests from an optional public GitHub repository as read-only review cards.
+
 ## Requirements
 
 - [Bun](https://bun.sh/) installed
@@ -70,11 +72,15 @@ When the app opens, click **Settings** and fill in these sections.
 - **Organization**: your org name, for example `my-org`
 - **Project**: your project name, for example `my-project`
 - **Team**: the Azure DevOps team whose board Cerulean should treat as the source of `New Work`. Required for board-column-based behavior.
+- **GitHub Username**: optional username for public GitHub review cards
+- **GitHub Repository**: optional public repo in `owner/repo` format or full GitHub URL
 
 Notes:
 
 - Organization input can be just the org name or a full Azure DevOps URL.
 - Project input can be the project name or a URL containing the project.
+- GitHub review cards are read-only and do not require credentials for public repositories.
+- Cerulean refreshes the public GitHub source less aggressively than ADO to avoid unauthenticated rate limits.
 - Use **Test Connection** before saving.
 
 ### Board Columns
