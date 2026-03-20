@@ -20,7 +20,12 @@ import { useSettings } from "@/hooks/use-board";
 import { createAdoClient } from "@/api/ado-client";
 import { openAdoPullRequestCreate } from "@/lib/ado-pr-create";
 import { TaskDialog } from "./task-dialog";
-import { isReviewWorkItem, type RelatedPullRequest, type WorkItem } from "@/types/board";
+import {
+  COMPLETED_COLUMN_ID,
+  isReviewWorkItem,
+  type RelatedPullRequest,
+  type WorkItem,
+} from "@/types/board";
 
 interface BoardCardProps {
   workItem: WorkItem;
@@ -173,6 +178,7 @@ export function BoardCard({
   const sortedPullRequests = [...relatedPullRequests].sort(
     (a, b) => Number(isPullRequestCompleted(a)) - Number(isPullRequestCompleted(b)),
   );
+  const showStatusEditor = columnId !== COMPLETED_COLUMN_ID;
 
   const save = () => {
     const trimmed = value.trim();
@@ -409,26 +415,28 @@ export function BoardCard({
               })}
             </ul>
           )}
-          <div className="flex items-center gap-2">
-            <textarea
-              ref={statusRef}
-              rows={1}
-              wrap="soft"
-              value={value}
-              placeholder="Set status..."
-              onChange={(e) => setValue(e.target.value)}
-              onBlur={save}
-              onKeyDown={(e) => {
-                e.stopPropagation();
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  e.currentTarget.blur();
-                }
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="w-full resize-none overflow-hidden text-xs text-muted-foreground bg-transparent border-0 outline-none focus:ring-1 focus:ring-ring rounded px-1 py-0.5 leading-snug placeholder:text-muted-foreground/40"
-            />
-          </div>
+          {showStatusEditor && (
+            <div className="flex items-center gap-2">
+              <textarea
+                ref={statusRef}
+                rows={1}
+                wrap="soft"
+                value={value}
+                placeholder="Set status..."
+                onChange={(e) => setValue(e.target.value)}
+                onBlur={save}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    e.currentTarget.blur();
+                  }
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="w-full resize-none overflow-hidden text-xs text-muted-foreground bg-transparent border-0 outline-none focus:ring-1 focus:ring-ring rounded px-1 py-0.5 leading-snug placeholder:text-muted-foreground/40"
+              />
+            </div>
+          )}
         </div>
       </div>
       {isCustomTask && (

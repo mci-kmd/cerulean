@@ -6,7 +6,7 @@ import { setDndRenderSettledResolver } from "@/lib/schedule-dnd-mutation";
 import { BoardCard } from "./board-card";
 import { createWorkItem } from "@/test/fixtures/work-items";
 import { createAssignment } from "@/test/fixtures/columns";
-import { DEFAULT_SETTINGS, type WorkItem } from "@/types/board";
+import { COMPLETED_COLUMN_ID, DEFAULT_SETTINGS, type WorkItem } from "@/types/board";
 
 const openAdoPullRequestCreateMock = vi.hoisted(() => vi.fn());
 
@@ -247,6 +247,16 @@ describe("BoardCard create PR button", () => {
 });
 
 describe("BoardCard status message", () => {
+  it("hides the status editor in the completed column", () => {
+    renderCard({
+      columnId: COMPLETED_COLUMN_ID,
+      statusMessage: "Done",
+    });
+
+    expect(screen.queryByPlaceholderText("Set status...")).toBeNull();
+    expect(screen.queryByDisplayValue("Done")).toBeNull();
+  });
+
   it("renders placeholder when no status", () => {
     renderCard({});
     expect(screen.getByPlaceholderText("Set status...")).toBeInTheDocument();
