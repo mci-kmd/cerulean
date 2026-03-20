@@ -89,6 +89,7 @@ function SettingsDialogContent({
       candidateStatesByType: "",
       areaPath: draft.areaPath,
       workItemTypes: draft.workItemTypes,
+      uiReviewTag: draft.uiReviewTag.trim(),
       pollInterval: draft.pollInterval,
     };
 
@@ -162,6 +163,7 @@ function SettingsDialogContent({
             closedState={draft.closedState}
             areaPath={draft.areaPath}
             workItemTypes={draft.workItemTypes}
+            uiReviewTag={draft.uiReviewTag}
             pollInterval={draft.pollInterval}
             onChange={handleFieldChange}
           />

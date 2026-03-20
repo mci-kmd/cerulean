@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   returnMutate: vi.fn(),
   completeMutate: vi.fn(),
   reviewMutate: vi.fn(),
+  updateTagsMutate: vi.fn(),
   candidateBoardConfig: undefined as
     | {
         boardId: string;
@@ -84,6 +85,20 @@ const mocks = vi.hoisted(() => ({
       status?: string;
       url: string;
     }>;
+  }>,
+  uiReviewWorkItems: [] as Array<{
+    id: number;
+    displayId?: number;
+    title: string;
+    type: string;
+    state: string;
+    rev: number;
+    url: string;
+    kind?: "ui-review";
+    uiReview?: {
+      sourceWorkItemId: number;
+      reviewTag: string;
+    };
   }>,
 }));
 
@@ -172,9 +187,24 @@ vi.mock("@/hooks/use-github-review-work-items", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-ui-review-work-items", () => ({
+  useUiReviewWorkItems: () => ({
+    workItems: mocks.uiReviewWorkItems,
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}));
+
 vi.mock("@/hooks/use-review-pull-request", () => ({
   useReviewPullRequest: () => ({
     mutate: mocks.reviewMutate,
+  }),
+}));
+
+vi.mock("@/hooks/use-update-work-item-tags", () => ({
+  useUpdateWorkItemTags: () => ({
+    mutate: mocks.updateTagsMutate,
   }),
 }));
 
@@ -263,6 +293,23 @@ function createReviewWorkItem(
   };
 }
 
+function createUiReviewWorkItem(id = -801, sourceWorkItemId = 101) {
+  return {
+    id,
+    displayId: sourceWorkItemId,
+    title: "UI review login flow",
+    type: "Task",
+    state: "Active",
+    rev: 1,
+    url: `https://dev.azure.com/test/_workitems/edit/${sourceWorkItemId}`,
+    kind: "ui-review" as const,
+    uiReview: {
+      sourceWorkItemId,
+      reviewTag: "UI Review",
+    },
+  };
+}
+
 function insertSettings(
   collections: ReturnType<typeof renderWithProviders>["collections"],
   overrides: Partial<typeof DEFAULT_SETTINGS> = {},
@@ -289,10 +336,12 @@ describe("App column change behavior", () => {
     mocks.returnMutate.mockReset();
     mocks.completeMutate.mockReset();
     mocks.reviewMutate.mockReset();
+    mocks.updateTagsMutate.mockReset();
     mocks.candidateBoardConfig = createBoardConfig();
     mocks.workItems = [createWorkItem()];
     mocks.reviewWorkItems = [];
     mocks.githubReviewWorkItems = [];
+    mocks.uiReviewWorkItems = [];
   });
 
   it("starts work when dragging from New Work into the configured source board column", async () => {
@@ -501,6 +550,68 @@ describe("App column change behavior", () => {
       mocks.boardOnColumnChange?.(101, "col-1", "col-2");
     });
 
+    expect(mocks.startMutate).not.toHaveBeenCalled();
+    expect(mocks.returnMutate).not.toHaveBeenCalled();
+    expect(mocks.completeMutate).not.toHaveBeenCalled();
+  });
+
+  it("adds the UI tag when moving a ui review item out of New Work", async () => {
+    mocks.workItems = [];
+    mocks.uiReviewWorkItems = [createUiReviewWorkItem()];
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections, { uiReviewTag: "UI Review" });
+      collections.columns.insert({ id: "col-1", name: "In Progress", order: 0 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    act(() => {
+      mocks.boardOnColumnChange?.(-801, NEW_WORK_COLUMN_ID, "col-1");
+    });
+
+    expect(mocks.updateTagsMutate).toHaveBeenCalledWith(
+      {
+        workItemId: 101,
+        addTags: ["UI"],
+        removeTags: [],
+      },
+      expect.objectContaining({
+        onError: expect.any(Function),
+      }),
+    );
+    expect(mocks.startMutate).not.toHaveBeenCalled();
+    expect(mocks.returnMutate).not.toHaveBeenCalled();
+    expect(mocks.completeMutate).not.toHaveBeenCalled();
+  });
+
+  it("removes the review tag when moving a ui review item to Completed", async () => {
+    mocks.workItems = [];
+    mocks.uiReviewWorkItems = [createUiReviewWorkItem()];
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections, { uiReviewTag: "UI Review" });
+      collections.columns.insert({ id: "col-1", name: "In Progress", order: 0 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    act(() => {
+      mocks.boardOnColumnChange?.(-801, NEW_WORK_COLUMN_ID, COMPLETED_COLUMN_ID);
+    });
+
+    expect(mocks.updateTagsMutate).toHaveBeenCalledWith(
+      {
+        workItemId: 101,
+        addTags: ["UI"],
+        removeTags: ["UI Review"],
+      },
+      expect.objectContaining({
+        onError: expect.any(Function),
+      }),
+    );
     expect(mocks.startMutate).not.toHaveBeenCalled();
     expect(mocks.returnMutate).not.toHaveBeenCalled();
     expect(mocks.completeMutate).not.toHaveBeenCalled();

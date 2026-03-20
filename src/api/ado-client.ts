@@ -13,6 +13,12 @@ import type {
   AdoWorkItem,
   WiqlResponse,
 } from "@/types/ado";
+import {
+  addAdoTags,
+  parseAdoTags,
+  removeAdoTags,
+  stringifyAdoTags,
+} from "@/lib/ado-tags";
 
 export class WorkItemAlreadyAssignedError extends Error {
   constructor(
@@ -57,6 +63,11 @@ export interface AdoClient {
     targetBoardColumnName?: string,
     targetBoardDoneField?: string,
     targetBoardDoneValue?: boolean,
+  ): Promise<AdoWorkItem>;
+  updateWorkItemTags(
+    id: number,
+    addTags?: string[],
+    removeTags?: string[],
   ): Promise<AdoWorkItem>;
   startWorkItem(
     id: number,
@@ -698,6 +709,41 @@ export class HttpAdoClient implements AdoClient {
     );
     if (!res.ok) throw new Error(`Update work item state failed: ${res.status}`);
     return this.readJson<AdoWorkItem>(res, "Update work item state");
+  }
+
+  async updateWorkItemTags(
+    id: number,
+    addTags: string[] = [],
+    removeTags: string[] = [],
+  ): Promise<AdoWorkItem> {
+    const [current] = await this.batchGetWorkItems([id], [
+      "System.Id",
+      "System.Tags",
+    ]);
+    if (!current) {
+      throw new Error(`Work item ${id} not found`);
+    }
+
+    const nextTags = removeAdoTags(
+      addAdoTags(parseAdoTags(current.fields["System.Tags"]), addTags),
+      removeTags,
+    );
+    const res = await fetch(
+      `${this.baseUrl}/_apis/wit/workitems/${id}?api-version=7.1`,
+      {
+        method: "PATCH",
+        headers: this.patchHeaders(),
+        body: JSON.stringify([
+          {
+            op: "add",
+            path: "/fields/System.Tags",
+            value: stringifyAdoTags(nextTags),
+          },
+        ]),
+      },
+    );
+    if (!res.ok) throw new Error(`Update work item tags failed: ${res.status}`);
+    return this.readJson<AdoWorkItem>(res, "Update work item tags");
   }
 
   private async getMyEmail(): Promise<string> {

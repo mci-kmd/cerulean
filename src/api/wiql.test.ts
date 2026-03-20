@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildWiqlQuery,
   buildCompletedWiqlQuery,
+  buildTagWiqlQuery,
   buildCandidateWiqlQuery,
   buildCandidateBoardWiqlQuery,
   buildBoardColumnWiqlQuery,
@@ -87,6 +88,27 @@ describe("buildCompletedWiqlQuery", () => {
   it("adds work item type filter", () => {
     const q = buildCompletedWiqlQuery("Resolved", "", "Bug, Task");
     expect(q).toContain("[System.WorkItemType] IN ('Bug', 'Task')");
+  });
+});
+
+describe("buildTagWiqlQuery", () => {
+  it("filters by tag without assignment constraints", () => {
+    const q = buildTagWiqlQuery("UI Review");
+    expect(q).toContain("[System.Tags] CONTAINS 'UI Review'");
+    expect(q).toContain("[System.State] <> 'Removed'");
+    expect(q).not.toContain("[System.AssignedTo]");
+    expect(q).toContain("ORDER BY [System.CreatedDate] DESC");
+  });
+
+  it("adds area path and work item type filters", () => {
+    const q = buildTagWiqlQuery("UI Review", "Project\\Team", "Bug, User Story");
+    expect(q).toContain("[System.AreaPath] UNDER 'Project\\Team'");
+    expect(q).toContain("[System.WorkItemType] IN ('Bug', 'User Story')");
+  });
+
+  it("escapes single quotes in tags", () => {
+    const q = buildTagWiqlQuery("Team's UI");
+    expect(q).toContain("'Team''s UI'");
   });
 });
 

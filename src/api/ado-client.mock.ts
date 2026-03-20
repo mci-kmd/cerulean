@@ -13,6 +13,12 @@ import type {
   AdoWorkItem,
   WiqlResponse,
 } from "@/types/ado";
+import {
+  addAdoTags,
+  parseAdoTags,
+  removeAdoTags,
+  stringifyAdoTags,
+} from "@/lib/ado-tags";
 
 export class MockAdoClient implements AdoClient {
   public wiqlResult: WiqlResponse = { workItems: [] };
@@ -249,6 +255,35 @@ export class MockAdoClient implements AdoClient {
           : {}),
       },
     };
+  }
+
+  async updateWorkItemTags(
+    id: number,
+    addTags: string[] = [],
+    removeTags: string[] = [],
+  ): Promise<import("@/types/ado").AdoWorkItem> {
+    this.callLog.push({
+      method: "updateWorkItemTags",
+      args: [id, addTags, removeTags],
+    });
+    if (this.shouldFail) throw new Error("Mock update tags error");
+    const index = this.workItems.findIndex((workItem) => workItem.id === id);
+    if (index < 0) throw new Error(`Work item ${id} not found`);
+
+    const item = this.workItems[index];
+    const nextTags = removeAdoTags(
+      addAdoTags(parseAdoTags(item.fields["System.Tags"]), addTags),
+      removeTags,
+    );
+    const nextItem = {
+      ...item,
+      fields: {
+        ...item.fields,
+        "System.Tags": stringifyAdoTags(nextTags),
+      },
+    };
+    this.workItems[index] = nextItem;
+    return nextItem;
   }
 
   async startWorkItem(

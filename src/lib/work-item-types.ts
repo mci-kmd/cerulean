@@ -1,4 +1,12 @@
-import { Bug, BookOpen, ClipboardList, CircleDot, GitPullRequest, type LucideIcon } from "lucide-react";
+import {
+  Bug,
+  BookOpen,
+  ClipboardList,
+  CircleDot,
+  Eye,
+  GitPullRequest,
+  type LucideIcon,
+} from "lucide-react";
 
 export interface TypeStyle {
   border: string;
@@ -32,6 +40,14 @@ const TASK_STYLE: TypeStyle = {
   stripe: "rgba(251, 191, 36, 0.16)",
 };
 
+export const UI_REVIEW_STYLE: TypeStyle = {
+  border: "border-l-teal-400",
+  bg: "bg-teal-50",
+  text: "text-teal-600",
+  badge: "bg-teal-50 text-teal-700 border-teal-200",
+  stripe: "rgba(45, 212, 191, 0.16)",
+};
+
 const FALLBACK_STYLE: TypeStyle = {
   border: "border-l-slate-300",
   bg: "bg-slate-50",
@@ -63,3 +79,4 @@ export function getTypeIcon(type: string): LucideIcon {
 }
 
 export const CUSTOM_TASK_TYPE = "Task";
+export const UI_REVIEW_ICON = Eye;

@@ -16,6 +16,7 @@ vi.mock("@/lib/ado-pr-create", () => ({
 
 function renderCard(props: {
   statusMessage?: string;
+  mockupUrl?: string;
   assignmentId?: string;
   columnId?: string;
   workItemOverrides?: Partial<WorkItem>;
@@ -25,6 +26,7 @@ function renderCard(props: {
     id: props.assignmentId ?? "asgn-1",
     workItemId: workItem.id,
     statusMessage: props.statusMessage,
+    mockupUrl: props.mockupUrl,
   });
 
   const result = renderWithProviders(
@@ -32,6 +34,7 @@ function renderCard(props: {
       workItem={workItem}
       assignmentId={assignment.id}
       statusMessage={assignment.statusMessage}
+      mockupUrl={assignment.mockupUrl}
       index={0}
       columnId={props.columnId ?? "col-todo"}
     />,
@@ -127,6 +130,193 @@ describe("BoardCard custom task", () => {
     const titleBtn = screen.getByRole("button", { name: "Custom Task" });
     expect(titleBtn).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Custom Task" })).toBeNull();
+  });
+});
+
+describe("BoardCard UI review task", () => {
+  it("renders a linked title without task-edit or ADO controls", async () => {
+    const { collections } = renderCard({
+      workItemOverrides: {
+        id: -1200,
+        displayId: 42,
+        title: "UI review login flow",
+        type: "Task",
+        url: "https://dev.azure.com/test-org/test-project/_workitems/edit/42",
+        kind: "ui-review",
+        uiReview: {
+          sourceWorkItemId: 42,
+          reviewTag: "UI Review",
+        },
+      },
+    });
+    insertAdoSettings(collections);
+
+    expect(
+      screen.getByRole("link", { name: "UI review login flow" }),
+    ).toHaveAttribute(
+      "href",
+      "https://dev.azure.com/test-org/test-project/_workitems/edit/42",
+    );
+    expect(screen.queryByRole("button", { name: "Edit task" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy ID 42" })).toBeNull();
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", {
+          name: "Create pull request for work item 42",
+        }),
+      ).toBeNull();
+    });
+  });
+
+  it("keeps the neutral background but uses teal accent styling and a review icon", () => {
+    renderCard({
+      workItemOverrides: {
+        id: -1200,
+        displayId: 42,
+        title: "UI review login flow",
+        type: "Task",
+        url: "https://dev.azure.com/test-org/test-project/_workitems/edit/42",
+        kind: "ui-review",
+        uiReview: {
+          sourceWorkItemId: 42,
+          reviewTag: "UI Review",
+        },
+      },
+    });
+
+    const card = getRenderedCardRoot();
+    const surface = getRenderedCardSurface();
+    expect(surface).toHaveClass("bg-card");
+    expect(surface).toHaveClass("border-l-teal-400");
+    expect(surface).not.toHaveClass("bg-amber-50");
+    expect(card.querySelector(".lucide-eye")).not.toBeNull();
+    expect(card.querySelector(".lucide-clipboard-list")).toBeNull();
+  });
+
+  it("renders a clickable mockup URL with a trailing hover-only pencil button", () => {
+    renderCard({
+      mockupUrl: "https://www.figma.com/file/mockup-123",
+      workItemOverrides: {
+        id: -1200,
+        displayId: 42,
+        title: "UI review login flow",
+        type: "Task",
+        url: "https://dev.azure.com/test-org/test-project/_workitems/edit/42",
+        kind: "ui-review",
+        uiReview: {
+          sourceWorkItemId: 42,
+          reviewTag: "UI Review",
+        },
+      },
+    });
+
+    const mockupLink = screen.getByRole("link", {
+      name: "https://www.figma.com/file/mockup-123",
+    });
+    const editButton = screen.getByRole("button", { name: "Edit mockup URL" });
+
+    expect(mockupLink).toHaveAttribute("href", "https://www.figma.com/file/mockup-123");
+    expect(editButton.compareDocumentPosition(mockupLink) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    expect(editButton).toHaveClass("opacity-0");
+    expect(editButton).toHaveClass("group-hover/mockup:opacity-100");
+    expect(editButton).toHaveClass("group-focus-within/mockup:opacity-100");
+  });
+
+  it("opens a mockup URL editor from the pencil button and saves on blur", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderCard({
+      assignmentId: "asgn-mockup-save",
+      workItemOverrides: {
+        id: -1200,
+        displayId: 42,
+        title: "UI review login flow",
+        type: "Task",
+        url: "https://dev.azure.com/test-org/test-project/_workitems/edit/42",
+        kind: "ui-review",
+        uiReview: {
+          sourceWorkItemId: 42,
+          reviewTag: "UI Review",
+        },
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Set mockup URL" }));
+    const input = screen.getByPlaceholderText("Set mockup URL...");
+    await user.type(input, "https://www.figma.com/file/mockup-save");
+    await user.tab();
+
+    await waitFor(() => {
+      expect(collections.assignments.get("asgn-mockup-save")?.mockupUrl).toBe(
+        "https://www.figma.com/file/mockup-save",
+      );
+    });
+    expect(
+      screen.getByRole("link", { name: "https://www.figma.com/file/mockup-save" }),
+    ).toBeInTheDocument();
+  });
+
+  it("trims and clears the mockup URL like status messages do", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderCard({
+      assignmentId: "asgn-mockup-clear",
+      mockupUrl: "https://www.figma.com/file/original",
+      workItemOverrides: {
+        id: -1200,
+        displayId: 42,
+        title: "UI review login flow",
+        type: "Task",
+        url: "https://dev.azure.com/test-org/test-project/_workitems/edit/42",
+        kind: "ui-review",
+        uiReview: {
+          sourceWorkItemId: 42,
+          reviewTag: "UI Review",
+        },
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Edit mockup URL" }));
+    const input = screen.getByDisplayValue("https://www.figma.com/file/original");
+    await user.clear(input);
+    await user.type(input, "  https://www.figma.com/file/trimmed  ");
+    await user.tab();
+
+    await waitFor(() => {
+      expect(collections.assignments.get("asgn-mockup-clear")?.mockupUrl).toBe(
+        "https://www.figma.com/file/trimmed",
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: "Edit mockup URL" }));
+    await user.clear(screen.getByDisplayValue("https://www.figma.com/file/trimmed"));
+    await user.tab();
+
+    await waitFor(() => {
+      expect(collections.assignments.get("asgn-mockup-clear")?.mockupUrl).toBeUndefined();
+    });
+    expect(screen.getByRole("button", { name: "Set mockup URL" })).toBeInTheDocument();
+  });
+
+  it("hides the mockup URL editor in the completed column", () => {
+    renderCard({
+      columnId: COMPLETED_COLUMN_ID,
+      mockupUrl: "https://www.figma.com/file/mockup-123",
+      workItemOverrides: {
+        id: -1200,
+        displayId: 42,
+        title: "UI review login flow",
+        type: "Task",
+        url: "https://dev.azure.com/test-org/test-project/_workitems/edit/42",
+        kind: "ui-review",
+        uiReview: {
+          sourceWorkItemId: 42,
+          reviewTag: "UI Review",
+        },
+      },
+    });
+
+    expect(screen.queryByRole("button", { name: "Edit mockup URL" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Set mockup URL" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "https://www.figma.com/file/mockup-123" })).toBeNull();
   });
 });
 

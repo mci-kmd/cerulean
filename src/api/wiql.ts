@@ -87,6 +87,15 @@ export function buildCompletedWiqlQuery(approvalState: string, areaPath?: string
   return `SELECT [System.Id] FROM WorkItems WHERE [System.State] = '${escaped}'${REMOVED_STATE_CLAUSE} AND [System.AssignedTo] = @Me${areaClause(areaPath)}${typesClause(workItemTypes)}`;
 }
 
+export function buildTagWiqlQuery(
+  tag: string,
+  areaPath?: string,
+  workItemTypes?: string,
+): string {
+  const escaped = tag.replace(/'/g, "''");
+  return `SELECT [System.Id] FROM WorkItems WHERE [System.Tags] CONTAINS '${escaped}'${REMOVED_STATE_CLAUSE}${areaClause(areaPath)}${typesClause(workItemTypes)} ORDER BY [System.CreatedDate] DESC`;
+}
+
 export function buildCandidateWiqlQuery(
   candidateState: string,
   areaPath?: string,

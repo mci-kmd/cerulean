@@ -8,6 +8,7 @@ interface SourceStateInputProps {
   closedState: string;
   areaPath: string;
   workItemTypes: string;
+  uiReviewTag: string;
   pollInterval: number;
   onChange: (field: string, value: string | number) => void;
 }
@@ -19,6 +20,7 @@ export function SourceStateInput({
   closedState,
   areaPath,
   workItemTypes,
+  uiReviewTag,
   pollInterval,
   onChange,
 }: SourceStateInputProps) {
@@ -102,6 +104,18 @@ export function SourceStateInput({
         />
         <p className="text-xs text-muted-foreground">
           Comma-separated types to include (e.g. Bug, Task, User Story). Leave empty for all types.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="uiReviewTag">UI review tag</Label>
+        <Input
+          id="uiReviewTag"
+          value={uiReviewTag}
+          onChange={(e) => onChange("uiReviewTag", e.target.value)}
+          placeholder="UI Review"
+        />
+        <p className="text-xs text-muted-foreground">
+          Optional. Matching work items show up as yellow virtual UI review cards in New Work.
         </p>
       </div>
       <div className="space-y-2">

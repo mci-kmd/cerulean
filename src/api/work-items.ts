@@ -10,9 +10,12 @@ import type {
 } from "@/types/ado";
 import type { RelatedPullRequest, WorkItem } from "@/types/board";
 import { createSyntheticNegativeId } from "@/lib/create-synthetic-id";
+import { CUSTOM_TASK_TYPE } from "@/lib/work-item-types";
+import { hasAdoTag, parseAdoTags } from "@/lib/ado-tags";
 import {
   buildWiqlQuery,
   buildCompletedWiqlQuery,
+  buildTagWiqlQuery,
   buildCandidateWiqlQuery,
   buildCandidateBoardWiqlQuery,
   buildBoardColumnWiqlQuery,
@@ -127,6 +130,7 @@ const WORK_ITEM_DETAIL_FIELDS = [
   "System.Title",
   "System.WorkItemType",
   "System.State",
+  "System.Tags",
   "System.AreaPath",
   "System.AssignedTo",
   "System.Rev",
@@ -171,6 +175,42 @@ export function mapAdoWorkItem(
       item._links?.html?.href ??
       `https://dev.azure.com/${org}/${project}/_workitems/edit/${item.id}`,
     ...(relatedPullRequests.length > 0 ? { relatedPullRequests } : {}),
+  };
+}
+
+function createUiReviewWorkItemId(workItemId: number): number {
+  return createSyntheticNegativeId(`ui-review:${workItemId}`);
+}
+
+function mapUiReviewWorkItem(
+  item: AdoWorkItem,
+  org: string,
+  project: string,
+  reviewTag: string,
+): WorkItem | null {
+  const mapped = mapAdoWorkItem(item, org, project);
+  if (isRemovedState(mapped.state)) {
+    return null;
+  }
+
+  const tags = parseAdoTags(item.fields["System.Tags"]);
+  if (!hasAdoTag(tags, reviewTag)) {
+    return null;
+  }
+
+  return {
+    id: createUiReviewWorkItemId(mapped.id),
+    displayId: mapped.id,
+    title: mapped.title,
+    type: CUSTOM_TASK_TYPE,
+    state: mapped.state,
+    rev: mapped.rev,
+    url: mapped.url,
+    kind: "ui-review",
+    uiReview: {
+      sourceWorkItemId: mapped.id,
+      reviewTag,
+    },
   };
 }
 
@@ -1016,6 +1056,33 @@ export async function fetchCompletedWorkItems(
     adoItems.map((i) => mapAdoWorkItem(i, org, project, boardConfig)),
   );
   return enrichPullRequestDetails(client, mappedItems);
+}
+
+export async function fetchUiReviewWorkItems(
+  client: AdoClient,
+  org: string,
+  project: string,
+  reviewTag: string,
+  areaPath?: string,
+  workItemTypes?: string,
+): Promise<WorkItem[]> {
+  const normalizedReviewTag = reviewTag.trim();
+  if (!normalizedReviewTag) {
+    return [];
+  }
+
+  const wiql = buildTagWiqlQuery(normalizedReviewTag, areaPath, workItemTypes);
+  const wiqlResult = await client.queryWorkItems(wiql);
+  const ids = wiqlResult.workItems.map((workItem) => workItem.id);
+
+  if (ids.length === 0) {
+    return [];
+  }
+
+  const adoItems = await client.batchGetWorkItems(ids, getWorkItemDetailFields());
+  return adoItems
+    .map((item) => mapUiReviewWorkItem(item, org, project, normalizedReviewTag))
+    .filter((item): item is WorkItem => item !== null);
 }
 
 const CANDIDATE_CAP = 50;

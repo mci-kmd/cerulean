@@ -4,6 +4,7 @@ import {
   fetchWorkItemsInitial,
   fetchWorkItemsDelta,
   fetchCompletedWorkItems,
+  fetchUiReviewWorkItems,
   fetchCandidateWorkItems,
   fetchReviewWorkItems,
 } from "./work-items";
@@ -822,6 +823,75 @@ describe("fetchWorkItemsInitial", () => {
     expect(
       client.callLog.filter((call) => call.method === "getPullRequest"),
     ).toHaveLength(1);
+  });
+});
+
+describe("fetchUiReviewWorkItems", () => {
+  it("maps tagged work items into virtual ui review tasks", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = {
+      workItems: [{ id: 51, url: "" }, { id: 52, url: "" }, { id: 53, url: "" }],
+    };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 51,
+        fields: {
+          "System.Id": 51,
+          "System.Title": "Review the login polish",
+          "System.WorkItemType": "Bug",
+          "System.State": "Active",
+          "System.Rev": 2,
+          "System.Tags": "Backend; UI Review",
+        },
+      }),
+      createAdoWorkItem({
+        id: 52,
+        fields: {
+          "System.Id": 52,
+          "System.Title": "Substring only",
+          "System.WorkItemType": "Bug",
+          "System.State": "Active",
+          "System.Rev": 1,
+          "System.Tags": "UI Reviewer",
+        },
+      }),
+      createAdoWorkItem({
+        id: 53,
+        fields: {
+          "System.Id": 53,
+          "System.Title": "Removed item",
+          "System.WorkItemType": "Bug",
+          "System.State": "Removed",
+          "System.Rev": 1,
+          "System.Tags": "UI Review",
+        },
+      }),
+    ];
+
+    const result = await fetchUiReviewWorkItems(
+      client,
+      "org",
+      "proj",
+      "UI Review",
+      "Area\\Team",
+      "Bug",
+    );
+
+    expect(client.callLog[0]?.args[0]).toContain("[System.Tags] CONTAINS 'UI Review'");
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      displayId: 51,
+      title: "Review the login polish",
+      type: "Task",
+      kind: "ui-review",
+      uiReview: {
+        sourceWorkItemId: 51,
+        reviewTag: "UI Review",
+      },
+    });
+    expect(result[0]?.id).toBeLessThan(0);
+    expect(result[0]?.url).toBe("https://dev.azure.com/test-org/test-project/_workitems/edit/51");
+    expect(result[0]?.relatedPullRequests).toBeUndefined();
   });
 });
 

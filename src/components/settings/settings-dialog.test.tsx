@@ -18,6 +18,7 @@ describe("SettingsDialog", () => {
     expect(screen.getByLabelText("Team")).toBeInTheDocument();
     expect(screen.getByLabelText("GitHub Username")).toBeInTheDocument();
     expect(screen.getByLabelText("GitHub Repository")).toBeInTheDocument();
+    expect(screen.getByLabelText("UI review tag")).toBeInTheDocument();
     expect(screen.getAllByText(/Code \(Read & write\)/i).length).toBeGreaterThan(0);
   });
 
@@ -150,6 +151,19 @@ describe("SettingsDialog", () => {
 
     const settings = collections.settings.get("settings");
     expect(settings?.areaPath).toBe("MyProject\\MyTeam");
+  });
+
+  it("saves UI review tag to collection", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderWithProviders(
+      <SettingsDialog open={true} onOpenChange={() => {}} />,
+    );
+
+    await user.type(screen.getByLabelText("UI review tag"), "  UI Review  ");
+    await user.click(screen.getByText("Save"));
+
+    const settings = collections.settings.get("settings");
+    expect(settings?.uiReviewTag).toBe("UI Review");
   });
 
   it("clears legacy state query fields on save", async () => {

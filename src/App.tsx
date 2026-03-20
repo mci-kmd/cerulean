@@ -22,7 +22,9 @@ import { useStartWork } from "@/hooks/use-start-work";
 import { useReturnToCandidate } from "@/hooks/use-return-to-candidate";
 import { useReviewWorkItems } from "@/hooks/use-review-work-items";
 import { useGithubReviewWorkItems } from "@/hooks/use-github-review-work-items";
+import { useUiReviewWorkItems } from "@/hooks/use-ui-review-work-items";
 import { useReviewPullRequest } from "@/hooks/use-review-pull-request";
+import { useUpdateWorkItemTags } from "@/hooks/use-update-work-item-tags";
 import { createAdoClient, type AdoClient } from "@/api/ado-client";
 import { isReconcileReady } from "@/logic/reconcile-readiness";
 import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
@@ -33,7 +35,7 @@ import {
   isBoardColumnSplit,
   type CandidateBoardConfig,
 } from "@/lib/ado-board";
-import { isReviewWorkItem } from "@/types/board";
+import { isReviewWorkItem, isUiReviewWorkItem } from "@/types/board";
 
 function getTargetBoardColumnUpdate(
   boardConfig: CandidateBoardConfig | undefined,
@@ -157,11 +159,26 @@ export function App() {
     settings?.githubRepository ?? "",
     settings?.pollInterval ?? 30,
   );
+  const {
+    workItems: uiReviewWorkItems,
+    isLoading: isLoadingUiReviewWorkItems,
+    error: uiReviewWorkItemsError,
+    refetch: refetchUiReviewWorkItems,
+  } = useUiReviewWorkItems(
+    client,
+    settings?.org ?? "",
+    settings?.project ?? "",
+    settings?.pollInterval ?? 30,
+    settings?.uiReviewTag,
+    settings?.areaPath,
+    settings?.workItemTypes,
+  );
 
   const completeWorkItem = useCompleteWorkItem(client);
   const returnToCandidate = useReturnToCandidate(client);
   const startWork = useStartWork(client);
   const reviewPullRequest = useReviewPullRequest(client);
+  const updateWorkItemTags = useUpdateWorkItemTags(client);
   const canLoadCandidates =
     canResolveCandidateBoard;
   const { candidates, isLoading: isLoadingCandidates } = useCandidates(
@@ -188,8 +205,16 @@ export function App() {
       ...customWorkItems,
       ...reviewWorkItems,
       ...githubReviewWorkItems,
+      ...uiReviewWorkItems,
     ],
-    [adoWorkItems, completedAdoItems, customWorkItems, reviewWorkItems, githubReviewWorkItems],
+    [
+      adoWorkItems,
+      completedAdoItems,
+      customWorkItems,
+      reviewWorkItems,
+      githubReviewWorkItems,
+      uiReviewWorkItems,
+    ],
   );
   const boardWorkItems = useMemo(() => {
     const merged = new Map<number, (typeof workItems)[number]>();
@@ -213,8 +238,9 @@ export function App() {
         ...candidates.map((candidate) => candidate.id),
         ...reviewNewWorkIds,
         ...githubReviewPlacement.candidateIds,
+        ...uiReviewWorkItems.map((item) => item.id),
       ]),
-    [candidates, githubReviewPlacement, reviewNewWorkIds],
+    [candidates, githubReviewPlacement, reviewNewWorkIds, uiReviewWorkItems],
   );
   const completedIds = useMemo(
     () =>
@@ -317,6 +343,13 @@ export function App() {
     toast.error("Failed to fetch GitHub review pull requests", {
       description: githubReviewWorkItemsError.message,
       id: "github-review-fetch-error",
+    });
+  }
+
+  if (uiReviewWorkItemsError) {
+    toast.error("Failed to fetch UI review items", {
+      description: uiReviewWorkItemsError.message,
+      id: "ui-review-fetch-error",
     });
   }
 
@@ -452,6 +485,31 @@ export function App() {
       return;
     }
 
+    if (isUiReviewWorkItem(boardWorkItem)) {
+      const addTags = movingFromNewWork ? ["UI"] : [];
+      const removeTags = movingToCompleted ? [boardWorkItem.uiReview.reviewTag] : [];
+
+      if (addTags.length === 0 && removeTags.length === 0) {
+        return;
+      }
+
+      updateWorkItemTags.mutate(
+        {
+          workItemId: boardWorkItem.uiReview.sourceWorkItemId,
+          addTags,
+          removeTags,
+        },
+        {
+          onError: (err) =>
+            toast.error("Failed to update work item tags", {
+              description: err.message,
+              id: `ui-review-tags-error-${boardWorkItem.uiReview.sourceWorkItemId}`,
+            }),
+        },
+      );
+      return;
+    }
+
     const customTask = collections.customTasks.toArray.find(
       (t) => t.workItemId === workItemId,
     );
@@ -577,8 +635,14 @@ export function App() {
           onRefresh={() => {
             void refetch();
             void refetchGithubReviewWorkItems();
+            void refetchUiReviewWorkItems();
           }}
-          isRefreshing={isLoading || isLoadingReviewWorkItems || isLoadingGithubReviewWorkItems}
+          isRefreshing={
+            isLoading ||
+            isLoadingReviewWorkItems ||
+            isLoadingGithubReviewWorkItems ||
+            isLoadingUiReviewWorkItems
+          }
           lastUpdated={dataUpdatedAt}
           hasError={!!error}
           demoMode={demoMode}
@@ -595,8 +659,12 @@ export function App() {
             org={settings.org}
             project={settings.project}
           />
-        ) : (isLoading || isLoadingReviewWorkItems || isLoadingGithubReviewWorkItems) &&
-          workItems.length === 0 ? (
+        ) : (
+          isLoading ||
+          isLoadingReviewWorkItems ||
+          isLoadingGithubReviewWorkItems ||
+          isLoadingUiReviewWorkItems
+        ) && workItems.length === 0 ? (
           <BoardSkeleton columnCount={columns.length} />
         ) : (
           <Board

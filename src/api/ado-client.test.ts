@@ -589,6 +589,48 @@ describe("HttpAdoClient", () => {
     ]);
   });
 
+  it("updates work item tags from the latest server value", async () => {
+    let capturedBody: unknown = null;
+    server.use(
+      http.post(`${BASE}/_apis/wit/workitemsbatch`, () => {
+        return HttpResponse.json({
+          count: 1,
+          value: [{
+            id: 42,
+            rev: 1,
+            fields: {
+              "System.Id": 42,
+              "System.State": "Active",
+              "System.Rev": 1,
+              "System.Tags": "Existing; UI Review",
+            },
+            url: `${BASE}/_apis/wit/workItems/42`,
+          }],
+        });
+      }),
+      http.patch(`${BASE}/_apis/wit/workitems/42`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({
+          id: 42,
+          rev: 2,
+          fields: {
+            "System.Id": 42,
+            "System.State": "Active",
+            "System.Tags": "Existing; UI",
+          },
+          url: `${BASE}/_apis/wit/workItems/42`,
+        });
+      }),
+    );
+
+    const result = await client.updateWorkItemTags(42, ["UI"], ["UI Review"]);
+
+    expect(capturedBody).toEqual([
+      { op: "add", path: "/fields/System.Tags", value: "Existing; UI" },
+    ]);
+    expect(result.id).toBe(42);
+  });
+
   describe("startWorkItem", () => {
     it("sends PATCH with state + assignedTo ops", async () => {
       let capturedBody: unknown = null;

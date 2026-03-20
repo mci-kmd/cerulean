@@ -14,7 +14,13 @@ import { toast } from "sonner";
 import { useBoardCollections } from "@/db/use-board-collections";
 import { CopyableId } from "@/components/copyable-id";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { getTypeStyle, getTypeIcon, CUSTOM_TASK_TYPE } from "@/lib/work-item-types";
+import {
+  getTypeStyle,
+  getTypeIcon,
+  CUSTOM_TASK_TYPE,
+  UI_REVIEW_ICON,
+  UI_REVIEW_STYLE,
+} from "@/lib/work-item-types";
 import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
 import { useSettings } from "@/hooks/use-board";
 import { createAdoClient } from "@/api/ado-client";
@@ -23,6 +29,7 @@ import { TaskDialog } from "./task-dialog";
 import {
   COMPLETED_COLUMN_ID,
   isReviewWorkItem,
+  isUiReviewWorkItem,
   type RelatedPullRequest,
   type WorkItem,
 } from "@/types/board";
@@ -31,6 +38,7 @@ interface BoardCardProps {
   workItem: WorkItem;
   assignmentId: string;
   statusMessage?: string;
+  mockupUrl?: string;
   index: number;
   columnId: string;
 }
@@ -143,6 +151,7 @@ export function BoardCard({
   workItem,
   assignmentId,
   statusMessage,
+  mockupUrl,
   index,
   columnId,
 }: BoardCardProps) {
@@ -156,12 +165,17 @@ export function BoardCard({
 
   const { assignments, customTasks } = useBoardCollections();
   const settings = useSettings();
-  const [value, setValue] = useState(statusMessage ?? "");
+  const [statusValue, setStatusValue] = useState(statusMessage ?? "");
+  const [mockupUrlValue, setMockupUrlValue] = useState(mockupUrl ?? "");
   const [editOpen, setEditOpen] = useState(false);
+  const [mockupUrlEditOpen, setMockupUrlEditOpen] = useState(false);
   const statusRef = useRef<HTMLTextAreaElement | null>(null);
+  const mockupUrlRef = useRef<HTMLInputElement | null>(null);
 
   const isReviewCard = isReviewWorkItem(workItem);
+  const isUiReviewCard = isUiReviewWorkItem(workItem);
   const isCustomTask = workItem.type === CUSTOM_TASK_TYPE && !workItem.url;
+  const isTaskLikeCard = isCustomTask || isUiReviewCard;
   const displayId = workItem.displayId ?? workItem.id;
   const relatedPullRequests =
     isReviewCard || workItem.type === "Bug" || workItem.type === "User Story"
@@ -169,7 +183,7 @@ export function BoardCard({
       : [];
   const isGithubReviewCard = isReviewCard && workItem.review.provider === "github";
   const canCreateAdoPullRequest =
-    !isCustomTask &&
+    !isTaskLikeCard &&
     !isGithubReviewCard &&
     !!settings?.pat &&
     !!settings?.org &&
@@ -179,9 +193,11 @@ export function BoardCard({
     (a, b) => Number(isPullRequestCompleted(a)) - Number(isPullRequestCompleted(b)),
   );
   const showStatusEditor = columnId !== COMPLETED_COLUMN_ID;
+  const showMockupUrlEditor = isUiReviewCard && showStatusEditor;
+  const trimmedMockupUrl = mockupUrlValue.trim();
 
-  const save = () => {
-    const trimmed = value.trim();
+  const saveStatus = () => {
+    const trimmed = statusValue.trim();
     if (trimmed !== (statusMessage ?? "")) {
       scheduleDndMutation(() => {
         if (!assignments.get(assignmentId)) return;
@@ -190,6 +206,19 @@ export function BoardCard({
         });
       });
     }
+  };
+
+  const saveMockupUrl = () => {
+    const trimmed = mockupUrlValue.trim();
+    if (trimmed !== (mockupUrl ?? "")) {
+      scheduleDndMutation(() => {
+        if (!assignments.get(assignmentId)) return;
+        assignments.update(assignmentId, (draft) => {
+          draft.mockupUrl = trimmed || undefined;
+        });
+      });
+    }
+    setMockupUrlEditOpen(false);
   };
 
   const handleEditSave = (newTitle: string) => {
@@ -219,15 +248,28 @@ export function BoardCard({
     if (!editor) return;
     editor.style.height = "0px";
     editor.style.height = `${editor.scrollHeight}px`;
-  }, [value]);
+  }, [statusValue]);
 
-  const style = getTypeStyle(workItem.type);
-  const typeIcon = getTypeIcon(workItem.type);
+  useEffect(() => {
+    if (!mockupUrlEditOpen) return;
+    const editor = mockupUrlRef.current;
+    if (!editor) return;
+    editor.focus();
+    editor.select();
+  }, [mockupUrlEditOpen]);
+
+  const style = isUiReviewCard ? UI_REVIEW_STYLE : getTypeStyle(workItem.type);
+  const typeIcon = isUiReviewCard ? UI_REVIEW_ICON : getTypeIcon(workItem.type);
   const reviewSurfaceStyle = isReviewCard
     ? {
         backgroundImage: `repeating-linear-gradient(45deg, transparent 0px, transparent 12px, ${style.stripe} 12px, ${style.stripe} 24px)`,
       }
     : undefined;
+  const surfaceClassName = isReviewCard
+    ? `${style.bg} transition-[filter] group-hover/card:brightness-[0.985]`
+    : isUiReviewCard
+      ? "bg-card transition-[background-color] group-hover/card:bg-accent/30"
+      : "bg-card transition-[background-color] group-hover/card:bg-accent/30";
 
   const handleCreatePullRequest = async (e: React.MouseEvent<HTMLButtonElement>) => {
     e.stopPropagation();
@@ -273,7 +315,7 @@ export function BoardCard({
           data-testid="board-card-surface"
           aria-hidden="true"
           style={reviewSurfaceStyle}
-          className={`pointer-events-none absolute inset-x-0 top-0 -bottom-px rounded-lg border-l-[3px] border border-border shadow-sm ${isReviewCard ? `${style.bg} transition-[filter] group-hover/card:brightness-[0.985]` : "bg-card transition-[background-color] group-hover/card:bg-accent/30"} ${style.border}`}
+          className={`pointer-events-none absolute inset-x-0 top-0 -bottom-px rounded-lg border-l-[3px] border border-border shadow-sm ${surfaceClassName} ${style.border}`}
         />
         <div className="relative z-10 p-3">
           <div className="flex items-center gap-1.5 mb-1.5">
@@ -289,23 +331,23 @@ export function BoardCard({
               </span>
             )}
             <span className="flex-1" />
-             {isCustomTask ? (
-               <button
-                type="button"
-                onClick={(e) => {
+              {isCustomTask ? (
+                <button
+                 type="button"
+                 onClick={(e) => {
                   e.stopPropagation();
                   setEditOpen(true);
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 className="text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover/card:opacity-100"
                  aria-label="Edit task"
-               >
-                 <Pencil className="h-3 w-3" />
-               </button>
-             ) : (
-               <div className="flex items-center gap-1">
-                 {canCreateAdoPullRequest && (
-                   <Tooltip>
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+              ) : isUiReviewCard ? null : (
+                <div className="flex items-center gap-1">
+                  {canCreateAdoPullRequest && (
+                    <Tooltip>
                      <TooltipTrigger asChild>
                        <button
                          type="button"
@@ -415,16 +457,81 @@ export function BoardCard({
               })}
             </ul>
           )}
+          {showMockupUrlEditor && (
+            <div className="group/mockup mb-2 flex items-center gap-2 text-xs text-muted-foreground">
+              {mockupUrlEditOpen ? (
+                <input
+                  ref={mockupUrlRef}
+                  value={mockupUrlValue}
+                  placeholder="Set mockup URL..."
+                  onChange={(e) => setMockupUrlValue(e.target.value)}
+                  onBlur={saveMockupUrl}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="w-full min-w-0 text-xs text-muted-foreground bg-transparent border-0 outline-none focus:ring-1 focus:ring-ring rounded px-1 py-0.5 leading-snug placeholder:text-muted-foreground/40"
+                />
+              ) : trimmedMockupUrl.length > 0 ? (
+                <>
+                  <a
+                    href={trimmedMockupUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={trimmedMockupUrl}
+                    className="min-w-0 flex-1 truncate hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {trimmedMockupUrl}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMockupUrlEditOpen(true);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="shrink-0 text-muted-foreground opacity-0 transition-[color,opacity] hover:text-foreground group-hover/mockup:opacity-100 group-focus-within/mockup:opacity-100 focus-visible:opacity-100"
+                    aria-label="Edit mockup URL"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 px-1 py-0.5 text-muted-foreground/40">
+                    Set mockup URL...
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMockupUrlEditOpen(true);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="shrink-0 text-muted-foreground opacity-0 transition-[color,opacity] hover:text-foreground group-hover/mockup:opacity-100 group-focus-within/mockup:opacity-100 focus-visible:opacity-100"
+                    aria-label="Set mockup URL"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           {showStatusEditor && (
             <div className="flex items-center gap-2">
               <textarea
                 ref={statusRef}
                 rows={1}
                 wrap="soft"
-                value={value}
+                value={statusValue}
                 placeholder="Set status..."
-                onChange={(e) => setValue(e.target.value)}
-                onBlur={save}
+                onChange={(e) => setStatusValue(e.target.value)}
+                onBlur={saveStatus}
                 onKeyDown={(e) => {
                   e.stopPropagation();
                   if (e.key === "Enter" && !e.shiftKey) {

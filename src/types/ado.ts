@@ -40,6 +40,7 @@ export interface AdoWorkItemFields {
   "System.Title": string;
   "System.WorkItemType": string;
   "System.State": string;
+  "System.Tags"?: string;
   "System.AssignedTo"?: {
     displayName: string;
     uniqueName: string;

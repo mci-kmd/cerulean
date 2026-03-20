@@ -16,6 +16,7 @@ export interface AdoSettings {
   candidateStatesByType: string;
   areaPath: string;
   workItemTypes: string;
+  uiReviewTag: string;
   pollInterval: number;
 }
 
@@ -37,6 +38,7 @@ export const DEFAULT_SETTINGS: AdoSettings = {
   candidateStatesByType: "",
   areaPath: "",
   workItemTypes: "",
+  uiReviewTag: "",
   pollInterval: 30,
 };
 
@@ -52,6 +54,7 @@ export interface ColumnAssignment {
   columnId: string;
   position: number;
   statusMessage?: string;
+  mockupUrl?: string;
 }
 
 export interface ReviewWorkItem {
@@ -59,6 +62,11 @@ export interface ReviewWorkItem {
   repositoryId: string;
   pullRequestId: number;
   reviewState: "new" | "active" | "completed";
+}
+
+export interface UiReviewWorkItem {
+  sourceWorkItemId: number;
+  reviewTag: string;
 }
 
 export interface WorkItem {
@@ -70,9 +78,10 @@ export interface WorkItem {
   boardColumnName?: string;
   rev: number;
   url: string;
-  kind?: "ado" | "review";
+  kind?: "ado" | "review" | "ui-review";
   relatedPullRequests?: RelatedPullRequest[];
   review?: ReviewWorkItem;
+  uiReview?: UiReviewWorkItem;
 }
 
 export interface RelatedPullRequest {
@@ -102,6 +111,12 @@ export function isReviewWorkItem(
   workItem: WorkItem | undefined,
 ): workItem is WorkItem & { kind: "review"; review: ReviewWorkItem } {
   return workItem?.kind === "review" && workItem.review !== undefined;
+}
+
+export function isUiReviewWorkItem(
+  workItem: WorkItem | undefined,
+): workItem is WorkItem & { kind: "ui-review"; uiReview: UiReviewWorkItem } {
+  return workItem?.kind === "ui-review" && workItem.uiReview !== undefined;
 }
 
 export { COMPLETED_COLUMN_ID, NEW_WORK_COLUMN_ID } from "../constants/board-columns";
