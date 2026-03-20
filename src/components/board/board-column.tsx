@@ -65,6 +65,7 @@ export function BoardColumn({ id, name, items, onAddTask, variant = "default" }:
               assignmentId={item.assignment.id}
               statusMessage={item.assignment.statusMessage}
               mockupUrl={item.assignment.mockupUrl}
+              discussionUrl={item.assignment.discussionUrl}
               index={index}
               columnId={id}
             />

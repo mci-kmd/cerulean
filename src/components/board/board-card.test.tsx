@@ -17,6 +17,7 @@ vi.mock("@/lib/ado-pr-create", () => ({
 function renderCard(props: {
   statusMessage?: string;
   mockupUrl?: string;
+  discussionUrl?: string;
   assignmentId?: string;
   columnId?: string;
   workItemOverrides?: Partial<WorkItem>;
@@ -27,6 +28,7 @@ function renderCard(props: {
     workItemId: workItem.id,
     statusMessage: props.statusMessage,
     mockupUrl: props.mockupUrl,
+    discussionUrl: props.discussionUrl,
   });
 
   const result = renderWithProviders(
@@ -35,6 +37,7 @@ function renderCard(props: {
       assignmentId={assignment.id}
       statusMessage={assignment.statusMessage}
       mockupUrl={assignment.mockupUrl}
+      discussionUrl={assignment.discussionUrl}
       index={0}
       columnId={props.columnId ?? "col-todo"}
     />,
@@ -193,9 +196,10 @@ describe("BoardCard UI review task", () => {
     expect(card.querySelector(".lucide-clipboard-list")).toBeNull();
   });
 
-  it("renders a clickable mockup URL with a trailing hover-only pencil button", () => {
+  it("renders labeled mockup and discussion links with hover-only pencil buttons", () => {
     renderCard({
       mockupUrl: "https://www.figma.com/file/mockup-123",
+      discussionUrl: "https://github.com/test-org/test-repo/pull/42",
       workItemOverrides: {
         id: -1200,
         displayId: 42,
@@ -210,16 +214,21 @@ describe("BoardCard UI review task", () => {
       },
     });
 
-    const mockupLink = screen.getByRole("link", {
-      name: "https://www.figma.com/file/mockup-123",
-    });
-    const editButton = screen.getByRole("button", { name: "Edit mockup URL" });
+    const mockupLink = screen.getByRole("link", { name: "Mockup" });
+    const discussionLink = screen.getByRole("link", { name: "Discussion" });
+    const editMockupButton = screen.getByRole("button", { name: "Edit mockup URL" });
+    const editDiscussionButton = screen.getByRole("button", { name: "Edit discussion URL" });
 
     expect(mockupLink).toHaveAttribute("href", "https://www.figma.com/file/mockup-123");
-    expect(editButton.compareDocumentPosition(mockupLink) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-    expect(editButton).toHaveClass("opacity-0");
-    expect(editButton).toHaveClass("group-hover/mockup:opacity-100");
-    expect(editButton).toHaveClass("group-focus-within/mockup:opacity-100");
+    expect(discussionLink).toHaveAttribute("href", "https://github.com/test-org/test-repo/pull/42");
+    expect(screen.queryByText("https://www.figma.com/file/mockup-123")).toBeNull();
+    expect(screen.queryByText("https://github.com/test-org/test-repo/pull/42")).toBeNull();
+    expect(editMockupButton).toHaveClass("w-4");
+    expect(editMockupButton).toHaveClass("opacity-0");
+    expect(editMockupButton).toHaveClass("group-hover/mockup:opacity-100");
+    expect(editDiscussionButton).toHaveClass("w-4");
+    expect(editDiscussionButton).toHaveClass("opacity-0");
+    expect(editDiscussionButton).toHaveClass("group-hover/discussion:opacity-100");
   });
 
   it("opens a mockup URL editor from the pencil button and saves on blur", async () => {
@@ -251,8 +260,8 @@ describe("BoardCard UI review task", () => {
       );
     });
     expect(
-      screen.getByRole("link", { name: "https://www.figma.com/file/mockup-save" }),
-    ).toBeInTheDocument();
+      screen.getByRole("link", { name: "Mockup" }),
+    ).toHaveAttribute("href", "https://www.figma.com/file/mockup-save");
   });
 
   it("trims and clears the mockup URL like status messages do", async () => {
@@ -296,10 +305,52 @@ describe("BoardCard UI review task", () => {
     expect(screen.getByRole("button", { name: "Set mockup URL" })).toBeInTheDocument();
   });
 
-  it("hides the mockup URL editor in the completed column", () => {
+  it("trims and clears the discussion URL like status messages do", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderCard({
+      assignmentId: "asgn-discussion-clear",
+      discussionUrl: "https://github.com/test-org/test-repo/pull/original",
+      workItemOverrides: {
+        id: -1200,
+        displayId: 42,
+        title: "UI review login flow",
+        type: "Task",
+        url: "https://dev.azure.com/test-org/test-project/_workitems/edit/42",
+        kind: "ui-review",
+        uiReview: {
+          sourceWorkItemId: 42,
+          reviewTag: "UI Review",
+        },
+      },
+    });
+
+    await user.click(screen.getByRole("button", { name: "Edit discussion URL" }));
+    const input = screen.getByDisplayValue("https://github.com/test-org/test-repo/pull/original");
+    await user.clear(input);
+    await user.type(input, "  https://github.com/test-org/test-repo/pull/trimmed  ");
+    await user.tab();
+
+    await waitFor(() => {
+      expect(collections.assignments.get("asgn-discussion-clear")?.discussionUrl).toBe(
+        "https://github.com/test-org/test-repo/pull/trimmed",
+      );
+    });
+
+    await user.click(screen.getByRole("button", { name: "Edit discussion URL" }));
+    await user.clear(screen.getByDisplayValue("https://github.com/test-org/test-repo/pull/trimmed"));
+    await user.tab();
+
+    await waitFor(() => {
+      expect(collections.assignments.get("asgn-discussion-clear")?.discussionUrl).toBeUndefined();
+    });
+    expect(screen.getByRole("button", { name: "Set discussion URL" })).toBeInTheDocument();
+  });
+
+  it("hides the UI review link editors in the completed column", () => {
     renderCard({
       columnId: COMPLETED_COLUMN_ID,
       mockupUrl: "https://www.figma.com/file/mockup-123",
+      discussionUrl: "https://github.com/test-org/test-repo/pull/42",
       workItemOverrides: {
         id: -1200,
         displayId: 42,
@@ -316,7 +367,10 @@ describe("BoardCard UI review task", () => {
 
     expect(screen.queryByRole("button", { name: "Edit mockup URL" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Set mockup URL" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "https://www.figma.com/file/mockup-123" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit discussion URL" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Set discussion URL" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Mockup" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Discussion" })).toBeNull();
   });
 });
 

@@ -54,6 +54,7 @@ export function NewWorkColumn({
             assignmentId={item.assignment.id}
             statusMessage={item.assignment.statusMessage}
             mockupUrl={item.assignment.mockupUrl}
+            discussionUrl={item.assignment.discussionUrl}
             index={index}
             columnId={NEW_WORK_COLUMN_ID}
           />

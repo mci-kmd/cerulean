@@ -4,6 +4,7 @@ import {
   GitPullRequest,
   GitPullRequestClosed,
   GitPullRequestDraft,
+  Image as ImageIcon,
   MessageCircle,
   Pencil,
   User,
@@ -39,9 +40,12 @@ interface BoardCardProps {
   assignmentId: string;
   statusMessage?: string;
   mockupUrl?: string;
+  discussionUrl?: string;
   index: number;
   columnId: string;
 }
+
+type UiReviewLinkEditor = "mockup" | "discussion";
 
 function isPullRequestCompleted(pr: RelatedPullRequest): boolean {
   if (pr.isCompleted !== undefined) return pr.isCompleted;
@@ -152,6 +156,7 @@ export function BoardCard({
   assignmentId,
   statusMessage,
   mockupUrl,
+  discussionUrl,
   index,
   columnId,
 }: BoardCardProps) {
@@ -167,10 +172,12 @@ export function BoardCard({
   const settings = useSettings();
   const [statusValue, setStatusValue] = useState(statusMessage ?? "");
   const [mockupUrlValue, setMockupUrlValue] = useState(mockupUrl ?? "");
+  const [discussionUrlValue, setDiscussionUrlValue] = useState(discussionUrl ?? "");
   const [editOpen, setEditOpen] = useState(false);
-  const [mockupUrlEditOpen, setMockupUrlEditOpen] = useState(false);
+  const [uiReviewLinkEditor, setUiReviewLinkEditor] = useState<UiReviewLinkEditor | null>(null);
   const statusRef = useRef<HTMLTextAreaElement | null>(null);
   const mockupUrlRef = useRef<HTMLInputElement | null>(null);
+  const discussionUrlRef = useRef<HTMLInputElement | null>(null);
 
   const isReviewCard = isReviewWorkItem(workItem);
   const isUiReviewCard = isUiReviewWorkItem(workItem);
@@ -193,8 +200,9 @@ export function BoardCard({
     (a, b) => Number(isPullRequestCompleted(a)) - Number(isPullRequestCompleted(b)),
   );
   const showStatusEditor = columnId !== COMPLETED_COLUMN_ID;
-  const showMockupUrlEditor = isUiReviewCard && showStatusEditor;
+  const showUiReviewLinks = isUiReviewCard && showStatusEditor;
   const trimmedMockupUrl = mockupUrlValue.trim();
+  const trimmedDiscussionUrl = discussionUrlValue.trim();
 
   const saveStatus = () => {
     const trimmed = statusValue.trim();
@@ -208,17 +216,23 @@ export function BoardCard({
     }
   };
 
-  const saveMockupUrl = () => {
-    const trimmed = mockupUrlValue.trim();
-    if (trimmed !== (mockupUrl ?? "")) {
+  const saveUiReviewLink = (link: UiReviewLinkEditor) => {
+    const isMockupLink = link === "mockup";
+    const trimmed = isMockupLink ? mockupUrlValue.trim() : discussionUrlValue.trim();
+    const currentValue = isMockupLink ? (mockupUrl ?? "") : (discussionUrl ?? "");
+    if (trimmed !== currentValue) {
       scheduleDndMutation(() => {
         if (!assignments.get(assignmentId)) return;
         assignments.update(assignmentId, (draft) => {
-          draft.mockupUrl = trimmed || undefined;
+          if (isMockupLink) {
+            draft.mockupUrl = trimmed || undefined;
+            return;
+          }
+          draft.discussionUrl = trimmed || undefined;
         });
       });
     }
-    setMockupUrlEditOpen(false);
+    setUiReviewLinkEditor((current) => (current === link ? null : current));
   };
 
   const handleEditSave = (newTitle: string) => {
@@ -251,12 +265,16 @@ export function BoardCard({
   }, [statusValue]);
 
   useEffect(() => {
-    if (!mockupUrlEditOpen) return;
-    const editor = mockupUrlRef.current;
+    const editor =
+      uiReviewLinkEditor === "mockup"
+        ? mockupUrlRef.current
+        : uiReviewLinkEditor === "discussion"
+          ? discussionUrlRef.current
+          : null;
     if (!editor) return;
     editor.focus();
     editor.select();
-  }, [mockupUrlEditOpen]);
+  }, [uiReviewLinkEditor]);
 
   const style = isUiReviewCard ? UI_REVIEW_STYLE : getTypeStyle(workItem.type);
   const typeIcon = isUiReviewCard ? UI_REVIEW_ICON : getTypeIcon(workItem.type);
@@ -300,6 +318,79 @@ export function BoardCard({
         description: error instanceof Error ? error.message : "Unknown error",
       });
     }
+  };
+
+  const renderUiReviewLink = ({
+    kind,
+    label,
+    url,
+    value,
+    placeholder,
+    inputRef,
+    icon: Icon,
+    onChange,
+  }: {
+    kind: UiReviewLinkEditor;
+    label: string;
+    url: string;
+    value: string;
+    placeholder: string;
+    inputRef: React.RefObject<HTMLInputElement | null>;
+    icon: LucideIcon;
+    onChange: (value: string) => void;
+  }) => {
+    const isEditing = uiReviewLinkEditor === kind;
+    const buttonLabel = `${url.length > 0 ? "Edit" : "Set"} ${label.toLowerCase()} URL`;
+
+    return (
+      <div className={`group/${kind} flex min-w-0 flex-1 items-center gap-1.5`}>
+        <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        {isEditing ? (
+          <input
+            ref={inputRef}
+            value={value}
+            placeholder={placeholder}
+            onChange={(e) => onChange(e.target.value)}
+            onBlur={() => saveUiReviewLink(kind)}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.currentTarget.blur();
+              }
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="min-w-0 flex-1 rounded bg-transparent px-1 py-0.5 text-xs leading-snug text-muted-foreground outline-none focus:ring-1 focus:ring-ring"
+          />
+        ) : url.length > 0 ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="min-w-0 truncate hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {label}
+          </a>
+        ) : (
+          <span className="min-w-0 truncate text-muted-foreground/60">{label}</span>
+        )}
+        {!isEditing && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setUiReviewLinkEditor(kind);
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className={`h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-[color,opacity] hover:text-foreground group-hover/${kind}:opacity-100 group-focus-within/${kind}:opacity-100 focus-visible:opacity-100`}
+            aria-label={buttonLabel}
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -457,69 +548,28 @@ export function BoardCard({
               })}
             </ul>
           )}
-          {showMockupUrlEditor && (
-            <div className="group/mockup mb-2 flex items-center gap-2 text-xs text-muted-foreground">
-              {mockupUrlEditOpen ? (
-                <input
-                  ref={mockupUrlRef}
-                  value={mockupUrlValue}
-                  placeholder="Set mockup URL..."
-                  onChange={(e) => setMockupUrlValue(e.target.value)}
-                  onBlur={saveMockupUrl}
-                  onKeyDown={(e) => {
-                    e.stopPropagation();
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      e.currentTarget.blur();
-                    }
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  className="w-full min-w-0 text-xs text-muted-foreground bg-transparent border-0 outline-none focus:ring-1 focus:ring-ring rounded px-1 py-0.5 leading-snug placeholder:text-muted-foreground/40"
-                />
-              ) : trimmedMockupUrl.length > 0 ? (
-                <>
-                  <a
-                    href={trimmedMockupUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={trimmedMockupUrl}
-                    className="min-w-0 flex-1 truncate hover:underline"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {trimmedMockupUrl}
-                  </a>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMockupUrlEditOpen(true);
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    className="shrink-0 text-muted-foreground opacity-0 transition-[color,opacity] hover:text-foreground group-hover/mockup:opacity-100 group-focus-within/mockup:opacity-100 focus-visible:opacity-100"
-                    aria-label="Edit mockup URL"
-                  >
-                    <Pencil className="h-3 w-3" />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span className="flex-1 px-1 py-0.5 text-muted-foreground/40">
-                    Set mockup URL...
-                  </span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setMockupUrlEditOpen(true);
-                    }}
-                    onPointerDown={(e) => e.stopPropagation()}
-                    className="shrink-0 text-muted-foreground opacity-0 transition-[color,opacity] hover:text-foreground group-hover/mockup:opacity-100 group-focus-within/mockup:opacity-100 focus-visible:opacity-100"
-                    aria-label="Set mockup URL"
-                  >
-                    <Pencil className="h-3 w-3" />
-                  </button>
-                </>
-              )}
+          {showUiReviewLinks && (
+            <div className="mb-2 flex items-center gap-4 text-xs text-muted-foreground">
+              {renderUiReviewLink({
+                kind: "mockup",
+                label: "Mockup",
+                url: trimmedMockupUrl,
+                value: mockupUrlValue,
+                placeholder: "Set mockup URL...",
+                inputRef: mockupUrlRef,
+                icon: ImageIcon,
+                onChange: setMockupUrlValue,
+              })}
+              {renderUiReviewLink({
+                kind: "discussion",
+                label: "Discussion",
+                url: trimmedDiscussionUrl,
+                value: discussionUrlValue,
+                placeholder: "Set discussion URL...",
+                inputRef: discussionUrlRef,
+                icon: MessageCircle,
+                onChange: setDiscussionUrlValue,
+              })}
             </div>
           )}
           {showStatusEditor && (

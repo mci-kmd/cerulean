@@ -55,6 +55,7 @@ export interface ColumnAssignment {
   position: number;
   statusMessage?: string;
   mockupUrl?: string;
+  discussionUrl?: string;
 }
 
 export interface ReviewWorkItem {
