@@ -3,6 +3,8 @@ import type {
   AdoCurrentUser,
   AdoBoard,
   AdoBoardReference,
+  AdoGitRef,
+  AdoGitRepository,
   AdoPolicyEvaluationRecord,
   AdoPullRequest,
   AdoResourceRef,
@@ -30,6 +32,8 @@ export class MockAdoClient implements AdoClient {
   public pullRequestPolicyEvaluations = new Map<string, AdoPolicyEvaluationRecord[]>();
   public boards: AdoBoardReference[] = [];
   public boardDetails = new Map<string, AdoBoard>();
+  public repositories: AdoGitRepository[] = [];
+  public refs = new Map<string, AdoGitRef[]>();
   public callLog: { method: string; args: unknown[] }[] = [];
 
   async queryWorkItems(wiql: string): Promise<WiqlResponse> {
@@ -69,6 +73,25 @@ export class MockAdoClient implements AdoClient {
       email: this.myEmail,
       displayName: this.myDisplayName,
     };
+  }
+
+  async listRepositories(): Promise<AdoGitRepository[]> {
+    this.callLog.push({ method: "listRepositories", args: [] });
+    if (this.shouldFail) throw new Error("Mock repositories error");
+    return this.repositories;
+  }
+
+  async listRefs(repositoryId: string, filter?: string): Promise<AdoGitRef[]> {
+    this.callLog.push({ method: "listRefs", args: [repositoryId, filter] });
+    if (this.shouldFail) throw new Error("Mock refs error");
+    const normalizedFilter = filter?.trim()
+      ? filter.startsWith("refs/")
+        ? filter
+        : `refs/${filter}`
+      : undefined;
+    return (this.refs.get(repositoryId) ?? []).filter(
+      (ref) => !normalizedFilter || ref.name.startsWith(normalizedFilter),
+    );
   }
 
   async listPullRequests(_status = "active"): Promise<AdoPullRequest[]> {

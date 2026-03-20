@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/helpers/render";
@@ -6,7 +6,13 @@ import { setDndRenderSettledResolver } from "@/lib/schedule-dnd-mutation";
 import { BoardCard } from "./board-card";
 import { createWorkItem } from "@/test/fixtures/work-items";
 import { createAssignment } from "@/test/fixtures/columns";
-import type { WorkItem } from "@/types/board";
+import { DEFAULT_SETTINGS, type WorkItem } from "@/types/board";
+
+const openAdoPullRequestCreateMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/ado-pr-create", () => ({
+  openAdoPullRequestCreate: openAdoPullRequestCreateMock,
+}));
 
 function renderCard(props: {
   statusMessage?: string;
@@ -89,6 +95,27 @@ function getRenderedCardSurface() {
   return surface;
 }
 
+function insertAdoSettings(
+  collections: ReturnType<typeof renderWithProviders>["collections"],
+  overrides: Partial<typeof DEFAULT_SETTINGS> = {},
+) {
+  act(() => {
+    collections.settings.insert({
+      ...DEFAULT_SETTINGS,
+      id: "settings",
+      pat: "test-pat",
+      org: "test-org",
+      project: "test-project",
+      ...overrides,
+    });
+  });
+}
+
+beforeEach(() => {
+  openAdoPullRequestCreateMock.mockReset();
+  openAdoPullRequestCreateMock.mockResolvedValue({ status: "opened" });
+});
+
 describe("BoardCard custom task", () => {
   it("does not render copyable ID for custom tasks", () => {
     renderCustomTaskCard();
@@ -149,6 +176,73 @@ describe("BoardCard review items", () => {
     expect(screen.getByTestId("pr-reviewer-count-7001")).toHaveTextContent("4");
     expect(screen.getByTestId("pr-unresolved-comments-7001")).toHaveTextContent("2");
     expect(getRenderedCardSurface().style.backgroundImage).toContain("repeating-linear-gradient");
+  });
+});
+
+describe("BoardCard create PR button", () => {
+  it("renders a create PR button before the copyable id for ADO-backed cards", async () => {
+    const { collections } = renderCard({});
+    insertAdoSettings(collections);
+
+    const button = await screen.findByRole("button", {
+      name: "Create pull request for work item 1",
+    });
+    const idButton = screen.getByRole("button", { name: "Copy ID 1" });
+
+    expect(button.compareDocumentPosition(idButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("does not render a create PR button for GitHub review cards", async () => {
+    const { collections } = renderCard({
+      workItemOverrides: {
+        id: -501,
+        displayId: 42,
+        kind: "review",
+        review: {
+          provider: "github",
+          repositoryId: "octo-org/widgets",
+          pullRequestId: 12,
+          reviewState: "new",
+        },
+      },
+    });
+    insertAdoSettings(collections);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("button", { name: "Create pull request for work item 42" }),
+      ).toBeNull();
+    });
+  });
+
+  it("opens ADO PR creation flow with the displayed work item id", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderCard({
+      workItemOverrides: {
+        id: -501,
+        displayId: 42,
+        kind: "review",
+        review: {
+          provider: "ado",
+          repositoryId: "repo-1",
+          pullRequestId: 7001,
+          reviewState: "new",
+        },
+      },
+    });
+    insertAdoSettings(collections);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Create pull request for work item 42" }),
+    );
+
+    expect(openAdoPullRequestCreateMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        org: "test-org",
+        project: "test-project",
+        workItemId: 42,
+      }),
+    );
   });
 });
 

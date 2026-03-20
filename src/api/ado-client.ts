@@ -3,6 +3,8 @@ import type {
   AdoBoard,
   AdoBoardReference,
   AdoBatchResponse,
+  AdoGitRef,
+  AdoGitRepository,
   AdoPolicyEvaluationRecord,
   AdoPullRequest,
   AdoResourceRef,
@@ -30,6 +32,8 @@ export interface AdoClient {
   listBoards(team?: string): Promise<AdoBoardReference[]>;
   getBoard(boardId: string, team?: string): Promise<AdoBoard>;
   getCurrentUser(): Promise<AdoCurrentUser>;
+  listRepositories(): Promise<AdoGitRepository[]>;
+  listRefs(repositoryId: string, filter?: string): Promise<AdoGitRef[]>;
   listPullRequests(status?: string): Promise<AdoPullRequest[]>;
   getPullRequest(repositoryId: string, pullRequestId: string): Promise<AdoPullRequest>;
   listPullRequestWorkItems(repositoryId: string, pullRequestId: string): Promise<AdoResourceRef[]>;
@@ -396,6 +400,48 @@ export class HttpAdoClient implements AdoClient {
       email,
     };
     return this.cachedCurrentUser;
+  }
+
+  async listRepositories(): Promise<AdoGitRepository[]> {
+    const res = await fetch(`${this.baseUrl}/_apis/git/repositories?api-version=7.1`, {
+      method: "GET",
+      headers: this.jsonHeaders(),
+    });
+    if (!res.ok) throw new Error(`Repositories fetch failed: ${res.status}`);
+    const data = await this.readJson<AdoGitRepository[] | { value?: AdoGitRepository[] }>(
+      res,
+      "Repositories fetch",
+    );
+    return Array.isArray(data) ? data : (data.value ?? []);
+  }
+
+  async listRefs(repositoryId: string, filter?: string): Promise<AdoGitRef[]> {
+    const refs: AdoGitRef[] = [];
+    let continuationToken: string | null = null;
+    do {
+      const params = new URLSearchParams({ "api-version": "7.1", $top: "1000" });
+      if (filter?.trim()) {
+        params.set("filter", filter.trim());
+      }
+      if (continuationToken) {
+        params.set("continuationToken", continuationToken);
+      }
+      const res = await fetch(
+        `${this.baseUrl}/_apis/git/repositories/${encodeURIComponent(repositoryId)}/refs?${params.toString()}`,
+        {
+          method: "GET",
+          headers: this.jsonHeaders(),
+        },
+      );
+      if (!res.ok) throw new Error(`Refs fetch failed: ${res.status}`);
+      const data = await this.readJson<AdoGitRef[] | { value?: AdoGitRef[] }>(
+        res,
+        "Refs fetch",
+      );
+      refs.push(...(Array.isArray(data) ? data : (data.value ?? [])));
+      continuationToken = res.headers.get("x-ms-continuationtoken");
+    } while (continuationToken);
+    return refs;
   }
 
   async listPullRequests(status = "active"): Promise<AdoPullRequest[]> {

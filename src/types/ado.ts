@@ -112,6 +112,20 @@ export interface AdoPullRequest {
   url?: string;
 }
 
+export interface AdoGitRepository {
+  id: string;
+  name: string;
+  defaultBranch?: string;
+  remoteUrl?: string;
+  webUrl?: string;
+}
+
+export interface AdoGitRef {
+  name: string;
+  objectId?: string;
+  url?: string;
+}
+
 export interface AdoPullRequestStatus {
   state?: string;
   description?: string;

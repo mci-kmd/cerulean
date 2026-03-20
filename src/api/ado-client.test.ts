@@ -304,6 +304,63 @@ describe("HttpAdoClient", () => {
     );
   });
 
+  it("fetches repositories with auth header", async () => {
+    let capturedAuth = "";
+    server.use(
+      http.get(`${BASE}/_apis/git/repositories`, ({ request }) => {
+        capturedAuth = request.headers.get("authorization") ?? "";
+        return HttpResponse.json({
+          value: [
+            {
+              id: "repo-1",
+              name: "Repo One",
+              defaultBranch: "refs/heads/main",
+            },
+          ],
+        });
+      }),
+    );
+
+    const repositories = await client.listRepositories();
+    expect(capturedAuth).toBe(`Basic ${btoa(":test-pat")}`);
+    expect(repositories).toEqual([
+      {
+        id: "repo-1",
+        name: "Repo One",
+        defaultBranch: "refs/heads/main",
+      },
+    ]);
+  });
+
+  it("fetches refs with filter and auth header", async () => {
+    let capturedAuth = "";
+    let capturedFilter = "";
+    server.use(
+      http.get(`${BASE}/_apis/git/repositories/repo-1/refs`, ({ request }) => {
+        capturedAuth = request.headers.get("authorization") ?? "";
+        capturedFilter = new URL(request.url).searchParams.get("filter") ?? "";
+        return HttpResponse.json({
+          value: [{ name: "refs/heads/1234-fix-login" }],
+        });
+      }),
+    );
+
+    const refs = await client.listRefs("repo-1", "heads/1234");
+    expect(capturedAuth).toBe(`Basic ${btoa(":test-pat")}`);
+    expect(capturedFilter).toBe("heads/1234");
+    expect(refs).toEqual([{ name: "refs/heads/1234-fix-login" }]);
+  });
+
+  it("throws on failed refs fetch", async () => {
+    server.use(
+      http.get(`${BASE}/_apis/git/repositories/repo-1/refs`, () => {
+        return new HttpResponse(null, { status: 403 });
+      }),
+    );
+
+    await expect(client.listRefs("repo-1", "heads/1234")).rejects.toThrow("403");
+  });
+
   it("fetches pull request details with auth header", async () => {
     let capturedAuth = "";
     server.use(

@@ -1,5 +1,6 @@
 import { createElement, useEffect, useRef, useState } from "react";
 import {
+  GitPullRequestArrow,
   GitPullRequest,
   GitPullRequestClosed,
   GitPullRequestDraft,
@@ -9,11 +10,15 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useSortable } from "@dnd-kit/react/sortable";
+import { toast } from "sonner";
 import { useBoardCollections } from "@/db/use-board-collections";
 import { CopyableId } from "@/components/copyable-id";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getTypeStyle, getTypeIcon, CUSTOM_TASK_TYPE } from "@/lib/work-item-types";
 import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
+import { useSettings } from "@/hooks/use-board";
+import { createAdoClient } from "@/api/ado-client";
+import { openAdoPullRequestCreate } from "@/lib/ado-pr-create";
 import { TaskDialog } from "./task-dialog";
 import { isReviewWorkItem, type RelatedPullRequest, type WorkItem } from "@/types/board";
 
@@ -145,6 +150,7 @@ export function BoardCard({
   });
 
   const { assignments, customTasks } = useBoardCollections();
+  const settings = useSettings();
   const [value, setValue] = useState(statusMessage ?? "");
   const [editOpen, setEditOpen] = useState(false);
   const statusRef = useRef<HTMLTextAreaElement | null>(null);
@@ -156,6 +162,14 @@ export function BoardCard({
     isReviewCard || workItem.type === "Bug" || workItem.type === "User Story"
       ? workItem.relatedPullRequests ?? []
       : [];
+  const isGithubReviewCard = isReviewCard && workItem.review.provider === "github";
+  const canCreateAdoPullRequest =
+    !isCustomTask &&
+    !isGithubReviewCard &&
+    !!settings?.pat &&
+    !!settings?.org &&
+    !!settings?.project &&
+    displayId > 0;
   const sortedPullRequests = [...relatedPullRequests].sort(
     (a, b) => Number(isPullRequestCompleted(a)) - Number(isPullRequestCompleted(b)),
   );
@@ -209,6 +223,37 @@ export function BoardCard({
       }
     : undefined;
 
+  const handleCreatePullRequest = async (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    if (!canCreateAdoPullRequest || !settings) return;
+
+    try {
+      const client = createAdoClient({
+        pat: settings.pat,
+        org: settings.org,
+        project: settings.project,
+      });
+      const result = await openAdoPullRequestCreate({
+        client,
+        org: settings.org,
+        project: settings.project,
+        workItemId: displayId,
+        clipboard: navigator.clipboard,
+        prompt: window.prompt.bind(window),
+        open: window.open.bind(window),
+      });
+      if (result.status === "no-match") {
+        toast.error("No matching ADO branch found", {
+          description: `Couldn't find a branch starting with ${displayId}.`,
+        });
+      }
+    } catch (error) {
+      toast.error("Failed to open ADO PR page", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  };
+
   return (
     <>
       <div
@@ -238,8 +283,8 @@ export function BoardCard({
               </span>
             )}
             <span className="flex-1" />
-            {isCustomTask ? (
-              <button
+             {isCustomTask ? (
+               <button
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -247,14 +292,32 @@ export function BoardCard({
                 }}
                 onPointerDown={(e) => e.stopPropagation()}
                 className="text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover/card:opacity-100"
-                aria-label="Edit task"
-              >
-                <Pencil className="h-3 w-3" />
-              </button>
-            ) : (
-              <CopyableId id={displayId} className="text-[10px]" />
-            )}
-          </div>
+                 aria-label="Edit task"
+               >
+                 <Pencil className="h-3 w-3" />
+               </button>
+             ) : (
+               <div className="flex items-center gap-1">
+                 {canCreateAdoPullRequest && (
+                   <Tooltip>
+                     <TooltipTrigger asChild>
+                       <button
+                         type="button"
+                         onClick={handleCreatePullRequest}
+                         onPointerDown={(e) => e.stopPropagation()}
+                         className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                         aria-label={`Create pull request for work item ${displayId}`}
+                       >
+                         <GitPullRequestArrow className="h-3 w-3" />
+                       </button>
+                     </TooltipTrigger>
+                     <TooltipContent>Create ADO pull request</TooltipContent>
+                   </Tooltip>
+                 )}
+                 <CopyableId id={displayId} className="text-[10px]" />
+               </div>
+             )}
+           </div>
           {isCustomTask ? (
             <button
               type="button"
