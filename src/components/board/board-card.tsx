@@ -31,6 +31,7 @@ import { openAdoPullRequestCreate } from "@/lib/ado-pr-create";
 import { TaskDialog } from "./task-dialog";
 import {
   COMPLETED_COLUMN_ID,
+  NEW_WORK_COLUMN_ID,
   isReviewWorkItem,
   isUiReviewWorkItem,
   type PullRequestMergedBuildSummary,
@@ -181,6 +182,10 @@ function getPullRequestStatusMetadata(pr: RelatedPullRequest): {
   };
 }
 
+function shouldShowPullRequestBuildStatus(columnId: string): boolean {
+  return columnId !== NEW_WORK_COLUMN_ID && columnId !== COMPLETED_COLUMN_ID;
+}
+
 export function BoardCard({
   workItem,
   assignmentId,
@@ -226,6 +231,7 @@ export function BoardCard({
   const sortedPullRequests = [...relatedPullRequests].sort(
     (a, b) => Number(isPullRequestCompleted(a)) - Number(isPullRequestCompleted(b)),
   );
+  const showPullRequestBuildStatus = shouldShowPullRequestBuildStatus(columnId);
   const showStatusEditor = columnId !== COMPLETED_COLUMN_ID;
   const showUiReviewLinks = isUiReviewCard && showStatusEditor;
   const trimmedMockupUrl = mockupUrlValue.trim();
@@ -511,9 +517,12 @@ export function BoardCard({
             <ul className="mb-2 space-y-0.5">
               {sortedPullRequests.map((pr) => {
                 const isCompleted = isPullRequestCompleted(pr);
-                const metadata = getPullRequestStatusMetadata(pr);
-                const Icon = metadata.icon;
+                const metadata = showPullRequestBuildStatus
+                  ? getPullRequestStatusMetadata(pr)
+                  : null;
+                const Icon = metadata?.icon;
                 const mergedBuildSummary =
+                  showPullRequestBuildStatus &&
                   !isReviewCard &&
                   pr.mergedBuildSummary &&
                   pr.mergedBuildSummary.totalCount > 0
@@ -541,19 +550,21 @@ export function BoardCard({
                 return (
                   <li key={pr.url}>
                     <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="mt-0.5 inline-flex shrink-0">
-                            <Icon
-                              data-testid={`pr-status-icon-${pr.id}`}
-                              data-pr-icon-variant={metadata.iconVariant}
-                              className={`h-3 w-3 ${metadata.iconClassName}`}
-                              aria-hidden="true"
-                            />
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent>{metadata.tooltip}</TooltipContent>
-                      </Tooltip>
+                      {metadata && Icon && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="mt-0.5 inline-flex shrink-0">
+                              <Icon
+                                data-testid={`pr-status-icon-${pr.id}`}
+                                data-pr-icon-variant={metadata.iconVariant}
+                                className={`h-3 w-3 ${metadata.iconClassName}`}
+                                aria-hidden="true"
+                              />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>{metadata.tooltip}</TooltipContent>
+                        </Tooltip>
+                      )}
                       <span
                         className={`inline-flex min-w-0 flex-wrap items-center gap-1 ${isCompleted ? "opacity-60" : ""}`}
                       >

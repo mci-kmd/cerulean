@@ -6,7 +6,12 @@ import { setDndRenderSettledResolver } from "@/lib/schedule-dnd-mutation";
 import { BoardCard } from "./board-card";
 import { createWorkItem } from "@/test/fixtures/work-items";
 import { createAssignment } from "@/test/fixtures/columns";
-import { COMPLETED_COLUMN_ID, DEFAULT_SETTINGS, type WorkItem } from "@/types/board";
+import {
+  COMPLETED_COLUMN_ID,
+  DEFAULT_SETTINGS,
+  NEW_WORK_COLUMN_ID,
+  type WorkItem,
+} from "@/types/board";
 
 const openAdoPullRequestCreateMock = vi.hoisted(() => vi.fn());
 
@@ -1062,7 +1067,7 @@ describe("BoardCard related PR links", () => {
     expect(screen.queryByTestId("pr-merged-build-summary-313")).toBeNull();
   });
 
-  it("shows merged-build summaries on completed task cards", () => {
+  it("hides merged-build summaries on completed task cards", () => {
     renderCard({
       columnId: COMPLETED_COLUMN_ID,
       workItemOverrides: {
@@ -1088,7 +1093,31 @@ describe("BoardCard related PR links", () => {
     });
 
     expect(screen.getByRole("link", { name: "Completed task PR" })).toBeInTheDocument();
-    expect(screen.getByTestId("pr-merged-build-summary-314")).toHaveTextContent("2/3");
+    expect(screen.queryByTestId("pr-status-icon-314")).toBeNull();
+    expect(screen.queryByTestId("pr-merged-build-summary-314")).toBeNull();
+  });
+
+  it("hides PR build-status icons in New Work", () => {
+    renderCard({
+      columnId: NEW_WORK_COLUMN_ID,
+      workItemOverrides: {
+        type: "Bug",
+        relatedPullRequests: [
+          {
+            id: "316",
+            label: "PR #316",
+            title: "Queued login fix",
+            status: "active",
+            mergeStatus: "rejectedByPolicy",
+            failingStatusChecks: ["CI Build"],
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/316",
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByRole("link", { name: "Queued login fix" })).toBeInTheDocument();
+    expect(screen.queryByTestId("pr-status-icon-316")).toBeNull();
   });
 
   it("keeps merged-build status outside the PR link and shows per-build tooltip lines", async () => {

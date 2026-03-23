@@ -409,28 +409,32 @@ function needsPullRequestBuildSummary(pr: RelatedPullRequest): boolean {
   return isPullRequestCompleted(pr.status, pr.isCompleted) && pr.mergedBuildSummary === undefined;
 }
 
-function needsPullRequestEnrichment(pr: RelatedPullRequest): boolean {
+function needsPullRequestEnrichment(
+  pr: RelatedPullRequest,
+  options?: PullRequestEnrichmentOptions,
+): boolean {
+  const hasCoreDetails = hasPullRequestTitle(pr) && hasPullRequestStatus(pr);
+  if (options?.includeBuildStatus === false) {
+    return !hasCoreDetails;
+  }
   return (
     needsPullRequestBuildSummary(pr) ||
-    !(
-      hasPullRequestTitle(pr) &&
-      hasPullRequestStatus(pr) &&
-      hasPullRequestMergeStatus(pr) &&
-      hasPullRequestReviewGate(pr)
-    )
+    !(hasCoreDetails && hasPullRequestMergeStatus(pr) && hasPullRequestReviewGate(pr))
   );
 }
 
 interface PullRequestEnrichmentOptions {
   refreshActivePullRequests?: boolean;
+  includeBuildStatus?: boolean;
 }
 
 function shouldRefreshPullRequest(
   pr: RelatedPullRequest,
   options?: PullRequestEnrichmentOptions,
 ): boolean {
-  if (!options?.refreshActivePullRequests) return needsPullRequestEnrichment(pr);
-  if (isPullRequestCompleted(pr.status, pr.isCompleted)) return needsPullRequestEnrichment(pr);
+  const needsEnrichment = needsPullRequestEnrichment(pr, options);
+  if (!options?.refreshActivePullRequests) return needsEnrichment;
+  if (isPullRequestCompleted(pr.status, pr.isCompleted)) return needsEnrichment;
   return true;
 }
 
@@ -603,6 +607,40 @@ interface PullRequestDetails {
   mergedBuildSummary?: PullRequestMergedBuildSummary | null;
 }
 
+async function loadPullRequestDetails(
+  client: AdoClient,
+  ref: PullRequestRef,
+  pr: AdoPullRequest,
+  options?: PullRequestEnrichmentOptions,
+): Promise<PullRequestDetails> {
+  const includeBuildStatus = options?.includeBuildStatus !== false;
+  const policyArtifactId = includeBuildStatus ? getPullRequestPolicyArtifactId(pr) : undefined;
+  const approvalCount = includeBuildStatus ? getPullRequestApprovalCount(pr) : undefined;
+  const [failingStatusChecks, unresolvedCommentCount] = await Promise.all([
+    policyArtifactId
+      ? getPullRequestPoliciesSafe(client, policyArtifactId).then(getFailingStatusChecks)
+      : Promise.resolve<string[]>([]),
+    includeBuildStatus
+      ? getPullRequestUnresolvedCommentCountSafe(
+          client,
+          ref.repositoryId,
+          ref.pullRequestId,
+          pr.status,
+        )
+      : Promise.resolve<number | undefined>(undefined),
+  ]);
+
+  return {
+    title: pr.title,
+    status: pr.status,
+    ...(pr.mergeStatus ? { mergeStatus: pr.mergeStatus } : {}),
+    ...(unresolvedCommentCount !== undefined ? { unresolvedCommentCount } : {}),
+    ...(approvalCount !== undefined ? { approvalCount } : {}),
+    ...(includeBuildStatus ? getRequiredReviewerGate(pr) : {}),
+    ...(failingStatusChecks.length > 0 ? { failingStatusChecks } : {}),
+  };
+}
+
 function mergePullRequestDetails(
   pr: RelatedPullRequest,
   details: PullRequestDetails,
@@ -733,30 +771,7 @@ async function enrichPullRequestDetails(
   const [firstKey, firstRef] = refs[0];
   try {
     const firstPr = await client.getPullRequest(firstRef.repositoryId, firstRef.pullRequestId);
-    const firstPolicyArtifactId = getPullRequestPolicyArtifactId(firstPr);
-    const firstApprovalCount = getPullRequestApprovalCount(firstPr);
-    const [failingStatusChecks, unresolvedCommentCount] = await Promise.all([
-      firstPolicyArtifactId
-        ? getPullRequestPoliciesSafe(client, firstPolicyArtifactId).then(getFailingStatusChecks)
-        : Promise.resolve<string[]>([]),
-      getPullRequestUnresolvedCommentCountSafe(
-        client,
-        firstRef.repositoryId,
-        firstRef.pullRequestId,
-        firstPr.status,
-      ),
-    ]);
-    detailsByKey.set(firstKey, {
-      title: firstPr.title,
-      status: firstPr.status,
-      ...(firstPr.mergeStatus ? { mergeStatus: firstPr.mergeStatus } : {}),
-      ...(unresolvedCommentCount !== undefined
-        ? { unresolvedCommentCount }
-        : {}),
-      ...(firstApprovalCount !== undefined ? { approvalCount: firstApprovalCount } : {}),
-      ...getRequiredReviewerGate(firstPr),
-      failingStatusChecks,
-    });
+    detailsByKey.set(firstKey, await loadPullRequestDetails(client, firstRef, firstPr, options));
   } catch {
     prLookupUnavailableClients.add(client);
     return workItems;
@@ -767,32 +782,9 @@ async function enrichPullRequestDetails(
     const remainingResults = await Promise.allSettled(
       remaining.map(async ([key, ref]) => {
         const pr = await client.getPullRequest(ref.repositoryId, ref.pullRequestId);
-        const policyArtifactId = getPullRequestPolicyArtifactId(pr);
-        const approvalCount = getPullRequestApprovalCount(pr);
-        const [failingStatusChecks, unresolvedCommentCount] = await Promise.all([
-          policyArtifactId
-            ? getPullRequestPoliciesSafe(client, policyArtifactId).then(getFailingStatusChecks)
-            : Promise.resolve<string[]>([]),
-          getPullRequestUnresolvedCommentCountSafe(
-            client,
-            ref.repositoryId,
-            ref.pullRequestId,
-            pr.status,
-          ),
-        ]);
         return [
           key,
-          {
-            title: pr.title,
-            status: pr.status,
-            ...(pr.mergeStatus ? { mergeStatus: pr.mergeStatus } : {}),
-            ...(unresolvedCommentCount !== undefined
-              ? { unresolvedCommentCount }
-              : {}),
-            ...(approvalCount !== undefined ? { approvalCount } : {}),
-            ...getRequiredReviewerGate(pr),
-            failingStatusChecks,
-          },
+          await loadPullRequestDetails(client, ref, pr, options),
         ] as const;
       }),
     );
@@ -817,7 +809,7 @@ async function enrichPullRequestDetails(
     completedPullRequestIds.add(ref.pullRequestId);
   }
 
-  if (completedPullRequestIds.size > 0) {
+  if (options?.includeBuildStatus !== false && completedPullRequestIds.size > 0) {
     const buildSummaries = await getMergedPullRequestBuildSummaries(client, completedPullRequestIds);
     for (const [key, details] of detailsByKey) {
       if (!isPullRequestCompleted(details.status)) continue;
@@ -928,8 +920,10 @@ async function buildRelatedPullRequestDetails(
   org: string,
   project: string,
   repositoryId: string,
+  options?: { includeBuildStatus?: boolean },
 ): Promise<RelatedPullRequest> {
-  const policyArtifactId = getPullRequestPolicyArtifactId(pr);
+  const policyArtifactId =
+    options?.includeBuildStatus === false ? undefined : getPullRequestPolicyArtifactId(pr);
   const approvalCount = getPullRequestApprovalCount(pr);
   const reviewerCount = getPullRequestReviewerCount(pr);
   const [failingStatusChecks, unresolvedCommentCount] = await Promise.all([
@@ -988,9 +982,11 @@ export async function fetchReviewWorkItems(
         repositoryId,
         String(pr.pullRequestId),
       );
+      const reviewState = getPullRequestReviewState(pr, currentUser);
       return {
         pr,
         repositoryId,
+        reviewState,
         workItemRefs,
       };
     }),
@@ -1022,7 +1018,7 @@ export async function fetchReviewWorkItems(
   );
 
   const detailedReviewPullRequests = await Promise.all(
-    workItemRefsByPullRequest.map(async ({ pr, repositoryId }) => ({
+    workItemRefsByPullRequest.map(async ({ pr, repositoryId, reviewState }) => ({
       pr,
       repositoryId,
       relatedPullRequest: await buildRelatedPullRequestDetails(
@@ -1031,6 +1027,7 @@ export async function fetchReviewWorkItems(
         org,
         project,
         repositoryId,
+        { includeBuildStatus: reviewState === "active" },
       ),
     })),
   );
@@ -1045,8 +1042,7 @@ export async function fetchReviewWorkItems(
   const completedIds = new Set<number>();
   const workItems: WorkItem[] = [];
 
-  for (const { pr, repositoryId, workItemRefs } of workItemRefsByPullRequest) {
-    const reviewState = getPullRequestReviewState(pr, currentUser);
+  for (const { pr, repositoryId, reviewState, workItemRefs } of workItemRefsByPullRequest) {
     const relatedPullRequest = relatedPullRequestsByKey.get(
       `${repositoryId}/${pr.pullRequestId}`,
     );
@@ -1260,7 +1256,9 @@ export async function fetchCompletedWorkItems(
   const mappedItems = filterRemovedWorkItems(
     adoItems.map((i) => mapAdoWorkItem(i, org, project, boardConfig)),
   );
-  return enrichPullRequestDetails(client, mappedItems);
+  return enrichPullRequestDetails(client, mappedItems, {
+    includeBuildStatus: false,
+  });
 }
 
 export async function fetchUiReviewWorkItems(

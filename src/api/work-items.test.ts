@@ -1510,6 +1510,53 @@ describe("fetchCompletedWorkItems", () => {
     expect(wiql).toContain("[WEF_FAKE_Kanban.Column] = 'Approved'");
     expect(wiql).toContain("[System.AssignedTo] = @Me");
   });
+
+  it("skips PR build-status lookups for completed items", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 80, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 80,
+        fields: {
+          "System.Id": 80,
+          "System.Title": "Completed shipping item",
+          "System.WorkItemType": "Bug",
+          "System.State": "Resolved",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "https://dev.azure.com/org/proj/_git/repo-1/pullrequest/8800",
+            attributes: { name: "Pull Request" },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/8800", {
+      pullRequestId: 8800,
+      title: "Completed shipping PR",
+      status: "completed",
+      mergeStatus: "succeeded",
+      repository: {
+        id: "repo-1",
+        project: { id: "proj-1" },
+      },
+    });
+
+    const items = await fetchCompletedWorkItems(client, "Resolved", "org", "proj");
+
+    expect(items[0]?.relatedPullRequests?.[0]).toMatchObject({
+      id: "8800",
+      title: "Completed shipping PR",
+      status: "completed",
+      mergeStatus: "succeeded",
+    });
+    expect(client.callLog.filter((call) => call.method === "getPullRequest")).toHaveLength(1);
+    expect(client.callLog.filter((call) => call.method === "getPullRequestPolicyEvaluations")).toHaveLength(0);
+    expect(client.callLog.filter((call) => call.method === "getPullRequestThreads")).toHaveLength(0);
+    expect(client.callLog.filter((call) => call.method === "listBuilds")).toHaveLength(0);
+  });
 });
 
 describe("fetchReviewWorkItems", () => {
@@ -1786,5 +1833,121 @@ describe("fetchReviewWorkItems", () => {
     expect(result.workItems).toHaveLength(0);
     expect(result.newWorkIds.size).toBe(0);
     expect(result.completedIds.size).toBe(0);
+  });
+
+  it("only fetches build-status policy data for active review cards", async () => {
+    const client = new MockAdoClient();
+    client.myEmail = "me@test.com";
+    client.myUserId = "me-id";
+    client.pullRequests.set("repo-1/7300", {
+      pullRequestId: 7300,
+      title: "Active review PR",
+      status: "active",
+      mergeStatus: "rejectedByPolicy",
+      createdBy: {
+        id: "other-id-1",
+        uniqueName: "other-1@test.com",
+      },
+      repository: {
+        id: "repo-1",
+        project: { id: "proj-1" },
+      },
+      reviewers: [{ id: "me-id", uniqueName: "me@test.com", vote: 0, isRequired: true }],
+    });
+    client.pullRequests.set("repo-2/7301", {
+      pullRequestId: 7301,
+      title: "Completed review PR",
+      status: "active",
+      mergeStatus: "rejectedByPolicy",
+      createdBy: {
+        id: "other-id-2",
+        uniqueName: "other-2@test.com",
+      },
+      repository: {
+        id: "repo-2",
+        project: { id: "proj-1" },
+      },
+      reviewers: [{ id: "me-id", uniqueName: "me@test.com", vote: 10, isRequired: true }],
+    });
+    client.pullRequests.set("repo-3/7302", {
+      pullRequestId: 7302,
+      title: "New review PR",
+      status: "active",
+      mergeStatus: "rejectedByPolicy",
+      createdBy: {
+        id: "other-id-3",
+        uniqueName: "other-3@test.com",
+      },
+      repository: {
+        id: "repo-3",
+        project: { id: "proj-1" },
+      },
+      reviewers: [{ id: "lead-id", uniqueName: "lead@test.com", vote: 0, isRequired: true }],
+    });
+    client.pullRequestWorkItems.set("repo-1/7300", [{ id: "70", url: "" }]);
+    client.pullRequestWorkItems.set("repo-2/7301", [{ id: "71", url: "" }]);
+    client.pullRequestWorkItems.set("repo-3/7302", [{ id: "72", url: "" }]);
+    client.pullRequestPolicyEvaluations.set("vstfs:///CodeReview/CodeReviewId/proj-1/7300", [
+      {
+        status: "rejected",
+        configuration: {
+          isBlocking: true,
+          isEnabled: true,
+          type: { displayName: "CI Build" },
+        },
+      },
+    ]);
+    client.workItems = [
+      createAdoWorkItem({
+        id: 70,
+        fields: {
+          "System.Id": 70,
+          "System.Title": "Active review bug",
+          "System.WorkItemType": "Bug",
+          "System.State": "Active",
+          "System.AreaPath": "Area\\Team",
+          "System.Rev": 1,
+        },
+      }),
+      createAdoWorkItem({
+        id: 71,
+        fields: {
+          "System.Id": 71,
+          "System.Title": "Completed review bug",
+          "System.WorkItemType": "Bug",
+          "System.State": "Active",
+          "System.AreaPath": "Area\\Team",
+          "System.Rev": 1,
+        },
+      }),
+      createAdoWorkItem({
+        id: 72,
+        fields: {
+          "System.Id": 72,
+          "System.Title": "New review bug",
+          "System.WorkItemType": "Bug",
+          "System.State": "Active",
+          "System.AreaPath": "Area\\Team",
+          "System.Rev": 1,
+        },
+      }),
+    ];
+
+    const result = await fetchReviewWorkItems(client, "org", "proj", "Area", "Bug");
+
+    const activeReview = result.workItems.find((item) => item.review?.pullRequestId === 7300);
+    const completedReview = result.workItems.find((item) => item.review?.pullRequestId === 7301);
+    const newReview = result.workItems.find((item) => item.review?.pullRequestId === 7302);
+
+    expect(activeReview?.review?.reviewState).toBe("active");
+    expect(activeReview?.relatedPullRequests?.[0].failingStatusChecks).toEqual(["CI Build"]);
+    expect(completedReview?.review?.reviewState).toBe("completed");
+    expect(completedReview?.relatedPullRequests?.[0].failingStatusChecks).toBeUndefined();
+    expect(newReview?.review?.reviewState).toBe("new");
+    expect(newReview?.relatedPullRequests?.[0].failingStatusChecks).toBeUndefined();
+    expect(client.callLog.filter((call) => call.method === "getPullRequestPolicyEvaluations")).toHaveLength(1);
+    expect(
+      client.callLog.find((call) => call.method === "getPullRequestPolicyEvaluations")?.args[0],
+    ).toBe("vstfs:///CodeReview/CodeReviewId/proj-1/7300");
   });
 });
