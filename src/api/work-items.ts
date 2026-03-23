@@ -288,6 +288,48 @@ function getBuildDisplayId(build: AdoBuild): string {
   return String(build.id);
 }
 
+const BUILD_RECENCY_FIELDS = [
+  "queueTime",
+  "startTime",
+  "finishTime",
+  "lastChangedDate",
+] as const;
+
+function parseBuildTimestamp(value?: string): number | undefined {
+  if (!value?.trim()) return undefined;
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? undefined : timestamp;
+}
+
+function isBuildNewer(candidate: AdoBuild, current: AdoBuild): boolean {
+  for (const field of BUILD_RECENCY_FIELDS) {
+    const candidateTimestamp = parseBuildTimestamp(candidate[field]);
+    const currentTimestamp = parseBuildTimestamp(current[field]);
+    if (candidateTimestamp === undefined && currentTimestamp === undefined) {
+      continue;
+    }
+    if (candidateTimestamp === undefined) {
+      return false;
+    }
+    if (currentTimestamp === undefined) {
+      return true;
+    }
+    if (candidateTimestamp !== currentTimestamp) {
+      return candidateTimestamp > currentTimestamp;
+    }
+  }
+  const candidateDisplayId = getBuildDisplayId(candidate);
+  const currentDisplayId = getBuildDisplayId(current);
+  const displayIdComparison = candidateDisplayId.localeCompare(currentDisplayId, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+  if (displayIdComparison !== 0) {
+    return displayIdComparison > 0;
+  }
+  return candidate.id > current.id;
+}
+
 function formatBuildStateLabel(value: string): string {
   return value
     .trim()
@@ -353,7 +395,8 @@ async function getMergedPullRequestBuildSummaries(
       if (!latestBuildsByPullRequest.has(pullRequestId)) {
         latestBuildsByPullRequest.set(pullRequestId, buildsByPipeline);
       }
-      if (!buildsByPipeline.has(pipelineKey)) {
+      const currentBuild = buildsByPipeline.get(pipelineKey);
+      if (!currentBuild || isBuildNewer(build, currentBuild)) {
         buildsByPipeline.set(pipelineKey, build);
       }
     }

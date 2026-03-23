@@ -136,6 +136,10 @@ export interface AdoBuild {
   id: number;
   appendCommitMessageToRunName?: boolean;
   buildNumber?: string;
+  queueTime?: string;
+  startTime?: string;
+  finishTime?: string;
+  lastChangedDate?: string;
   status?: string;
   result?: string;
   sourceBranch?: string;

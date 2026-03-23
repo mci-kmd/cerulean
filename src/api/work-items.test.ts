@@ -392,6 +392,80 @@ describe("fetchWorkItemsInitial", () => {
     expect(client.callLog.filter((call) => call.method === "listBuilds")).toHaveLength(1);
   });
 
+  it("keeps only the newest merged build status per pipeline when retries exist", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with retried merged build",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f127",
+            attributes: { name: "Pull Request" },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/127", {
+      pullRequestId: 127,
+      title: "Retry flaky merged build",
+      status: "completed",
+      mergeStatus: "succeeded",
+      reviewers: [{ isRequired: true, vote: 10 }],
+    });
+    client.builds = [
+      {
+        id: 910,
+        buildNumber: "#20260320.10 • Merged PR 127: Retry flaky merged build",
+        queueTime: "2026-03-20T10:00:00.000Z",
+        status: "completed",
+        result: "failed",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 18, name: "CI" },
+      },
+      {
+        id: 912,
+        buildNumber: "#20260320.12 • Merged PR 127: Retry flaky merged build",
+        queueTime: "2026-03-20T11:00:00.000Z",
+        status: "completed",
+        result: "succeeded",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 18, name: "CI" },
+      },
+      {
+        id: 911,
+        buildNumber: "#20260320.11 • Merged PR 127: Retry flaky merged build",
+        queueTime: "2026-03-20T10:30:00.000Z",
+        status: "inProgress",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 19, name: "Deploy" },
+      },
+    ];
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+
+    expect(result.workItems[0].relatedPullRequests?.[0]).toMatchObject({
+      id: "127",
+      mergedBuildSummary: {
+        totalCount: 2,
+        completedCount: 1,
+        failedCount: 0,
+        builds: [
+          { pipeline: "CI", buildId: "20260320.12", status: "Succeeded" },
+          { pipeline: "Deploy", buildId: "20260320.11", status: "In Progress" },
+        ],
+      },
+    });
+  });
+
   it("matches merged PR builds from trigger info when buildNumber lacks the merge message", async () => {
     const client = new MockAdoClient();
     client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
