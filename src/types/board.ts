@@ -65,6 +65,19 @@ export interface ReviewWorkItem {
   reviewState: "new" | "active" | "completed";
 }
 
+export interface PullRequestMergedBuildSummary {
+  totalCount: number;
+  completedCount: number;
+  failedCount: number;
+  builds: PullRequestMergedBuildDetail[];
+}
+
+export interface PullRequestMergedBuildDetail {
+  pipeline: string;
+  buildId: string;
+  status: string;
+}
+
 export interface UiReviewWorkItem {
   sourceWorkItemId: number;
   reviewTag: string;
@@ -98,6 +111,7 @@ export interface RelatedPullRequest {
   requiredReviewersApproved?: boolean;
   requiredReviewersPendingCount?: number;
   isCompleted?: boolean;
+  mergedBuildSummary?: PullRequestMergedBuildSummary | null;
   url: string;
 }
 

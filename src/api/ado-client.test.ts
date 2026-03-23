@@ -84,6 +84,57 @@ describe("HttpAdoClient", () => {
     await expect(client.queryWorkItems("SELECT ...")).rejects.toThrow("401");
   });
 
+  it("lists builds with auth header and branch filter", async () => {
+    let capturedAuth = "";
+    let capturedBranch = "";
+    let capturedTop = "";
+    server.use(
+      http.get(`${BASE}/_apis/build/builds`, ({ request }) => {
+        capturedAuth = request.headers.get("authorization") ?? "";
+        const url = new URL(request.url);
+        capturedBranch = url.searchParams.get("branchName") ?? "";
+        capturedTop = url.searchParams.get("$top") ?? "";
+        return HttpResponse.json({
+          value: [
+            {
+              id: 42,
+              buildNumber: "#20260320.4 • Merged PR 123: Improve login flow",
+              status: "completed",
+              result: "succeeded",
+              sourceBranch: "refs/heads/master",
+              definition: { id: 7, name: "CI" },
+            },
+          ],
+        });
+      }),
+    );
+
+    const builds = await client.listBuilds("refs/heads/master", 50);
+    expect(capturedAuth).toBe(`Basic ${btoa(":test-pat")}`);
+    expect(capturedBranch).toBe("refs/heads/master");
+    expect(capturedTop).toBe("50");
+    expect(builds).toEqual([
+      {
+        id: 42,
+        buildNumber: "#20260320.4 • Merged PR 123: Improve login flow",
+        status: "completed",
+        result: "succeeded",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 7, name: "CI" },
+      },
+    ]);
+  });
+
+  it("throws on failed builds fetch", async () => {
+    server.use(
+      http.get(`${BASE}/_apis/build/builds`, () => {
+        return new HttpResponse(null, { status: 403 });
+      }),
+    );
+
+    await expect(client.listBuilds("refs/heads/master", 10)).rejects.toThrow("403");
+  });
+
   it("lists boards without duplicating the default team path", async () => {
     let capturedPathname = "";
     server.use(

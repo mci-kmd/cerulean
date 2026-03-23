@@ -1,5 +1,6 @@
 import { createElement, useEffect, useRef, useState } from "react";
 import {
+  Check,
   GitPullRequestArrow,
   GitPullRequest,
   GitPullRequestClosed,
@@ -8,6 +9,7 @@ import {
   MessageCircle,
   Pencil,
   User,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { useSortable } from "@dnd-kit/react/sortable";
@@ -31,6 +33,7 @@ import {
   COMPLETED_COLUMN_ID,
   isReviewWorkItem,
   isUiReviewWorkItem,
+  type PullRequestMergedBuildSummary,
   type RelatedPullRequest,
   type WorkItem,
 } from "@/types/board";
@@ -61,6 +64,33 @@ function getRequiredReviewerTooltip(pr: RelatedPullRequest): string {
   return typeof pendingCount === "number" && pendingCount > 0
     ? `Waiting for ${pendingCount} required reviewer${pendingCount === 1 ? "" : "s"} approval`
     : "Waiting for required reviewer approval";
+}
+
+function getMergedBuildSummaryClassName(pr: RelatedPullRequest): string {
+  const summary = pr.mergedBuildSummary;
+  if (!summary || summary.totalCount <= 0) {
+    return "text-muted-foreground";
+  }
+  if (summary.failedCount > 0) {
+    return "text-red-600";
+  }
+  if (summary.completedCount >= summary.totalCount) {
+    return "text-green-600";
+  }
+  return "text-amber-600";
+}
+
+function formatMergedBuildPipelineName(pipeline: string): string {
+  return pipeline.startsWith("KMD.Identity.") ? pipeline.slice("KMD.Identity.".length) : pipeline;
+}
+
+function getMergedBuildSummaryTooltip(summary: PullRequestMergedBuildSummary): string | null {
+  if (summary.builds.length === 0) {
+    return null;
+  }
+  return summary.builds
+    .map((build) => `${formatMergedBuildPipelineName(build.pipeline)} - ${build.buildId}: ${build.status}`)
+    .join("\n");
 }
 
 function getPullRequestStatusMetadata(pr: RelatedPullRequest): {
@@ -184,10 +214,7 @@ export function BoardCard({
   const isCustomTask = workItem.type === CUSTOM_TASK_TYPE && !workItem.url;
   const isTaskLikeCard = isCustomTask || isUiReviewCard;
   const displayId = workItem.displayId ?? workItem.id;
-  const relatedPullRequests =
-    isReviewCard || workItem.type === "Bug" || workItem.type === "User Story"
-      ? workItem.relatedPullRequests ?? []
-      : [];
+  const relatedPullRequests = !isTaskLikeCard ? (workItem.relatedPullRequests ?? []) : [];
   const isGithubReviewCard = isReviewCard && workItem.review.provider === "github";
   const canCreateAdoPullRequest =
     !isTaskLikeCard &&
@@ -486,15 +513,34 @@ export function BoardCard({
                 const isCompleted = isPullRequestCompleted(pr);
                 const metadata = getPullRequestStatusMetadata(pr);
                 const Icon = metadata.icon;
+                const mergedBuildSummary =
+                  !isReviewCard &&
+                  pr.mergedBuildSummary &&
+                  pr.mergedBuildSummary.totalCount > 0
+                    ? pr.mergedBuildSummary
+                    : null;
+                const mergedBuildTooltip = mergedBuildSummary
+                  ? getMergedBuildSummaryTooltip(mergedBuildSummary)
+                  : null;
+                const mergedBuildIndicator = mergedBuildSummary ? (
+                  <span
+                    data-testid={`pr-merged-build-summary-${pr.id}`}
+                    className={`inline-flex items-center gap-0.5 ${getMergedBuildSummaryClassName(pr)}`}
+                    aria-label={`Build pipelines ${mergedBuildSummary.completedCount} of ${mergedBuildSummary.totalCount} completed`}
+                  >
+                    <Workflow
+                      data-testid={`pr-merged-build-icon-${pr.id}`}
+                      className="h-3 w-3"
+                      aria-hidden="true"
+                    />
+                    <span>
+                      {mergedBuildSummary.completedCount}/{mergedBuildSummary.totalCount}
+                    </span>
+                  </span>
+                ) : null;
                 return (
                   <li key={pr.url}>
-                    <a
-                      href={pr.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-start gap-1.5 text-xs text-muted-foreground hover:underline"
-                      onClick={(e) => e.stopPropagation()}
-                    >
+                    <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span className="mt-0.5 inline-flex shrink-0">
@@ -508,9 +554,34 @@ export function BoardCard({
                         </TooltipTrigger>
                         <TooltipContent>{metadata.tooltip}</TooltipContent>
                       </Tooltip>
-                      <span className={`inline-flex items-center gap-1 ${isCompleted ? "opacity-60" : ""}`}>
-                        {getPullRequestTitle(pr)}
-                        {isCompleted ? " (Completed)" : ""}
+                      <span
+                        className={`inline-flex min-w-0 flex-wrap items-center gap-1 ${isCompleted ? "opacity-60" : ""}`}
+                      >
+                        <a
+                          href={pr.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {getPullRequestTitle(pr)}
+                        </a>
+                        {isCompleted && (
+                          <span role="img" aria-label="Completed" className="inline-flex shrink-0">
+                            <Check className="h-3 w-3" aria-hidden="true" />
+                          </span>
+                        )}
+                        {mergedBuildIndicator &&
+                          (mergedBuildTooltip ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>{mergedBuildIndicator}</TooltipTrigger>
+                              <TooltipContent className="whitespace-pre-line">
+                                {mergedBuildTooltip}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            mergedBuildIndicator
+                          ))}
                         {!isCompleted && (pr.unresolvedCommentCount ?? 0) > 0 && (
                           <span
                             data-testid={`pr-unresolved-comments-${pr.id}`}
@@ -542,7 +613,7 @@ export function BoardCard({
                           </span>
                         )}
                       </span>
-                    </a>
+                    </div>
                   </li>
                 );
               })}

@@ -1,6 +1,7 @@
 import type { AdoClient } from "./ado-client";
 import type {
   AdoCurrentUser,
+  AdoBuild,
   AdoPolicyEvaluationRecord,
   AdoPullRequest,
   AdoResourceRef,
@@ -8,7 +9,11 @@ import type {
   AdoWorkItem,
   AdoWorkItemRelation,
 } from "@/types/ado";
-import type { RelatedPullRequest, WorkItem } from "@/types/board";
+import type {
+  PullRequestMergedBuildSummary,
+  RelatedPullRequest,
+  WorkItem,
+} from "@/types/board";
 import { createSyntheticNegativeId } from "@/lib/create-synthetic-id";
 import { CUSTOM_TASK_TYPE } from "@/lib/work-item-types";
 import { hasAdoTag, parseAdoTags } from "@/lib/ado-tags";
@@ -29,6 +34,9 @@ import { detectChanges } from "@/logic/detect-changes";
 const prLookupUnavailableClients = new WeakSet<AdoClient>();
 const prPolicyLookupUnavailableClients = new WeakSet<AdoClient>();
 const prThreadsLookupUnavailableClients = new WeakSet<AdoClient>();
+const prBuildLookupUnavailableClients = new WeakSet<AdoClient>();
+const MASTER_BRANCH_NAME = "refs/heads/master";
+const MERGED_PR_BUILD_FETCH_LIMIT = 200;
 
 function isPullRequestRelation(relation: AdoWorkItemRelation): boolean {
   const name = relation.attributes?.name;
@@ -226,6 +234,159 @@ function parsePullRequestRef(url: string): PullRequestRef | null {
   return { repositoryId: match[1], pullRequestId: match[2] };
 }
 
+function getMergedBuildPullRequestId(build: AdoBuild): string | undefined {
+  const candidateTexts = [
+    build.buildNumber?.trim(),
+    ...Object.values(build.triggerInfo ?? {})
+      .filter((value): value is string => typeof value === "string")
+      .map((value) => value.trim()),
+  ].filter((value): value is string => Boolean(value));
+
+  for (const text of candidateTexts) {
+    const match = text.match(/\bMerged PR\s*#?\s*(\d+)(?::|\b)/i);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+
+  return undefined;
+}
+
+function getBuildPipelineKey(build: AdoBuild): string {
+  const definitionId = build.definition?.id;
+  const definitionName = build.definition?.name?.trim();
+  if (typeof definitionId === "number" && definitionName) {
+    return `${definitionId}:${definitionName}`;
+  }
+  if (typeof definitionId === "number") {
+    return String(definitionId);
+  }
+  if (definitionName) {
+    return definitionName;
+  }
+  return `build:${build.id}`;
+}
+
+function getBuildPipelineName(build: AdoBuild): string {
+  const definitionName = build.definition?.name?.trim();
+  if (definitionName) {
+    return definitionName;
+  }
+  const definitionId = build.definition?.id;
+  if (typeof definitionId === "number") {
+    return `Pipeline ${definitionId}`;
+  }
+  return "Unknown pipeline";
+}
+
+function getBuildDisplayId(build: AdoBuild): string {
+  const buildNumber = build.buildNumber?.trim();
+  if (buildNumber) {
+    const firstToken = buildNumber.split(/\s+/)[0];
+    return firstToken.replace(/^#/, "");
+  }
+  return String(build.id);
+}
+
+function formatBuildStateLabel(value: string): string {
+  return value
+    .trim()
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((segment) => segment[0].toUpperCase() + segment.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function getBuildDisplayStatus(build: AdoBuild): string {
+  const normalizedStatus = build.status?.trim().toLowerCase();
+  const rawResult = build.result?.trim();
+  const normalizedResult = rawResult?.toLowerCase();
+  if (
+    normalizedStatus === "completed" &&
+    rawResult &&
+    normalizedResult !== "none"
+  ) {
+    return formatBuildStateLabel(rawResult);
+  }
+  if (build.status?.trim()) {
+    return formatBuildStateLabel(build.status);
+  }
+  return "Unknown";
+}
+
+function isBuildCompleted(build: AdoBuild): boolean {
+  return build.status?.trim().toLowerCase() === "completed";
+}
+
+function isBuildFailed(build: AdoBuild): boolean {
+  const normalizedResult = build.result?.trim().toLowerCase();
+  if (
+    !normalizedResult ||
+    normalizedResult === "succeeded" ||
+    normalizedResult === "partiallysucceeded" ||
+    normalizedResult === "none"
+  ) {
+    return false;
+  }
+  return true;
+}
+
+async function getMergedPullRequestBuildSummaries(
+  client: AdoClient,
+  pullRequestIds: Set<string>,
+): Promise<Map<string, PullRequestMergedBuildSummary>> {
+  if (pullRequestIds.size === 0 || prBuildLookupUnavailableClients.has(client)) {
+    return new Map();
+  }
+
+  try {
+    const builds = await client.listBuilds(MASTER_BRANCH_NAME, MERGED_PR_BUILD_FETCH_LIMIT);
+    const latestBuildsByPullRequest = new Map<string, Map<string, AdoBuild>>();
+
+    for (const build of builds) {
+      const pullRequestId = getMergedBuildPullRequestId(build);
+      if (!pullRequestId || !pullRequestIds.has(pullRequestId)) continue;
+      const pipelineKey = getBuildPipelineKey(build);
+      const buildsByPipeline = latestBuildsByPullRequest.get(pullRequestId) ?? new Map<string, AdoBuild>();
+      if (!latestBuildsByPullRequest.has(pullRequestId)) {
+        latestBuildsByPullRequest.set(pullRequestId, buildsByPipeline);
+      }
+      if (!buildsByPipeline.has(pipelineKey)) {
+        buildsByPipeline.set(pipelineKey, build);
+      }
+    }
+
+    const summaries = new Map<string, PullRequestMergedBuildSummary>();
+    for (const [pullRequestId, buildsByPipeline] of latestBuildsByPullRequest) {
+      const latestBuilds = [...buildsByPipeline.values()];
+      const buildDetails = latestBuilds
+        .map((build) => ({
+          pipeline: getBuildPipelineName(build),
+          buildId: getBuildDisplayId(build),
+          status: getBuildDisplayStatus(build),
+        }))
+        .sort((left, right) => {
+          const pipelineComparison = left.pipeline.localeCompare(right.pipeline);
+          if (pipelineComparison !== 0) return pipelineComparison;
+          return left.buildId.localeCompare(right.buildId);
+        });
+      summaries.set(pullRequestId, {
+        totalCount: latestBuilds.length,
+        completedCount: latestBuilds.filter(isBuildCompleted).length,
+        failedCount: latestBuilds.filter(isBuildFailed).length,
+        builds: buildDetails,
+      });
+    }
+
+    return summaries;
+  } catch {
+    prBuildLookupUnavailableClients.add(client);
+    return new Map();
+  }
+}
+
 function hasPullRequestTitle(pr: RelatedPullRequest): boolean {
   return Boolean(pr.title?.trim());
 }
@@ -244,12 +405,19 @@ function hasPullRequestReviewGate(pr: RelatedPullRequest): boolean {
   return pr.requiredReviewersApproved !== undefined;
 }
 
+function needsPullRequestBuildSummary(pr: RelatedPullRequest): boolean {
+  return isPullRequestCompleted(pr.status, pr.isCompleted) && pr.mergedBuildSummary === undefined;
+}
+
 function needsPullRequestEnrichment(pr: RelatedPullRequest): boolean {
-  return !(
-    hasPullRequestTitle(pr) &&
-    hasPullRequestStatus(pr) &&
-    hasPullRequestMergeStatus(pr) &&
-    hasPullRequestReviewGate(pr)
+  return (
+    needsPullRequestBuildSummary(pr) ||
+    !(
+      hasPullRequestTitle(pr) &&
+      hasPullRequestStatus(pr) &&
+      hasPullRequestMergeStatus(pr) &&
+      hasPullRequestReviewGate(pr)
+    )
   );
 }
 
@@ -432,6 +600,7 @@ interface PullRequestDetails {
   requiredReviewersApproved?: boolean;
   requiredReviewersPendingCount?: number;
   failingStatusChecks?: string[];
+  mergedBuildSummary?: PullRequestMergedBuildSummary | null;
 }
 
 function mergePullRequestDetails(
@@ -452,6 +621,7 @@ function mergePullRequestDetails(
   const requiredReviewersApproved = details.requiredReviewersApproved;
   const requiredReviewersPendingCount = details.requiredReviewersPendingCount;
   const failingStatusChecks = details.failingStatusChecks;
+  const mergedBuildSummary = details.mergedBuildSummary;
   const isCompleted = status.toLowerCase() === "completed";
 
   const sameTitle = title.length === 0 || title === pr.title;
@@ -476,6 +646,15 @@ function mergePullRequestDetails(
       pr.failingStatusChecks !== undefined &&
       failingStatusChecks.length === pr.failingStatusChecks.length &&
       failingStatusChecks.every((check, index) => check === pr.failingStatusChecks?.[index]));
+  const sameMergedBuildSummary =
+    mergedBuildSummary === undefined ||
+    (mergedBuildSummary === null
+      ? pr.mergedBuildSummary === null
+      : pr.mergedBuildSummary !== undefined &&
+        pr.mergedBuildSummary !== null &&
+        mergedBuildSummary.totalCount === pr.mergedBuildSummary.totalCount &&
+        mergedBuildSummary.completedCount === pr.mergedBuildSummary.completedCount &&
+        mergedBuildSummary.failedCount === pr.mergedBuildSummary.failedCount);
   const sameCompletion = status.length === 0 || isCompleted === pr.isCompleted;
   if (
     sameTitle &&
@@ -486,6 +665,7 @@ function mergePullRequestDetails(
     sameRequiredReviewersApproved &&
     sameRequiredReviewersPendingCount &&
     sameFailingStatusChecks &&
+    sameMergedBuildSummary &&
     sameCompletion
   ) {
     return pr;
@@ -513,12 +693,16 @@ function mergePullRequestDetails(
         ? { failingStatusChecks }
         : { failingStatusChecks: undefined }
       : {}),
+    ...(mergedBuildSummary !== undefined ? { mergedBuildSummary } : {}),
   };
   if (unresolvedCommentCount !== undefined && normalizedUnresolvedCommentCount === undefined) {
     delete merged.unresolvedCommentCount;
   }
   if (approvalCount !== undefined && normalizedApprovalCount === undefined) {
     delete merged.approvalCount;
+  }
+  if (mergedBuildSummary === undefined) {
+    delete merged.mergedBuildSummary;
   }
   return merged;
 }
@@ -622,6 +806,27 @@ async function enrichPullRequestDetails(
     }
     if (hadLookupFailure) {
       prLookupUnavailableClients.add(client);
+    }
+  }
+
+  const completedPullRequestIds = new Set<string>();
+  for (const [key, details] of detailsByKey) {
+    if (!isPullRequestCompleted(details.status)) continue;
+    const ref = refsByKey.get(key);
+    if (!ref) continue;
+    completedPullRequestIds.add(ref.pullRequestId);
+  }
+
+  if (completedPullRequestIds.size > 0) {
+    const buildSummaries = await getMergedPullRequestBuildSummaries(client, completedPullRequestIds);
+    for (const [key, details] of detailsByKey) {
+      if (!isPullRequestCompleted(details.status)) continue;
+      const ref = refsByKey.get(key);
+      if (!ref) continue;
+      detailsByKey.set(key, {
+        ...details,
+        mergedBuildSummary: buildSummaries.get(ref.pullRequestId) ?? null,
+      });
     }
   }
 

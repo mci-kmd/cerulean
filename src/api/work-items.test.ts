@@ -284,6 +284,31 @@ describe("fetchWorkItemsInitial", () => {
       mergeStatus: "succeeded",
       reviewers: [{ isRequired: true, vote: 10 }],
     });
+    client.builds = [
+      {
+        id: 901,
+        buildNumber: "#20260320.4 • Merged PR 123: Improve login flow",
+        status: "completed",
+        result: "succeeded",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 10, name: "CI" },
+      },
+      {
+        id: 902,
+        buildNumber: "#20260320.5 • Merged PR 123: Improve login flow",
+        status: "inProgress",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 11, name: "Deploy" },
+      },
+      {
+        id: 903,
+        buildNumber: "#20260320.3 • Merged PR 123: Improve login flow",
+        status: "completed",
+        result: "failed",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 10, name: "CI" },
+      },
+    ];
 
     const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
     expect(result.workItems[0].relatedPullRequests).toEqual([
@@ -297,15 +322,198 @@ describe("fetchWorkItemsInitial", () => {
         requiredReviewersApproved: true,
         requiredReviewersPendingCount: 0,
         isCompleted: true,
+        mergedBuildSummary: {
+          totalCount: 2,
+          completedCount: 1,
+          failedCount: 0,
+          builds: [
+            { pipeline: "CI", buildId: "20260320.4", status: "Succeeded" },
+            { pipeline: "Deploy", buildId: "20260320.5", status: "In Progress" },
+          ],
+        },
         url: "https://dev.azure.com/org/proj/_git/repo-1/pullrequest/123",
       },
     ]);
     expect(
       client.callLog.filter((call) => call.method === "getPullRequest"),
     ).toHaveLength(1);
+    expect(client.callLog.filter((call) => call.method === "listBuilds")).toHaveLength(1);
     expect(
       client.callLog.filter((call) => call.method === "getPullRequestThreads"),
     ).toHaveLength(0);
+  });
+
+  it("stores a checked empty merged build summary when no master builds match a completed PR", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with completed PR",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f124",
+            attributes: { name: "Pull Request" },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/124", {
+      pullRequestId: 124,
+      title: "Improve logout flow",
+      status: "completed",
+      mergeStatus: "succeeded",
+      reviewers: [{ isRequired: true, vote: 10 }],
+    });
+    client.builds = [
+      {
+        id: 904,
+        buildNumber: "#20260320.6 • Merged PR 999: Other work",
+        status: "completed",
+        result: "succeeded",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 12, name: "CI" },
+      },
+    ];
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+
+    expect(result.workItems[0].relatedPullRequests?.[0]).toMatchObject({
+      id: "124",
+      mergedBuildSummary: null,
+    });
+    expect(client.callLog.filter((call) => call.method === "listBuilds")).toHaveLength(1);
+  });
+
+  it("matches merged PR builds from trigger info when buildNumber lacks the merge message", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with completed PR",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f125",
+            attributes: { name: "Pull Request" },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/125", {
+      pullRequestId: 125,
+      title: "Improve sign out",
+      status: "completed",
+      mergeStatus: "succeeded",
+      reviewers: [{ isRequired: true, vote: 10 }],
+    });
+    client.builds = [
+      {
+        id: 905,
+        buildNumber: "#20260320.7",
+        appendCommitMessageToRunName: true,
+        status: "completed",
+        result: "succeeded",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 15, name: "CI" },
+        triggerInfo: {
+          "ci.message": "Merged PR 125: Improve sign out",
+        },
+      },
+      {
+        id: 906,
+        buildNumber: "#20260320.8",
+        appendCommitMessageToRunName: true,
+        status: "inProgress",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 16, name: "Deploy" },
+        triggerInfo: {
+          "ci.message": "Merged PR 125: Improve sign out",
+        },
+      },
+    ];
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+
+    expect(result.workItems[0].relatedPullRequests?.[0]).toMatchObject({
+      id: "125",
+      mergedBuildSummary: {
+        totalCount: 2,
+        completedCount: 1,
+        failedCount: 0,
+        builds: [
+          { pipeline: "CI", buildId: "20260320.7", status: "Succeeded" },
+          { pipeline: "Deploy", buildId: "20260320.8", status: "In Progress" },
+        ],
+      },
+    });
+  });
+
+  it("treats partially succeeded merged builds as successful summaries", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with partially succeeded build",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f126",
+            attributes: { name: "Pull Request" },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/126", {
+      pullRequestId: 126,
+      title: "Improve registration",
+      status: "completed",
+      mergeStatus: "succeeded",
+      reviewers: [{ isRequired: true, vote: 10 }],
+    });
+    client.builds = [
+      {
+        id: 907,
+        buildNumber: "#20260320.9 • Merged PR 126: Improve registration",
+        status: "completed",
+        result: "partiallySucceeded",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 17, name: "CI" },
+      },
+    ];
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+
+    expect(result.workItems[0].relatedPullRequests?.[0]).toMatchObject({
+      id: "126",
+      mergedBuildSummary: {
+        totalCount: 1,
+        completedCount: 1,
+        failedCount: 0,
+        builds: [{ pipeline: "CI", buildId: "20260320.9", status: "Partially Succeeded" }],
+      },
+    });
   });
 
   it("enriches active pull requests with unresolved thread counts", async () => {

@@ -127,6 +127,22 @@ export interface AdoGitRef {
   url?: string;
 }
 
+export interface AdoBuildDefinition {
+  id?: number;
+  name?: string;
+}
+
+export interface AdoBuild {
+  id: number;
+  appendCommitMessageToRunName?: boolean;
+  buildNumber?: string;
+  status?: string;
+  result?: string;
+  sourceBranch?: string;
+  definition?: AdoBuildDefinition;
+  triggerInfo?: Record<string, unknown>;
+}
+
 export interface AdoPullRequestStatus {
   state?: string;
   description?: string;

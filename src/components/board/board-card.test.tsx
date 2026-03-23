@@ -701,13 +701,15 @@ describe("BoardCard related PR links", () => {
 
     const activePrOne = screen.getByRole("link", { name: "Active PR one" });
     const activePrTwo = screen.getByRole("link", { name: "Active PR two" });
-    const completedPr = screen.getByRole("link", { name: "Completed PR (Completed)" });
+    const completedPr = screen.getByRole("link", { name: "Completed PR" });
     const workItemLink = screen.getByRole("link", { name: "Test Item" });
 
-    expect(within(activePrOne).getByTestId("pr-unresolved-comments-2001")).toHaveTextContent("2");
-    expect(within(activePrTwo).getByTestId("pr-unresolved-comments-2003")).toHaveTextContent("1");
+    expect(within(activePrOne).queryByTestId("pr-unresolved-comments-2001")).toBeNull();
+    expect(within(activePrTwo).queryByTestId("pr-unresolved-comments-2003")).toBeNull();
     expect(within(completedPr).queryByTestId("pr-unresolved-comments-2002")).toBeNull();
     expect(workItemLink.querySelector('[data-testid^="pr-unresolved-comments-"]')).toBeNull();
+    expect(screen.getByTestId("pr-unresolved-comments-2001")).toHaveTextContent("2");
+    expect(screen.getByTestId("pr-unresolved-comments-2003")).toHaveTextContent("1");
   });
 
   it("hides unresolved comment count when active pull requests have none", () => {
@@ -779,21 +781,19 @@ describe("BoardCard related PR links", () => {
 
     const activePrWithApprovals = screen.getByRole("link", { name: "Active PR with approvals" });
     const activePrWithOneApproval = screen.getByRole("link", { name: "Active PR with one approval" });
-    const completedPr = screen.getByRole("link", { name: "Completed PR with approvals (Completed)" });
+    const completedPr = screen.getByRole("link", { name: "Completed PR with approvals" });
 
-    expect(within(activePrWithApprovals).getByTestId("pr-unresolved-comments-2020")).toHaveTextContent(
-      "2",
-    );
-    expect(within(activePrWithApprovals).getByTestId("pr-approval-count-2020")).toHaveTextContent(
-      "3",
-    );
-    expect(within(activePrWithOneApproval).getByTestId("pr-approval-count-2021")).toHaveTextContent(
-      "1",
-    );
+    expect(within(activePrWithApprovals).queryByTestId("pr-unresolved-comments-2020")).toBeNull();
+    expect(within(activePrWithApprovals).queryByTestId("pr-approval-count-2020")).toBeNull();
+    expect(within(activePrWithOneApproval).queryByTestId("pr-approval-count-2021")).toBeNull();
     expect(within(completedPr).queryByTestId("pr-approval-count-2022")).toBeNull();
 
-    const unresolvedBadge = within(activePrWithApprovals).getByTestId("pr-unresolved-comments-2020");
-    const approvalBadge = within(activePrWithApprovals).getByTestId("pr-approval-count-2020");
+    expect(screen.getByTestId("pr-unresolved-comments-2020")).toHaveTextContent("2");
+    expect(screen.getByTestId("pr-approval-count-2020")).toHaveTextContent("3");
+    expect(screen.getByTestId("pr-approval-count-2021")).toHaveTextContent("1");
+
+    const unresolvedBadge = screen.getByTestId("pr-unresolved-comments-2020");
+    const approvalBadge = screen.getByTestId("pr-approval-count-2020");
     expect(unresolvedBadge.compareDocumentPosition(approvalBadge) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
   });
 
@@ -817,10 +817,11 @@ describe("BoardCard related PR links", () => {
       "href",
       "https://dev.azure.com/org/proj/_git/repo/pullrequest/123",
     );
-    expect(prLink.querySelector("svg")).not.toBeNull();
+    expect(prLink.querySelector("svg")).toBeNull();
+    expect(screen.getByTestId("pr-status-icon-123")).toBeInTheDocument();
   });
 
-  it("postfixes completed pull requests", () => {
+  it("renders a checkmark for completed pull requests", () => {
     renderCard({
       workItemOverrides: {
         type: "User Story",
@@ -836,11 +837,10 @@ describe("BoardCard related PR links", () => {
       },
     });
 
-    const completedPrLink = screen.getByRole("link", { name: "Ship release notes (Completed)" });
+    const completedPrLink = screen.getByRole("link", { name: "Ship release notes" });
     expect(completedPrLink).toBeInTheDocument();
-    expect(within(completedPrLink).getByText("Ship release notes (Completed)")).toHaveClass(
-      "opacity-60",
-    );
+    expect(screen.getByRole("img", { name: "Completed" })).toBeInTheDocument();
+    expect(completedPrLink.parentElement).toHaveClass("opacity-60");
   });
 
   it("orders active pull requests before completed ones", () => {
@@ -867,13 +867,10 @@ describe("BoardCard related PR links", () => {
     });
 
     const links = within(screen.getByRole("list")).getAllByRole("link");
-    expect(links.map((link) => link.textContent)).toEqual([
-      "Add migration script",
-      "Finalize migration (Completed)",
-    ]);
+    expect(links.map((link) => link.textContent)).toEqual(["Add migration script", "Finalize migration"]);
   });
 
-  it("does not render related pull request links for non-bug/story cards", () => {
+  it("renders related pull request links for normal task cards", () => {
     renderCard({
       workItemOverrides: {
         type: "Task",
@@ -881,14 +878,14 @@ describe("BoardCard related PR links", () => {
           {
             id: "999",
             label: "PR #999",
-            title: "This should not render",
+            title: "Task PR should render",
             url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/999",
           },
         ],
       },
     });
 
-    expect(screen.queryByRole("link", { name: "This should not render" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Task PR should render" })).toBeInTheDocument();
   });
 
   it("shows green icon + tooltip for mergeable pull requests", async () => {
@@ -946,6 +943,192 @@ describe("BoardCard related PR links", () => {
         name: "Waiting for 1 required reviewer approval",
       }),
     ).toBeInTheDocument();
+  });
+
+  it("shows an amber merged-build summary on completed own-work PRs when builds are still running", () => {
+    renderCard({
+      workItemOverrides: {
+        type: "Bug",
+        relatedPullRequests: [
+          {
+            id: "310",
+            label: "PR #310",
+            title: "Merged login flow",
+            status: "completed",
+            mergeStatus: "succeeded",
+            isCompleted: true,
+            mergedBuildSummary: {
+              totalCount: 3,
+              completedCount: 2,
+              failedCount: 0,
+              builds: [],
+            },
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/310",
+          },
+        ],
+      },
+    });
+
+    const summary = screen.getByTestId("pr-merged-build-summary-310");
+    expect(summary).toHaveTextContent("2/3");
+    expect(summary).toHaveClass("text-amber-600");
+    expect(screen.getByTestId("pr-merged-build-icon-310")).toBeInTheDocument();
+  });
+
+  it("shows a green merged-build summary when all related builds completed successfully", () => {
+    renderCard({
+      workItemOverrides: {
+        type: "Bug",
+        relatedPullRequests: [
+          {
+            id: "311",
+            label: "PR #311",
+            title: "Merged checkout flow",
+            status: "completed",
+            mergeStatus: "succeeded",
+            isCompleted: true,
+            mergedBuildSummary: {
+              totalCount: 3,
+              completedCount: 3,
+              failedCount: 0,
+              builds: [],
+            },
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/311",
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByTestId("pr-merged-build-summary-311")).toHaveClass("text-green-600");
+  });
+
+  it("shows a red merged-build summary when any related build has failed", () => {
+    renderCard({
+      workItemOverrides: {
+        type: "Bug",
+        relatedPullRequests: [
+          {
+            id: "312",
+            label: "PR #312",
+            title: "Merged claims flow",
+            status: "completed",
+            mergeStatus: "succeeded",
+            isCompleted: true,
+            mergedBuildSummary: {
+              totalCount: 3,
+              completedCount: 2,
+              failedCount: 1,
+              builds: [],
+            },
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/312",
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByTestId("pr-merged-build-summary-312")).toHaveClass("text-red-600");
+  });
+
+  it("does not show merged-build summaries on review cards", () => {
+    renderCard({
+      workItemOverrides: {
+        kind: "review",
+        review: {
+          provider: "ado",
+          repositoryId: "repo-1",
+          pullRequestId: 313,
+          reviewState: "active",
+        },
+        relatedPullRequests: [
+          {
+            id: "313",
+            label: "PR #313",
+            title: "Someone else's PR",
+            status: "completed",
+            mergeStatus: "succeeded",
+            isCompleted: true,
+            mergedBuildSummary: {
+              totalCount: 3,
+              completedCount: 1,
+              failedCount: 0,
+              builds: [],
+            },
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/313",
+          },
+        ],
+      },
+    });
+
+    expect(screen.queryByTestId("pr-merged-build-summary-313")).toBeNull();
+  });
+
+  it("shows merged-build summaries on completed task cards", () => {
+    renderCard({
+      columnId: COMPLETED_COLUMN_ID,
+      workItemOverrides: {
+        type: "Task",
+        relatedPullRequests: [
+          {
+            id: "314",
+            label: "PR #314",
+            title: "Completed task PR",
+            status: "completed",
+            mergeStatus: "succeeded",
+            isCompleted: true,
+            mergedBuildSummary: {
+              totalCount: 3,
+              completedCount: 2,
+              failedCount: 0,
+              builds: [],
+            },
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/314",
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByRole("link", { name: "Completed task PR" })).toBeInTheDocument();
+    expect(screen.getByTestId("pr-merged-build-summary-314")).toHaveTextContent("2/3");
+  });
+
+  it("keeps merged-build status outside the PR link and shows per-build tooltip lines", async () => {
+    const user = userEvent.setup();
+    renderCard({
+      workItemOverrides: {
+        type: "Bug",
+        relatedPullRequests: [
+          {
+            id: "315",
+            label: "PR #315",
+            title: "Merged signup flow",
+            status: "completed",
+            mergeStatus: "succeeded",
+            isCompleted: true,
+            mergedBuildSummary: {
+              totalCount: 2,
+              completedCount: 1,
+              failedCount: 0,
+              builds: [
+                { pipeline: "KMD.Identity.Api", buildId: "20260320.5", status: "Succeeded" },
+                { pipeline: "Deploy", buildId: "20260320.6", status: "In Progress" },
+              ],
+            },
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/315",
+          },
+        ],
+      },
+    });
+
+    const prLink = screen.getByRole("link", { name: "Merged signup flow" });
+    const summary = screen.getByTestId("pr-merged-build-summary-315");
+
+    expect(within(prLink).queryByTestId("pr-merged-build-summary-315")).toBeNull();
+
+    await user.hover(summary);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip).toHaveTextContent("Api - 20260320.5: Succeeded");
+    expect(tooltip).not.toHaveTextContent("KMD.Identity.Api - 20260320.5: Succeeded");
+    expect(tooltip).toHaveTextContent("Deploy - 20260320.6: In Progress");
   });
 
   it("shows red conflict icon + tooltip when PR has merge conflicts", async () => {

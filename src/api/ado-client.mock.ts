@@ -3,6 +3,7 @@ import type {
   AdoCurrentUser,
   AdoBoard,
   AdoBoardReference,
+  AdoBuild,
   AdoGitRef,
   AdoGitRepository,
   AdoPolicyEvaluationRecord,
@@ -28,9 +29,11 @@ export class MockAdoClient implements AdoClient {
   public shouldFailPullRequestStatuses = false;
   public shouldFailPullRequestThreads = false;
   public shouldFailPullRequestPolicyEvaluations = false;
+  public shouldFailBuilds = false;
   public myEmail = "me@test.com";
   public myUserId = "me-id";
   public myDisplayName = "Me";
+  public builds: AdoBuild[] = [];
   public pullRequests = new Map<string, AdoPullRequest>();
   public pullRequestWorkItems = new Map<string, AdoResourceRef[]>();
   public pullRequestStatuses = new Map<string, AdoPullRequestStatus[]>();
@@ -98,6 +101,20 @@ export class MockAdoClient implements AdoClient {
     return (this.refs.get(repositoryId) ?? []).filter(
       (ref) => !normalizedFilter || ref.name.startsWith(normalizedFilter),
     );
+  }
+
+  async listBuilds(branchName?: string, top = 200): Promise<AdoBuild[]> {
+    this.callLog.push({ method: "listBuilds", args: [branchName, top] });
+    if (this.shouldFail || this.shouldFailBuilds) {
+      throw new Error("Mock builds error");
+    }
+    const filteredBuilds = branchName?.trim()
+      ? this.builds.filter(
+          (build) =>
+            build.sourceBranch?.trim().toLowerCase() === branchName.trim().toLowerCase(),
+        )
+      : this.builds;
+    return filteredBuilds.slice(0, top);
   }
 
   async listPullRequests(_status = "active"): Promise<AdoPullRequest[]> {

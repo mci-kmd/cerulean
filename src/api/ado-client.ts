@@ -3,6 +3,7 @@ import type {
   AdoBoard,
   AdoBoardReference,
   AdoBatchResponse,
+  AdoBuild,
   AdoGitRef,
   AdoGitRepository,
   AdoPolicyEvaluationRecord,
@@ -40,6 +41,7 @@ export interface AdoClient {
   getCurrentUser(): Promise<AdoCurrentUser>;
   listRepositories(): Promise<AdoGitRepository[]>;
   listRefs(repositoryId: string, filter?: string): Promise<AdoGitRef[]>;
+  listBuilds(branchName?: string, top?: number): Promise<AdoBuild[]>;
   listPullRequests(status?: string): Promise<AdoPullRequest[]>;
   getPullRequest(repositoryId: string, pullRequestId: string): Promise<AdoPullRequest>;
   listPullRequestWorkItems(repositoryId: string, pullRequestId: string): Promise<AdoResourceRef[]>;
@@ -455,6 +457,24 @@ export class HttpAdoClient implements AdoClient {
       continuationToken = res.headers.get("x-ms-continuationtoken");
     } while (continuationToken);
     return refs;
+  }
+
+  async listBuilds(branchName?: string, top = 200): Promise<AdoBuild[]> {
+    const params = new URLSearchParams({
+      "api-version": "7.1",
+      queryOrder: "queueTimeDescending",
+      $top: String(top),
+    });
+    if (branchName?.trim()) {
+      params.set("branchName", branchName.trim());
+    }
+    const res = await fetch(`${this.baseUrl}/_apis/build/builds?${params.toString()}`, {
+      method: "GET",
+      headers: this.jsonHeaders(),
+    });
+    if (!res.ok) throw new Error(`Builds fetch failed: ${res.status}`);
+    const data = await this.readJson<{ value?: AdoBuild[] }>(res, "Builds fetch");
+    return data.value ?? [];
   }
 
   async listPullRequests(status = "active"): Promise<AdoPullRequest[]> {
