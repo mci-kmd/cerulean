@@ -11,8 +11,7 @@ import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { TaskDialog } from "@/components/board/task-dialog";
 import { useBoardCollections } from "@/db/use-board-collections";
 import { useBoard, useSettings, useColumns, useAssignments } from "@/hooks/use-board";
-import { useWorkItems } from "@/hooks/use-work-items";
-import { useCompletedWorkItems } from "@/hooks/use-completed-work-items";
+import { useAssignedBoardWorkItems } from "@/hooks/use-assigned-board-work-items";
 import { useCompleteWorkItem } from "@/hooks/use-complete-work-item";
 import { useReconcile } from "@/hooks/use-reconcile";
 import { useCustomTasks, customTasksToWorkItems } from "@/hooks/use-custom-tasks";
@@ -110,31 +109,26 @@ export function App() {
     preferredBoardColumnNames,
     settings?.candidateBoardColumn?.trim(),
   );
-  const { workItems: adoWorkItems, isLoading, isSuccess, error, refetch, dataUpdatedAt } =
-    useWorkItems(
-      client,
-      "",
-      settings?.org ?? "",
-      settings?.project ?? "",
-      settings?.pollInterval ?? 30,
-      settings?.areaPath,
-      settings?.workItemTypes,
-      settings?.sourceBoardColumn,
-      candidateBoardConfig,
-    );
-
-  const { workItems: completedAdoItems, isSuccess: completedSuccess } =
-    useCompletedWorkItems(
-      client,
-      "",
-      settings?.org ?? "",
-      settings?.project ?? "",
-      settings?.pollInterval ?? 30,
-      settings?.areaPath,
-      settings?.workItemTypes,
-      settings?.approvalBoardColumn,
-      candidateBoardConfig,
-    );
+  const {
+    workItems: adoWorkItems,
+    completedWorkItems: completedAdoItems,
+    isLoading,
+    isSuccess,
+    error,
+    refetch,
+    dataUpdatedAt,
+  } = useAssignedBoardWorkItems(
+    client,
+    settings?.org ?? "",
+    settings?.project ?? "",
+    settings?.pollInterval ?? 30,
+    settings?.areaPath,
+    settings?.workItemTypes,
+    settings?.sourceBoardColumn,
+    settings?.approvalBoardColumn,
+    candidateBoardConfig,
+  );
+  const completedSuccess = isSuccess;
   const {
     workItems: reviewWorkItems,
     newWorkIds: reviewNewWorkIds,

@@ -116,21 +116,15 @@ vi.mock("@/components/board/board", () => ({
   },
 }));
 
-vi.mock("@/hooks/use-work-items", () => ({
-  useWorkItems: () => ({
+vi.mock("@/hooks/use-assigned-board-work-items", () => ({
+  useAssignedBoardWorkItems: () => ({
     workItems: mocks.workItems,
+    completedWorkItems: [],
     isLoading: false,
     isSuccess: true,
     error: null,
     refetch: vi.fn(),
     dataUpdatedAt: 0,
-  }),
-}));
-
-vi.mock("@/hooks/use-completed-work-items", () => ({
-  useCompletedWorkItems: () => ({
-    workItems: [],
-    isSuccess: true,
   }),
 }));
 
