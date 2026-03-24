@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Copy, ExternalLink, FilePlus2, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import type { AdoClient } from "@/api/ado-client";
+import { RetroMarkdownEditor } from "./retro-markdown-editor";
 import {
   buildRetroFilePath,
   buildRetroFilename,
@@ -351,16 +351,15 @@ export function RetroPrepView({
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-2">
-          <label htmlFor="retro-draft" className="text-sm font-medium">
-            Draft markdown
-          </label>
-          <Textarea
-            id="retro-draft"
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            className="min-h-[28rem] font-mono text-xs"
-            placeholder="Retro draft will appear here."
-          />
+          <div className="flex items-center justify-between gap-3">
+            <div className="space-y-1">
+              <label className="text-sm font-medium">Draft markdown</label>
+              <p className="text-xs text-muted-foreground">
+                Markdown renders inline. Move the cursor into a block to edit its raw markers.
+              </p>
+            </div>
+          </div>
+          <RetroMarkdownEditor value={draft} onChange={setDraft} />
         </div>
 
         <div className="space-y-3">

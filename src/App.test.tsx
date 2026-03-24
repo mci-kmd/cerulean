@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/helpers/render";
@@ -9,6 +9,25 @@ import { createAdoWorkItem } from "@/test/fixtures/work-items";
 import { DEFAULT_SETTINGS, type AdoSettings } from "@/types/board";
 
 const BASE = "https://dev.azure.com/test-org/test-project";
+
+vi.mock("@/components/retro/retro-markdown-editor", () => ({
+  RetroMarkdownEditor: ({
+    value,
+    onChange,
+    placeholder,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    placeholder?: string;
+  }) => (
+    <textarea
+      aria-label="Draft markdown"
+      value={value}
+      placeholder={placeholder}
+      onChange={(event) => onChange(event.target.value)}
+    />
+  ),
+}));
 
 function createSettings(overrides: Partial<AdoSettings> = {}): AdoSettings {
   return {
