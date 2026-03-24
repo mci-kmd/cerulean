@@ -108,6 +108,7 @@ describe("RetroMarkdownEditor", () => {
     expect(fakeView.contentDOM.setAttribute).toHaveBeenNthCalledWith(1, "role", "textbox");
     expect(fakeView.contentDOM.setAttribute).toHaveBeenNthCalledWith(2, "aria-label", "Draft markdown");
     expect(fakeView.contentDOM.setAttribute).toHaveBeenNthCalledWith(3, "aria-multiline", "true");
+    expect(fakeView.contentDOM.setAttribute).toHaveBeenNthCalledWith(4, "spellcheck", "true");
 
     const onChange = codeMirrorProps[0].onChange as (value: string) => void;
     onChange("## Updated");

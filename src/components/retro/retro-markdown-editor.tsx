@@ -83,6 +83,7 @@ export function RetroMarkdownEditor({
         view.contentDOM.setAttribute("role", "textbox");
         view.contentDOM.setAttribute("aria-label", "Draft markdown");
         view.contentDOM.setAttribute("aria-multiline", "true");
+        view.contentDOM.setAttribute("spellcheck", "true");
       }}
     />
   );
