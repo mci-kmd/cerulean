@@ -42,6 +42,8 @@ If you only want read-only PR metadata, `Code (Read)` is enough. Full PR drag/re
    - **Work Items (Read, write, & manage)**
    - **Code (Read)**
    - **User profile (Read)**
+   - **Build (Read)**
+   - **Release (Read)**
 7. Copy the token once and store it somewhere safe.
 
 ## Install

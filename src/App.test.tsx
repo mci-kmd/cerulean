@@ -181,6 +181,30 @@ describe("App integration", () => {
 
   }, 10000);
 
+  it("shows an auth toast when an Azure DevOps query fails with 403", async () => {
+    installBoardHandlers();
+    server.use(
+      http.post(`${BASE}/_apis/wit/wiql`, () => new HttpResponse(null, { status: 403 })),
+    );
+
+    const { collections } = renderWithProviders(<App />);
+
+    collections.settings.insert(
+      createSettings({
+        id: "settings",
+        pollInterval: 60,
+      }),
+    );
+    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+
+    expect(await screen.findByText("Azure DevOps permission denied")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "A request to Azure DevOps was rejected with 403. Check PAT scopes and your Azure DevOps permissions.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("opens settings dialog from header", async () => {
     const user = userEvent.setup();
     renderWithProviders(<App />);

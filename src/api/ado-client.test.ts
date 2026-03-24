@@ -135,6 +135,138 @@ describe("HttpAdoClient", () => {
     await expect(client.listBuilds("refs/heads/master", 10)).rejects.toThrow("403");
   });
 
+  it("lists releases for a build from the release API", async () => {
+    let capturedHost = "";
+    let capturedArtifactType = "";
+    let capturedArtifactVersionId = "";
+    let capturedExpand = "";
+    server.use(
+      http.get("https://vsrm.dev.azure.com/test-org/test-project/_apis/release/releases", ({ request }) => {
+        const url = new URL(request.url);
+        capturedHost = url.host;
+        capturedArtifactType = url.searchParams.get("artifactTypeId") ?? "";
+        capturedArtifactVersionId = url.searchParams.get("artifactVersionId") ?? "";
+        capturedExpand = url.searchParams.get("$expand") ?? "";
+        return HttpResponse.json({
+          value: [
+            {
+              id: 81,
+              name: "Release-81",
+              environments: [{ id: 5, name: "DEV", status: "succeeded" }],
+            },
+          ],
+        });
+      }),
+    );
+
+    const releases = await client.listReleasesForBuild("1001");
+
+    expect(capturedHost).toBe("vsrm.dev.azure.com");
+    expect(capturedArtifactType).toBe("Build");
+    expect(capturedArtifactVersionId).toBe("1001");
+    expect(capturedExpand).toBe("environments");
+    expect(releases).toEqual([
+      {
+        id: 81,
+        name: "Release-81",
+        environments: [{ id: 5, name: "DEV", status: "succeeded" }],
+      },
+    ]);
+  });
+
+  it("falls back to the build version when build id returns no releases", async () => {
+    const capturedArtifactVersionIds: string[] = [];
+    server.use(
+      http.get("https://vsrm.dev.azure.com/test-org/test-project/_apis/release/releases", ({ request }) => {
+        const artifactVersionId =
+          new URL(request.url).searchParams.get("artifactVersionId") ?? "";
+        capturedArtifactVersionIds.push(artifactVersionId);
+        return HttpResponse.json({
+          value:
+            artifactVersionId === "20260324.4"
+              ? [
+                  {
+                    id: 82,
+                    name: "Release-82",
+                    environments: [{ id: 6, name: "PROD", status: "pendingApproval" }],
+                  },
+                ]
+              : [],
+        });
+      }),
+    );
+
+    const releases = await client.listReleasesForBuild("1001", "20260324.4");
+
+    expect(capturedArtifactVersionIds).toEqual(["1001", "20260324.4"]);
+    expect(releases).toEqual([
+      {
+        id: 82,
+        name: "Release-82",
+        environments: [{ id: 6, name: "PROD", status: "pendingApproval" }],
+      },
+    ]);
+  });
+
+  it("throws on failed releases fetch", async () => {
+    server.use(
+      http.get("https://vsrm.dev.azure.com/test-org/test-project/_apis/release/releases", () => {
+        return new HttpResponse(null, { status: 403 });
+      }),
+    );
+
+    await expect(client.listReleasesForBuild("1001")).rejects.toThrow("403");
+  });
+
+  it("lists recent releases with environments", async () => {
+    let capturedArtifactVersionId = "missing";
+    let capturedTop = "";
+    server.use(
+      http.get("https://vsrm.dev.azure.com/test-org/test-project/_apis/release/releases", ({ request }) => {
+        const url = new URL(request.url);
+        capturedArtifactVersionId = url.searchParams.get("artifactVersionId") ?? "";
+        capturedTop = url.searchParams.get("$top") ?? "";
+        return HttpResponse.json({
+          value: [
+            {
+              id: 90,
+              name: "Release-90",
+              artifacts: [
+                {
+                  type: "Build",
+                  definitionReference: {
+                    version: { id: "1001", name: "20260324.4" },
+                  },
+                },
+              ],
+              environments: [{ id: 7, name: "DEV", status: "succeeded" }],
+            },
+          ],
+        });
+      }),
+    );
+
+    const releases = await client.listRecentReleases(25);
+
+    expect(capturedArtifactVersionId).toBe("");
+    expect(capturedTop).toBe("25");
+    expect(releases).toEqual([
+      {
+        id: 90,
+        name: "Release-90",
+        artifacts: [
+          {
+            type: "Build",
+            definitionReference: {
+              version: { id: "1001", name: "20260324.4" },
+            },
+          },
+        ],
+        environments: [{ id: 7, name: "DEV", status: "succeeded" }],
+      },
+    ]);
+  });
+
   it("lists boards without duplicating the default team path", async () => {
     let capturedPathname = "";
     server.use(

@@ -86,6 +86,22 @@ export interface PullRequestMergedBuildDetail {
   status: string;
 }
 
+export interface PullRequestMergedReleaseSummary {
+  totalCount: number;
+  inProgressCount: number;
+  deployedCount: number;
+  releases: PullRequestMergedReleaseDetail[];
+}
+
+export interface PullRequestMergedReleaseDetail {
+  pipeline: string;
+  buildId: string;
+  status: string;
+  inProgressEnvironment?: string;
+  deployedEnvironment?: string;
+  url?: string;
+}
+
 export interface UiReviewWorkItem {
   sourceWorkItemId: number;
   reviewTag: string;
@@ -120,6 +136,7 @@ export interface RelatedPullRequest {
   requiredReviewersPendingCount?: number;
   isCompleted?: boolean;
   mergedBuildSummary?: PullRequestMergedBuildSummary | null;
+  mergedReleaseSummary?: PullRequestMergedReleaseSummary | null;
   url: string;
 }
 

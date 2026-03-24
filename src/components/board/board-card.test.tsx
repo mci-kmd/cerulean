@@ -1142,6 +1142,19 @@ describe("BoardCard related PR links", () => {
                 { pipeline: "Deploy", buildId: "20260320.6", status: "In Progress" },
               ],
             },
+            mergedReleaseSummary: {
+              totalCount: 1,
+              inProgressCount: 0,
+              deployedCount: 1,
+              releases: [
+                {
+                  pipeline: "KMD.Identity.Api",
+                  buildId: "20260320.5",
+                  status: "Deployed to DEV",
+                  deployedEnvironment: "DEV",
+                },
+              ],
+            },
             url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/315",
           },
         ],
@@ -1149,15 +1162,53 @@ describe("BoardCard related PR links", () => {
     });
 
     const prLink = screen.getByRole("link", { name: "Merged signup flow" });
-    const summary = screen.getByTestId("pr-merged-build-summary-315");
+    const buildSummary = screen.getByTestId("pr-merged-build-summary-315");
+    const releaseSummary = screen.getByTestId("pr-merged-release-summary-315");
 
     expect(within(prLink).queryByTestId("pr-merged-build-summary-315")).toBeNull();
+    expect(within(prLink).queryByTestId("pr-merged-release-summary-315")).toBeNull();
+    expect(releaseSummary).toHaveTextContent("0/1");
+    expect(releaseSummary).toHaveAttribute(
+      "aria-label",
+      "Release deployments 0 in progress and 1 deployed",
+    );
 
-    await user.hover(summary);
-    const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip).toHaveTextContent("Api - 20260320.5: Succeeded");
-    expect(tooltip).not.toHaveTextContent("KMD.Identity.Api - 20260320.5: Succeeded");
-    expect(tooltip).toHaveTextContent("Deploy - 20260320.6: In Progress");
+    await user.hover(buildSummary);
+    const buildTooltip = await screen.findByRole("tooltip");
+    expect(buildTooltip).toHaveTextContent("Api - 20260320.5: Succeeded");
+    expect(buildTooltip).not.toHaveTextContent("KMD.Identity.Api - 20260320.5: Succeeded");
+    expect(buildTooltip).toHaveTextContent("Deploy - 20260320.6: In Progress");
+  });
+
+  it("hides merged-release status when no builds completed successfully", () => {
+    renderCard({
+      workItemOverrides: {
+        type: "Bug",
+        relatedPullRequests: [
+          {
+            id: "317",
+            label: "PR #317",
+            title: "Failing merged build",
+            status: "completed",
+            mergeStatus: "succeeded",
+            isCompleted: true,
+            mergedBuildSummary: {
+              totalCount: 2,
+              completedCount: 1,
+              failedCount: 1,
+              builds: [
+                { pipeline: "CI", buildId: "20260320.7", status: "Failed" },
+                { pipeline: "Deploy", buildId: "20260320.8", status: "In Progress" },
+              ],
+            },
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/317",
+          },
+        ],
+      },
+    });
+
+    expect(screen.getByTestId("pr-merged-build-summary-317")).toBeInTheDocument();
+    expect(screen.queryByTestId("pr-merged-release-summary-317")).toBeNull();
   });
 
   it("shows red conflict icon + tooltip when PR has merge conflicts", async () => {

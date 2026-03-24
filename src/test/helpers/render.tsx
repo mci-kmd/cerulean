@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BoardCollectionsProvider } from "@/db/provider";
 import { createBoardCollections, type BoardCollections } from "@/db/create-collections";
+import { createAppQueryClient } from "@/lib/query-client";
 
 interface CustomRenderOptions extends Omit<RenderOptions, "wrapper"> {
   collections?: BoardCollections;
@@ -11,11 +12,11 @@ interface CustomRenderOptions extends Omit<RenderOptions, "wrapper"> {
 }
 
 export function createTestQueryClient() {
-  return new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: 0 },
-      mutations: { retry: false },
-    },
+  return createAppQueryClient({
+    queryRetry: false,
+    mutationRetry: false,
+    staleTime: 0,
+    gcTime: 0,
   });
 }
 

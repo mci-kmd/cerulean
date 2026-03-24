@@ -1,19 +1,21 @@
 import type { AdoClient } from "./ado-client";
 import type {
-  AdoCurrentUser,
-  AdoBuild,
-  AdoPolicyEvaluationRecord,
-  AdoPullRequest,
-  AdoResourceRef,
-  AdoPullRequestThread,
-  AdoWorkItem,
-  AdoWorkItemRelation,
-} from "@/types/ado";
-import type {
-  PullRequestMergedBuildSummary,
-  RelatedPullRequest,
-  WorkItem,
-} from "@/types/board";
+    AdoCurrentUser,
+    AdoBuild,
+    AdoPolicyEvaluationRecord,
+    AdoPullRequest,
+    AdoRelease,
+    AdoResourceRef,
+    AdoPullRequestThread,
+    AdoWorkItem,
+    AdoWorkItemRelation,
+  } from "@/types/ado";
+  import type {
+    PullRequestMergedBuildSummary,
+    PullRequestMergedReleaseSummary,
+    RelatedPullRequest,
+    WorkItem,
+  } from "@/types/board";
 import { createSyntheticNegativeId } from "@/lib/create-synthetic-id";
 import { CUSTOM_TASK_TYPE } from "@/lib/work-item-types";
 import { hasAdoTag, parseAdoTags } from "@/lib/ado-tags";
@@ -35,8 +37,10 @@ const prLookupUnavailableClients = new WeakSet<AdoClient>();
 const prPolicyLookupUnavailableClients = new WeakSet<AdoClient>();
 const prThreadsLookupUnavailableClients = new WeakSet<AdoClient>();
 const prBuildLookupUnavailableClients = new WeakSet<AdoClient>();
+const prReleaseLookupUnavailableClients = new WeakSet<AdoClient>();
 const MASTER_BRANCH_NAME = "refs/heads/master";
 const MERGED_PR_BUILD_FETCH_LIMIT = 200;
+const RECENT_RELEASE_FETCH_LIMIT = 100;
 
 function isPullRequestRelation(relation: AdoWorkItemRelation): boolean {
   const name = relation.attributes?.name;
@@ -375,12 +379,29 @@ function isBuildFailed(build: AdoBuild): boolean {
   return true;
 }
 
-async function getMergedPullRequestBuildSummaries(
+function isBuildSuccessful(build: AdoBuild): boolean {
+  const normalizedStatus = build.status?.trim().toLowerCase();
+  const normalizedResult = build.result?.trim().toLowerCase();
+  return (
+    normalizedStatus === "completed" &&
+    (normalizedResult === "succeeded" || normalizedResult === "partiallysucceeded")
+  );
+}
+
+interface MergedPullRequestBuildData {
+  summaries: Map<string, PullRequestMergedBuildSummary>;
+  successfulBuilds: Map<string, AdoBuild[]>;
+}
+
+async function getMergedPullRequestBuildData(
   client: AdoClient,
   pullRequestIds: Set<string>,
-): Promise<Map<string, PullRequestMergedBuildSummary>> {
+): Promise<MergedPullRequestBuildData> {
   if (pullRequestIds.size === 0 || prBuildLookupUnavailableClients.has(client)) {
-    return new Map();
+    return {
+      summaries: new Map(),
+      successfulBuilds: new Map(),
+    };
   }
 
   try {
@@ -402,6 +423,7 @@ async function getMergedPullRequestBuildSummaries(
     }
 
     const summaries = new Map<string, PullRequestMergedBuildSummary>();
+    const successfulBuilds = new Map<string, AdoBuild[]>();
     for (const [pullRequestId, buildsByPipeline] of latestBuildsByPullRequest) {
       const latestBuilds = [...buildsByPipeline.values()];
       const buildDetails = latestBuilds
@@ -421,12 +443,228 @@ async function getMergedPullRequestBuildSummaries(
         failedCount: latestBuilds.filter(isBuildFailed).length,
         builds: buildDetails,
       });
+      successfulBuilds.set(pullRequestId, latestBuilds.filter(isBuildSuccessful));
     }
 
-    return summaries;
+    return { summaries, successfulBuilds };
   } catch {
     prBuildLookupUnavailableClients.add(client);
-    return new Map();
+    return {
+      summaries: new Map(),
+      successfulBuilds: new Map(),
+    };
+  }
+}
+
+function getReleaseTrackingEnvironmentName(name?: string): "DEV" | "PROD" | undefined {
+  const normalizedName = name?.trim().toLowerCase();
+  if (normalizedName === "dev") return "DEV";
+  if (normalizedName === "prod") return "PROD";
+  return undefined;
+}
+
+function isReleaseEnvironmentDeployed(status?: string): boolean {
+  const normalizedStatus = status?.trim().toLowerCase();
+  return normalizedStatus === "succeeded" || normalizedStatus === "partiallysucceeded";
+}
+
+function isReleaseEnvironmentInProgress(status?: string): boolean {
+  const normalizedStatus = status?.trim().toLowerCase();
+  return (
+    normalizedStatus === "inprogress" ||
+    normalizedStatus === "queued" ||
+    normalizedStatus === "scheduled" ||
+    normalizedStatus === "pendingapproval" ||
+    normalizedStatus === "notstarted" ||
+    normalizedStatus === "queuedforagent" ||
+    normalizedStatus === "pending"
+  );
+}
+
+function getPreferredReleaseEnvironment(
+  environments: Iterable<"DEV" | "PROD">,
+): "DEV" | "PROD" | undefined {
+  const values = new Set(environments);
+  if (values.has("PROD")) return "PROD";
+  if (values.has("DEV")) return "DEV";
+  return undefined;
+}
+
+function getReleaseWebUrl(release: AdoRelease): string | undefined {
+  return (
+    release._links?.web?.href?.trim() ||
+    release.webAccessUri?.trim() ||
+    release.url?.trim() ||
+    undefined
+  );
+}
+
+function getMergedBuildReleaseStatus(
+  deployedEnvironment: "DEV" | "PROD" | undefined,
+  inProgressEnvironment: "DEV" | "PROD" | undefined,
+): string {
+  if (deployedEnvironment && inProgressEnvironment) {
+    return `Deployed to ${deployedEnvironment}; ${inProgressEnvironment} in progress`;
+  }
+  if (deployedEnvironment) {
+    return `Deployed to ${deployedEnvironment}`;
+  }
+  if (inProgressEnvironment) {
+    return `${inProgressEnvironment} in progress`;
+  }
+  return "No release";
+}
+
+function getBuildReleaseMatchTokens(build: AdoBuild): Set<string> {
+  const tokens = new Set<string>();
+  const addToken = (value?: string) => {
+    const trimmed = value?.trim();
+    if (!trimmed) return;
+    tokens.add(trimmed);
+    if (trimmed.startsWith("#")) {
+      tokens.add(trimmed.slice(1));
+    }
+  };
+
+  addToken(String(build.id));
+  addToken(getBuildDisplayId(build));
+  addToken(build.buildNumber);
+  return tokens;
+}
+
+function getReleaseArtifactMatchTokens(release: AdoRelease): Set<string> {
+  const tokens = new Set<string>();
+  const addToken = (value?: string) => {
+    const trimmed = value?.trim();
+    if (!trimmed) return;
+    tokens.add(trimmed);
+    if (trimmed.startsWith("#")) {
+      tokens.add(trimmed.slice(1));
+    }
+  };
+
+  for (const artifact of release.artifacts ?? []) {
+    if (artifact.type?.trim().toLowerCase() !== "build") continue;
+    for (const reference of Object.values(artifact.definitionReference ?? {})) {
+      addToken(reference.id);
+      addToken(reference.name);
+    }
+  }
+
+  return tokens;
+}
+
+function isReleaseMatchedToBuild(release: AdoRelease, build: AdoBuild): boolean {
+  const buildTokens = getBuildReleaseMatchTokens(build);
+  if (buildTokens.size === 0) return false;
+  const releaseTokens = getReleaseArtifactMatchTokens(release);
+  for (const token of buildTokens) {
+    if (releaseTokens.has(token)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+interface PullRequestReleaseLookupResult {
+  summaries: Map<string, PullRequestMergedReleaseSummary>;
+  available: boolean;
+}
+
+async function getMergedPullRequestReleaseSummaries(
+  client: AdoClient,
+  successfulBuildsByPullRequest: Map<string, AdoBuild[]>,
+): Promise<PullRequestReleaseLookupResult> {
+  if (successfulBuildsByPullRequest.size === 0) {
+    return { summaries: new Map(), available: true };
+  }
+  if (prReleaseLookupUnavailableClients.has(client)) {
+    return { summaries: new Map(), available: false };
+  }
+
+  try {
+    const recentReleases = await client.listRecentReleases(RECENT_RELEASE_FETCH_LIMIT);
+    const releaseLists = await Promise.all(
+      [...successfulBuildsByPullRequest.entries()].flatMap(([pullRequestId, builds]) =>
+        builds.map(async (build) => [
+          `${pullRequestId}/${build.id}`,
+          await client.listReleasesForBuild(String(build.id), getBuildDisplayId(build)),
+        ] as const),
+      ),
+    );
+    const releasesByBuildKey = new Map<string, AdoRelease[]>(releaseLists);
+    const summaries = new Map<string, PullRequestMergedReleaseSummary>();
+
+    for (const [pullRequestId, builds] of successfulBuildsByPullRequest) {
+      const releases = builds
+        .map((build) => {
+          const buildKey = `${pullRequestId}/${build.id}`;
+          const matchingReleases = [
+            ...(releasesByBuildKey.get(buildKey) ?? []),
+            ...recentReleases.filter((release) => isReleaseMatchedToBuild(release, build)),
+          ].filter(
+            (release, index, allReleases) =>
+              allReleases.findIndex((candidate) => candidate.id === release.id) === index,
+          );
+          const deployedEnvironments: Array<"DEV" | "PROD"> = [];
+          const inProgressEnvironments: Array<"DEV" | "PROD"> = [];
+          let releaseUrl: string | undefined;
+
+          for (const release of matchingReleases) {
+            const relevantEnvironments: Array<{
+              environmentName: "DEV" | "PROD";
+              status?: string;
+            }> = [];
+            for (const environment of release.environments ?? []) {
+              const environmentName = getReleaseTrackingEnvironmentName(environment.name);
+              if (!environmentName) continue;
+              relevantEnvironments.push({
+                environmentName,
+                status: environment.status,
+              });
+            }
+            if (relevantEnvironments.length === 0) continue;
+            releaseUrl ??= getReleaseWebUrl(release);
+            for (const environment of relevantEnvironments) {
+              if (isReleaseEnvironmentDeployed(environment.status)) {
+                deployedEnvironments.push(environment.environmentName);
+                continue;
+              }
+              if (isReleaseEnvironmentInProgress(environment.status)) {
+                inProgressEnvironments.push(environment.environmentName);
+              }
+            }
+          }
+
+          const deployedEnvironment = getPreferredReleaseEnvironment(deployedEnvironments);
+          const inProgressEnvironment = getPreferredReleaseEnvironment(inProgressEnvironments);
+          return {
+            pipeline: getBuildPipelineName(build),
+            buildId: getBuildDisplayId(build),
+            status: getMergedBuildReleaseStatus(deployedEnvironment, inProgressEnvironment),
+            ...(inProgressEnvironment ? { inProgressEnvironment } : {}),
+            ...(deployedEnvironment ? { deployedEnvironment } : {}),
+            ...(releaseUrl ? { url: releaseUrl } : {}),
+          };
+        })
+        .sort((left, right) => {
+          const pipelineComparison = left.pipeline.localeCompare(right.pipeline);
+          if (pipelineComparison !== 0) return pipelineComparison;
+          return left.buildId.localeCompare(right.buildId);
+        });
+
+      summaries.set(pullRequestId, {
+        totalCount: builds.length,
+        inProgressCount: releases.filter((release) => release.inProgressEnvironment !== undefined).length,
+        deployedCount: releases.filter((release) => release.deployedEnvironment !== undefined).length,
+        releases,
+      });
+    }
+
+    return { summaries, available: true };
+  } catch {
+    prReleaseLookupUnavailableClients.add(client);
+    return { summaries: new Map(), available: false };
   }
 }
 
@@ -468,6 +706,7 @@ function needsPullRequestEnrichment(
 
 interface PullRequestEnrichmentOptions {
   refreshActivePullRequests?: boolean;
+  refreshCompletedPullRequests?: boolean;
   includeBuildStatus?: boolean;
 }
 
@@ -476,9 +715,14 @@ function shouldRefreshPullRequest(
   options?: PullRequestEnrichmentOptions,
 ): boolean {
   const needsEnrichment = needsPullRequestEnrichment(pr, options);
-  if (!options?.refreshActivePullRequests) return needsEnrichment;
-  if (isPullRequestCompleted(pr.status, pr.isCompleted)) return needsEnrichment;
-  return true;
+  const isCompleted = isPullRequestCompleted(pr.status, pr.isCompleted);
+  if (isCompleted) {
+    return options?.refreshCompletedPullRequests ? true : needsEnrichment;
+  }
+  if (options?.refreshActivePullRequests) {
+    return true;
+  }
+  return needsEnrichment;
 }
 
 function isPullRequestCompleted(status?: string, isCompleted?: boolean): boolean {
@@ -648,6 +892,60 @@ interface PullRequestDetails {
   requiredReviewersPendingCount?: number;
   failingStatusChecks?: string[];
   mergedBuildSummary?: PullRequestMergedBuildSummary | null;
+  mergedReleaseSummary?: PullRequestMergedReleaseSummary | null;
+}
+
+function hasSameMergedBuildSummary(
+  left: PullRequestMergedBuildSummary | null | undefined,
+  right: PullRequestMergedBuildSummary | null | undefined,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return left === right;
+  if (
+    left.totalCount !== right.totalCount ||
+    left.completedCount !== right.completedCount ||
+    left.failedCount !== right.failedCount ||
+    left.builds.length !== right.builds.length
+  ) {
+    return false;
+  }
+  return left.builds.every((build, index) => {
+    const other = right.builds[index];
+    return (
+      other !== undefined &&
+      build.pipeline === other.pipeline &&
+      build.buildId === other.buildId &&
+      build.status === other.status
+    );
+  });
+}
+
+function hasSameMergedReleaseSummary(
+  left: PullRequestMergedReleaseSummary | null | undefined,
+  right: PullRequestMergedReleaseSummary | null | undefined,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return left === right;
+  if (
+    left.totalCount !== right.totalCount ||
+    left.inProgressCount !== right.inProgressCount ||
+    left.deployedCount !== right.deployedCount ||
+    left.releases.length !== right.releases.length
+  ) {
+    return false;
+  }
+  return left.releases.every((release, index) => {
+    const other = right.releases[index];
+    return (
+      other !== undefined &&
+      release.pipeline === other.pipeline &&
+      release.buildId === other.buildId &&
+      release.status === other.status &&
+      release.inProgressEnvironment === other.inProgressEnvironment &&
+      release.deployedEnvironment === other.deployedEnvironment &&
+      release.url === other.url
+    );
+  });
 }
 
 async function loadPullRequestDetails(
@@ -703,6 +1001,7 @@ function mergePullRequestDetails(
   const requiredReviewersPendingCount = details.requiredReviewersPendingCount;
   const failingStatusChecks = details.failingStatusChecks;
   const mergedBuildSummary = details.mergedBuildSummary;
+  const mergedReleaseSummary = details.mergedReleaseSummary;
   const isCompleted = status.toLowerCase() === "completed";
 
   const sameTitle = title.length === 0 || title === pr.title;
@@ -731,11 +1030,12 @@ function mergePullRequestDetails(
     mergedBuildSummary === undefined ||
     (mergedBuildSummary === null
       ? pr.mergedBuildSummary === null
-      : pr.mergedBuildSummary !== undefined &&
-        pr.mergedBuildSummary !== null &&
-        mergedBuildSummary.totalCount === pr.mergedBuildSummary.totalCount &&
-        mergedBuildSummary.completedCount === pr.mergedBuildSummary.completedCount &&
-        mergedBuildSummary.failedCount === pr.mergedBuildSummary.failedCount);
+      : hasSameMergedBuildSummary(mergedBuildSummary, pr.mergedBuildSummary));
+  const sameMergedReleaseSummary =
+    mergedReleaseSummary === undefined ||
+    (mergedReleaseSummary === null
+      ? pr.mergedReleaseSummary === null
+      : hasSameMergedReleaseSummary(mergedReleaseSummary, pr.mergedReleaseSummary));
   const sameCompletion = status.length === 0 || isCompleted === pr.isCompleted;
   if (
     sameTitle &&
@@ -747,6 +1047,7 @@ function mergePullRequestDetails(
     sameRequiredReviewersPendingCount &&
     sameFailingStatusChecks &&
     sameMergedBuildSummary &&
+    sameMergedReleaseSummary &&
     sameCompletion
   ) {
     return pr;
@@ -775,6 +1076,7 @@ function mergePullRequestDetails(
         : { failingStatusChecks: undefined }
       : {}),
     ...(mergedBuildSummary !== undefined ? { mergedBuildSummary } : {}),
+    ...(mergedReleaseSummary !== undefined ? { mergedReleaseSummary } : {}),
   };
   if (unresolvedCommentCount !== undefined && normalizedUnresolvedCommentCount === undefined) {
     delete merged.unresolvedCommentCount;
@@ -784,6 +1086,9 @@ function mergePullRequestDetails(
   }
   if (mergedBuildSummary === undefined) {
     delete merged.mergedBuildSummary;
+  }
+  if (mergedReleaseSummary === undefined) {
+    delete merged.mergedReleaseSummary;
   }
   return merged;
 }
@@ -853,7 +1158,11 @@ async function enrichPullRequestDetails(
   }
 
   if (options?.includeBuildStatus !== false && completedPullRequestIds.size > 0) {
-    const buildSummaries = await getMergedPullRequestBuildSummaries(client, completedPullRequestIds);
+    const { summaries: buildSummaries, successfulBuilds } = await getMergedPullRequestBuildData(
+      client,
+      completedPullRequestIds,
+    );
+    const releaseLookup = await getMergedPullRequestReleaseSummaries(client, successfulBuilds);
     for (const [key, details] of detailsByKey) {
       if (!isPullRequestCompleted(details.status)) continue;
       const ref = refsByKey.get(key);
@@ -861,6 +1170,9 @@ async function enrichPullRequestDetails(
       detailsByKey.set(key, {
         ...details,
         mergedBuildSummary: buildSummaries.get(ref.pullRequestId) ?? null,
+        ...(releaseLookup.available
+          ? { mergedReleaseSummary: releaseLookup.summaries.get(ref.pullRequestId) ?? null }
+          : {}),
       });
     }
   }
@@ -1262,6 +1574,7 @@ export async function fetchWorkItemsDelta(
   const refreshedWorkItems = filterRemovedWorkItems(
     await enrichPullRequestDetails(client, workItems, {
       refreshActivePullRequests: true,
+      refreshCompletedPullRequests: true,
     }),
   );
 

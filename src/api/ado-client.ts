@@ -10,6 +10,7 @@ import type {
   AdoGitRepository,
   AdoPolicyEvaluationRecord,
   AdoPullRequest,
+  AdoRelease,
   AdoResourceRef,
   AdoPullRequestStatus,
   AdoPullRequestThread,
@@ -61,6 +62,8 @@ export interface AdoClient {
     comment?: string,
   ): Promise<AdoGitPush>;
   listBuilds(branchName?: string, top?: number): Promise<AdoBuild[]>;
+  listReleasesForBuild(buildId: string, buildVersion?: string): Promise<AdoRelease[]>;
+  listRecentReleases(top?: number): Promise<AdoRelease[]>;
   listPullRequests(status?: string): Promise<AdoPullRequest[]>;
   getPullRequest(repositoryId: string, pullRequestId: string): Promise<AdoPullRequest>;
   listPullRequestWorkItems(repositoryId: string, pullRequestId: string): Promise<AdoResourceRef[]>;
@@ -283,10 +286,33 @@ class AdoBatchFetchError extends Error {
   }
 }
 
+export function getAdoErrorStatus(error: unknown): number | undefined {
+  if (typeof error === "object" && error !== null) {
+    const status = Reflect.get(error, "status");
+    if (typeof status === "number") {
+      return status;
+    }
+  }
+
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : undefined;
+  if (!message) {
+    return undefined;
+  }
+
+  const match = message.match(/\b(401|403)\b/);
+  return match ? Number(match[1]) : undefined;
+}
+
 export class HttpAdoClient implements AdoClient {
   private org: string;
   private project: string;
   private baseUrl: string;
+  private releaseBaseUrl: string;
   private authHeader: string;
   private cachedCurrentUser: AdoCurrentUser | null = null;
 
@@ -295,6 +321,7 @@ export class HttpAdoClient implements AdoClient {
     this.org = normalized.org;
     this.project = normalized.project;
     this.baseUrl = `https://dev.azure.com/${encodeURIComponent(normalized.org)}/${encodeURIComponent(normalized.project)}`;
+    this.releaseBaseUrl = `https://vsrm.dev.azure.com/${encodeURIComponent(normalized.org)}/${encodeURIComponent(normalized.project)}`;
     this.authHeader = `Basic ${btoa(":" + normalized.pat)}`;
   }
 
@@ -671,6 +698,59 @@ export class HttpAdoClient implements AdoClient {
     });
     if (!res.ok) throw new Error(`Builds fetch failed: ${res.status}`);
     const data = await this.readJson<{ value?: AdoBuild[] }>(res, "Builds fetch");
+    return data.value ?? [];
+  }
+
+  private async fetchReleasesByArtifactVersion(artifactVersionId: string): Promise<AdoRelease[]> {
+    const params = new URLSearchParams({
+      "api-version": "7.1",
+      artifactTypeId: "Build",
+      artifactVersionId,
+      "$expand": "environments",
+      "$top": "50",
+      queryOrder: "descending",
+    });
+    const res = await fetch(`${this.releaseBaseUrl}/_apis/release/releases?${params.toString()}`, {
+      method: "GET",
+      headers: this.jsonHeaders(),
+    });
+    if (!res.ok) throw new Error(`Releases fetch failed: ${res.status}`);
+    const data = await this.readJson<{ value?: AdoRelease[] }>(res, "Releases fetch");
+    return data.value ?? [];
+  }
+
+  async listReleasesForBuild(buildId: string, buildVersion?: string): Promise<AdoRelease[]> {
+    const normalizedBuildId = buildId.trim();
+    if (!normalizedBuildId) {
+      throw new Error("Build id is required");
+    }
+
+    const releases = await this.fetchReleasesByArtifactVersion(normalizedBuildId);
+    const normalizedBuildVersion = buildVersion?.trim();
+    if (
+      releases.length > 0 ||
+      !normalizedBuildVersion ||
+      normalizedBuildVersion === normalizedBuildId
+    ) {
+      return releases;
+    }
+
+    return this.fetchReleasesByArtifactVersion(normalizedBuildVersion);
+  }
+
+  async listRecentReleases(top = 100): Promise<AdoRelease[]> {
+    const params = new URLSearchParams({
+      "api-version": "7.1",
+      "$expand": "environments",
+      "$top": String(top),
+      queryOrder: "descending",
+    });
+    const res = await fetch(`${this.releaseBaseUrl}/_apis/release/releases?${params.toString()}`, {
+      method: "GET",
+      headers: this.jsonHeaders(),
+    });
+    if (!res.ok) throw new Error(`Recent releases fetch failed: ${res.status}`);
+    const data = await this.readJson<{ value?: AdoRelease[] }>(res, "Recent releases fetch");
     return data.value ?? [];
   }
 

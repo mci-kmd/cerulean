@@ -188,6 +188,37 @@ export interface AdoBuild {
   triggerInfo?: Record<string, unknown>;
 }
 
+export interface AdoReleaseEnvironment {
+  id?: number;
+  name?: string;
+  status?: string;
+}
+
+export interface AdoReleaseArtifactReferenceValue {
+  id?: string;
+  name?: string;
+}
+
+export interface AdoReleaseArtifact {
+  type?: string;
+  definitionReference?: Record<string, AdoReleaseArtifactReferenceValue>;
+}
+
+export interface AdoRelease {
+  id: number;
+  name?: string;
+  status?: string;
+  webAccessUri?: string;
+  url?: string;
+  environments?: AdoReleaseEnvironment[];
+  artifacts?: AdoReleaseArtifact[];
+  _links?: {
+    web?: {
+      href?: string;
+    };
+  };
+}
+
 export interface AdoPullRequestStatus {
   state?: string;
   description?: string;

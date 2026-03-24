@@ -8,6 +8,7 @@ import {
   Image as ImageIcon,
   MessageCircle,
   Pencil,
+  Rocket,
   User,
   Workflow,
   type LucideIcon,
@@ -35,6 +36,7 @@ import {
   isReviewWorkItem,
   isUiReviewWorkItem,
   type PullRequestMergedBuildSummary,
+  type PullRequestMergedReleaseSummary,
   type RelatedPullRequest,
   type WorkItem,
 } from "@/types/board";
@@ -91,6 +93,32 @@ function getMergedBuildSummaryTooltip(summary: PullRequestMergedBuildSummary): s
   }
   return summary.builds
     .map((build) => `${formatMergedBuildPipelineName(build.pipeline)} - ${build.buildId}: ${build.status}`)
+    .join("\n");
+}
+
+function getMergedReleaseSummaryClassName(pr: RelatedPullRequest): string {
+  const summary = pr.mergedReleaseSummary;
+  if (!summary || summary.totalCount <= 0) {
+    return "text-muted-foreground";
+  }
+  if (summary.inProgressCount > 0) {
+    return "text-amber-600";
+  }
+  if (summary.deployedCount > 0) {
+    return "text-green-600";
+  }
+  return "text-muted-foreground";
+}
+
+function getMergedReleaseSummaryTooltip(summary: PullRequestMergedReleaseSummary): string | null {
+  if (summary.releases.length === 0) {
+    return null;
+  }
+  return summary.releases
+    .map(
+      (release) =>
+        `${formatMergedBuildPipelineName(release.pipeline)} - ${release.buildId}: ${release.status}`,
+    )
     .join("\n");
 }
 
@@ -532,6 +560,16 @@ export function BoardCard({
                 const mergedBuildTooltip = mergedBuildSummary
                   ? getMergedBuildSummaryTooltip(mergedBuildSummary)
                   : null;
+                const mergedReleaseSummary =
+                  showPullRequestBuildStatus &&
+                  !isReviewCard &&
+                  pr.mergedReleaseSummary &&
+                  pr.mergedReleaseSummary.totalCount > 0
+                    ? pr.mergedReleaseSummary
+                    : null;
+                const mergedReleaseTooltip = mergedReleaseSummary
+                  ? getMergedReleaseSummaryTooltip(mergedReleaseSummary)
+                  : null;
                 const mergedBuildIndicator = mergedBuildSummary ? (
                   <span
                     data-testid={`pr-merged-build-summary-${pr.id}`}
@@ -545,6 +583,22 @@ export function BoardCard({
                     />
                     <span>
                       {mergedBuildSummary.completedCount}/{mergedBuildSummary.totalCount}
+                    </span>
+                  </span>
+                ) : null;
+                const mergedReleaseIndicator = mergedReleaseSummary ? (
+                  <span
+                    data-testid={`pr-merged-release-summary-${pr.id}`}
+                    className={`inline-flex items-center gap-0.5 ${getMergedReleaseSummaryClassName(pr)}`}
+                    aria-label={`Release deployments ${mergedReleaseSummary.inProgressCount} in progress and ${mergedReleaseSummary.deployedCount} deployed`}
+                  >
+                    <Rocket
+                      data-testid={`pr-merged-release-icon-${pr.id}`}
+                      className="h-3 w-3"
+                      aria-hidden="true"
+                    />
+                    <span>
+                      {mergedReleaseSummary.inProgressCount}/{mergedReleaseSummary.deployedCount}
                     </span>
                   </span>
                 ) : null;
@@ -595,6 +649,17 @@ export function BoardCard({
                             </Tooltip>
                           ) : (
                             mergedBuildIndicator
+                          ))}
+                        {mergedReleaseIndicator &&
+                          (mergedReleaseTooltip ? (
+                            <Tooltip>
+                              <TooltipTrigger asChild>{mergedReleaseIndicator}</TooltipTrigger>
+                              <TooltipContent className="whitespace-pre-line">
+                                {mergedReleaseTooltip}
+                              </TooltipContent>
+                            </Tooltip>
+                          ) : (
+                            mergedReleaseIndicator
                           ))}
                         {!isCompleted && (pr.unresolvedCommentCount ?? 0) > 0 && (
                           <span

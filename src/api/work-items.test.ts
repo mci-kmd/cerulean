@@ -309,6 +309,17 @@ describe("fetchWorkItemsInitial", () => {
         definition: { id: 10, name: "CI" },
       },
     ];
+    client.releasesByBuildId.set("20260320.4", [
+      {
+        id: 81,
+        name: "Release-81",
+        webAccessUri: "https://dev.azure.com/org/proj/_release?releaseId=81&_a=release-summary",
+        environments: [
+          { id: 5, name: "DEV", status: "succeeded" },
+          { id: 6, name: "PROD", status: "pendingApproval" },
+        ],
+      },
+    ]);
 
     const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
     expect(result.workItems[0].relatedPullRequests).toEqual([
@@ -331,6 +342,21 @@ describe("fetchWorkItemsInitial", () => {
             { pipeline: "Deploy", buildId: "20260320.5", status: "In Progress" },
           ],
         },
+        mergedReleaseSummary: {
+          totalCount: 1,
+          inProgressCount: 1,
+          deployedCount: 1,
+          releases: [
+            {
+              pipeline: "CI",
+              buildId: "20260320.4",
+              status: "Deployed to DEV; PROD in progress",
+              inProgressEnvironment: "PROD",
+              deployedEnvironment: "DEV",
+              url: "https://dev.azure.com/org/proj/_release?releaseId=81&_a=release-summary",
+            },
+          ],
+        },
         url: "https://dev.azure.com/org/proj/_git/repo-1/pullrequest/123",
       },
     ]);
@@ -338,6 +364,12 @@ describe("fetchWorkItemsInitial", () => {
       client.callLog.filter((call) => call.method === "getPullRequest"),
     ).toHaveLength(1);
     expect(client.callLog.filter((call) => call.method === "listBuilds")).toHaveLength(1);
+    expect(
+      client.callLog.filter((call) => call.method === "listReleasesForBuild"),
+    ).toHaveLength(1);
+    expect(
+      client.callLog.find((call) => call.method === "listReleasesForBuild")?.args,
+    ).toEqual(["901", "20260320.4"]);
     expect(
       client.callLog.filter((call) => call.method === "getPullRequestThreads"),
     ).toHaveLength(0);
@@ -388,8 +420,93 @@ describe("fetchWorkItemsInitial", () => {
     expect(result.workItems[0].relatedPullRequests?.[0]).toMatchObject({
       id: "124",
       mergedBuildSummary: null,
+      mergedReleaseSummary: null,
     });
     expect(client.callLog.filter((call) => call.method === "listBuilds")).toHaveLength(1);
+  });
+
+  it("matches releases from recent release artifact metadata when filtered lookup misses", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with recent release match",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f126",
+            attributes: { name: "Pull Request" },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/126", {
+      pullRequestId: 126,
+      title: "Match recent release",
+      status: "completed",
+      mergeStatus: "succeeded",
+      reviewers: [{ isRequired: true, vote: 10 }],
+    });
+    client.builds = [
+      {
+        id: 906,
+        buildNumber: "#20260324.4 • Merged PR 126: Match recent release",
+        status: "completed",
+        result: "succeeded",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 13, name: "CI" },
+      },
+    ];
+    client.releases = [
+      {
+        id: 91,
+        name: "Release-91",
+        artifacts: [
+          {
+            type: "Build",
+            definitionReference: {
+              version: { id: "some-other-id", name: "20260324.4" },
+            },
+          },
+        ],
+        environments: [
+          { id: 9, name: "DEV", status: "succeeded" },
+          { id: 10, name: "PROD", status: "pendingApproval" },
+        ],
+        webAccessUri: "https://dev.azure.com/org/proj/_release?releaseId=91&_a=release-summary",
+      },
+    ];
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+
+    expect(result.workItems[0].relatedPullRequests?.[0]).toMatchObject({
+      id: "126",
+      mergedReleaseSummary: {
+        totalCount: 1,
+        inProgressCount: 1,
+        deployedCount: 1,
+        releases: [
+          {
+            pipeline: "CI",
+            buildId: "20260324.4",
+            status: "Deployed to DEV; PROD in progress",
+            inProgressEnvironment: "PROD",
+            deployedEnvironment: "DEV",
+            url: "https://dev.azure.com/org/proj/_release?releaseId=91&_a=release-summary",
+          },
+        ],
+      },
+    });
+    expect(
+      client.callLog.filter((call) => call.method === "listRecentReleases"),
+    ).toHaveLength(1);
   });
 
   it("keeps only the newest merged build status per pipeline when retries exist", async () => {
@@ -1320,6 +1437,215 @@ describe("fetchWorkItemsDelta", () => {
     expect(
       client.callLog.filter((call) => call.method === "getPullRequestPolicyEvaluations"),
     ).toHaveLength(1);
+  });
+
+  it("refreshes completed PR build counts for unchanged work items", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 7, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 7,
+        fields: {
+          "System.Id": 7,
+          "System.Rev": 1,
+          "System.Title": "Story with merged PR builds",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+        },
+      }),
+    ];
+    client.pullRequests.set("repo-1/315", {
+      pullRequestId: 315,
+      title: "Merged signup flow",
+      status: "completed",
+      mergeStatus: "succeeded",
+      reviewers: [{ isRequired: true, vote: 10 }],
+    });
+    client.builds = [
+      {
+        id: 1001,
+        buildNumber: "#20260320.7 • Merged PR 315: Merged signup flow",
+        status: "completed",
+        result: "succeeded",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 31, name: "CI" },
+      },
+      {
+        id: 1002,
+        buildNumber: "#20260320.8 • Merged PR 315: Merged signup flow",
+        status: "completed",
+        result: "succeeded",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 32, name: "Deploy" },
+      },
+      {
+        id: 1003,
+        buildNumber: "#20260320.9 • Merged PR 315: Merged signup flow",
+        status: "completed",
+        result: "succeeded",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 33, name: "Smoke" },
+      },
+    ];
+
+    const cachedRevMap = new Map([[7, { rev: 1 }]]);
+    const cachedItems = [
+      {
+        id: 7,
+        title: "Story with merged PR builds",
+        type: "User Story",
+        state: "Active",
+        rev: 1,
+        url: "https://dev.azure.com/org/proj/_workitems/edit/7",
+        relatedPullRequests: [
+          {
+            id: "315",
+            label: "PR #315",
+            title: "Merged signup flow",
+            status: "completed",
+            mergeStatus: "succeeded",
+            requiredReviewersApproved: true,
+            requiredReviewersPendingCount: 0,
+            isCompleted: true,
+            mergedBuildSummary: {
+              totalCount: 3,
+              completedCount: 0,
+              failedCount: 0,
+              builds: [
+                { pipeline: "CI", buildId: "20260320.7", status: "In Progress" },
+                { pipeline: "Deploy", buildId: "20260320.8", status: "In Progress" },
+                { pipeline: "Smoke", buildId: "20260320.9", status: "In Progress" },
+              ],
+            },
+            url: "https://dev.azure.com/org/proj/_git/repo-1/pullrequest/315",
+          },
+        ],
+      },
+    ];
+
+    const result = await fetchWorkItemsDelta(
+      client,
+      "Active",
+      "org",
+      "proj",
+      cachedRevMap,
+      cachedItems,
+    );
+
+    expect(result.workItems[0].relatedPullRequests?.[0]).toMatchObject({
+      id: "315",
+      mergedBuildSummary: {
+        totalCount: 3,
+        completedCount: 3,
+        failedCount: 0,
+        builds: [
+          { pipeline: "CI", buildId: "20260320.7", status: "Succeeded" },
+          { pipeline: "Deploy", buildId: "20260320.8", status: "Succeeded" },
+          { pipeline: "Smoke", buildId: "20260320.9", status: "Succeeded" },
+        ],
+      },
+    });
+    expect(
+      client.callLog.filter((call) => call.method === "listBuilds"),
+    ).toHaveLength(1);
+  });
+
+  it("refreshes completed PR build details when summary counts stay the same", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 8, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 8,
+        fields: {
+          "System.Id": 8,
+          "System.Rev": 1,
+          "System.Title": "Story with retried merged build",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+        },
+      }),
+    ];
+    client.pullRequests.set("repo-1/316", {
+      pullRequestId: 316,
+      title: "Retry deploy",
+      status: "completed",
+      mergeStatus: "succeeded",
+      reviewers: [{ isRequired: true, vote: 10 }],
+    });
+    client.builds = [
+      {
+        id: 1011,
+        buildNumber: "#20260320.10 • Merged PR 316: Retry deploy",
+        status: "completed",
+        result: "succeeded",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 41, name: "CI" },
+      },
+      {
+        id: 1013,
+        buildNumber: "#20260320.12 • Merged PR 316: Retry deploy",
+        queueTime: "2026-03-20T12:00:00.000Z",
+        status: "inProgress",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 42, name: "Deploy" },
+      },
+      {
+        id: 1012,
+        buildNumber: "#20260320.11 • Merged PR 316: Retry deploy",
+        queueTime: "2026-03-20T11:00:00.000Z",
+        status: "inProgress",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 42, name: "Deploy" },
+      },
+    ];
+
+    const cachedRevMap = new Map([[8, { rev: 1 }]]);
+    const cachedItems = [
+      {
+        id: 8,
+        title: "Story with retried merged build",
+        type: "User Story",
+        state: "Active",
+        rev: 1,
+        url: "https://dev.azure.com/org/proj/_workitems/edit/8",
+        relatedPullRequests: [
+          {
+            id: "316",
+            label: "PR #316",
+            title: "Retry deploy",
+            status: "completed",
+            mergeStatus: "succeeded",
+            requiredReviewersApproved: true,
+            requiredReviewersPendingCount: 0,
+            isCompleted: true,
+            mergedBuildSummary: {
+              totalCount: 2,
+              completedCount: 1,
+              failedCount: 0,
+              builds: [
+                { pipeline: "CI", buildId: "20260320.10", status: "Succeeded" },
+                { pipeline: "Deploy", buildId: "20260320.11", status: "In Progress" },
+              ],
+            },
+            url: "https://dev.azure.com/org/proj/_git/repo-1/pullrequest/316",
+          },
+        ],
+      },
+    ];
+
+    const result = await fetchWorkItemsDelta(
+      client,
+      "Active",
+      "org",
+      "proj",
+      cachedRevMap,
+      cachedItems,
+    );
+
+    expect(result.workItems[0].relatedPullRequests?.[0]?.mergedBuildSummary?.builds).toEqual([
+      { pipeline: "CI", buildId: "20260320.10", status: "Succeeded" },
+      { pipeline: "Deploy", buildId: "20260320.12", status: "In Progress" },
+    ]);
   });
 
   it("drops changed items that became removed instead of keeping cached values", async () => {

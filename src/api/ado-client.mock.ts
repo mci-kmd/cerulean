@@ -10,6 +10,7 @@ import type {
   AdoGitRepository,
   AdoPolicyEvaluationRecord,
   AdoPullRequest,
+  AdoRelease,
   AdoResourceRef,
   AdoPullRequestStatus,
   AdoPullRequestThread,
@@ -32,10 +33,13 @@ export class MockAdoClient implements AdoClient {
   public shouldFailPullRequestThreads = false;
   public shouldFailPullRequestPolicyEvaluations = false;
   public shouldFailBuilds = false;
+  public shouldFailReleases = false;
   public myEmail = "me@test.com";
   public myUserId = "me-id";
   public myDisplayName = "Me";
   public builds: AdoBuild[] = [];
+  public releases: AdoRelease[] = [];
+  public releasesByBuildId = new Map<string, AdoRelease[]>();
   public pullRequests = new Map<string, AdoPullRequest>();
   public pullRequestWorkItems = new Map<string, AdoResourceRef[]>();
   public pullRequestStatuses = new Map<string, AdoPullRequestStatus[]>();
@@ -177,6 +181,31 @@ export class MockAdoClient implements AdoClient {
         )
       : this.builds;
     return filteredBuilds.slice(0, top);
+  }
+
+  async listReleasesForBuild(buildId: string, buildVersion?: string): Promise<AdoRelease[]> {
+    this.callLog.push({ method: "listReleasesForBuild", args: [buildId, buildVersion] });
+    if (this.shouldFail || this.shouldFailReleases) {
+      throw new Error("Mock releases error");
+    }
+    return (
+      this.releasesByBuildId.get(buildId.trim()) ??
+      (buildVersion?.trim() ? this.releasesByBuildId.get(buildVersion.trim()) : undefined) ??
+      []
+    );
+  }
+
+  async listRecentReleases(top = 100): Promise<AdoRelease[]> {
+    this.callLog.push({ method: "listRecentReleases", args: [top] });
+    if (this.shouldFail || this.shouldFailReleases) {
+      throw new Error("Mock recent releases error");
+    }
+    if (this.releases.length > 0) {
+      return this.releases.slice(0, top);
+    }
+    return [...new Map(
+      [...this.releasesByBuildId.values()].flat().map((release) => [release.id, release] as const),
+    ).values()].slice(0, top);
   }
 
   async listPullRequests(_status = "active"): Promise<AdoPullRequest[]> {
