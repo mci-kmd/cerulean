@@ -501,7 +501,7 @@ describe("HttpAdoClient", () => {
       "Create retro notes",
     );
 
-    expect(capturedFilter).toBe("refs/heads/main");
+    expect(capturedFilter).toBe("heads/main");
     expect(capturedBody).toEqual({
       refUpdates: [
         {
@@ -534,6 +534,73 @@ describe("HttpAdoClient", () => {
         name: "Retro Repo",
       },
       commits: [{ commitId: "commit-1" }],
+    });
+  });
+
+  it("queries refs with a heads filter even when the branch is provided as a full ref", async () => {
+    let capturedFilter = "";
+    let capturedBody: unknown = null;
+    server.use(
+      http.get(`${BASE}/_apis/git/repositories/repo-1/refs`, ({ request }) => {
+        capturedFilter = new URL(request.url).searchParams.get("filter") ?? "";
+        return HttpResponse.json({
+          value: [{ name: "refs/heads/master", objectId: "def456" }],
+        });
+      }),
+      http.post(`${BASE}/_apis/git/repositories/repo-1/pushes`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({
+          pushId: 88,
+          repository: {
+            id: "repo-1",
+            name: "Retro Repo",
+          },
+          commits: [{ commitId: "commit-2" }],
+        });
+      }),
+    );
+
+    const push = await client.createRepositoryFile(
+      "repo-1",
+      "/retros/2026-03-24.md",
+      "# Retro\n",
+      "refs/heads/master",
+      "Create retro notes",
+    );
+
+    expect(capturedFilter).toBe("heads/master");
+    expect(capturedBody).toEqual({
+      refUpdates: [
+        {
+          name: "refs/heads/master",
+          oldObjectId: "def456",
+        },
+      ],
+      commits: [
+        {
+          comment: "Create retro notes",
+          changes: [
+            {
+              changeType: "add",
+              item: {
+                path: "/retros/2026-03-24.md",
+              },
+              newContent: {
+                content: "# Retro\n",
+                contentType: "rawtext",
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(push).toEqual({
+      pushId: 88,
+      repository: {
+        id: "repo-1",
+        name: "Retro Repo",
+      },
+      commits: [{ commitId: "commit-2" }],
     });
   });
 

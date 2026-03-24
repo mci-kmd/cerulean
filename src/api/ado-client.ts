@@ -227,6 +227,11 @@ function toGitBranchRef(branchName: string): string {
   return shortName ? `refs/heads/${shortName}` : "";
 }
 
+function toGitRefFilter(branchName: string): string {
+  const shortName = normalizeGitBranchName(branchName);
+  return shortName ? `heads/${shortName}` : "";
+}
+
 function normalizeGitItemPath(path: string): string {
   const normalized = path.trim().replace(/\\/g, "/");
   if (!normalized) return "";
@@ -604,7 +609,8 @@ export class HttpAdoClient implements AdoClient {
     if (!branchRef) {
       throw new Error("Branch name is required");
     }
-    const refs = await this.listRefs(repositoryId, branchRef);
+    const branchFilter = toGitRefFilter(branchName);
+    const refs = await this.listRefs(repositoryId, branchFilter);
     const branch = refs.find(
       (ref) => ref.name.trim().toLowerCase() === branchRef.toLowerCase(),
     );
