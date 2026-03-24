@@ -292,13 +292,6 @@ export function RetroPrepView({
 
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4">
-      <div className="space-y-1">
-        <h2 className="text-xl font-semibold font-heading">Retro Prep</h2>
-        <p className="text-sm text-muted-foreground">
-          Build today&apos;s retro document from `Template.md` in ADO, then seed follow-up notes from the newest prior retro before creating or opening it in the repo editor.
-        </p>
-      </div>
-
       {!isConfigured && (
         <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
           Configure <strong>Retro Repository</strong>, <strong>Retro Branch</strong>, and <strong>Retro Filename Pattern</strong> in Settings to use Retro Prep.
@@ -349,43 +342,20 @@ export function RetroPrepView({
         </Button>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_250px]">
         <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3">
-            <div className="space-y-1">
-              <label className="text-sm font-medium">Draft markdown</label>
-              <p className="text-xs text-muted-foreground">
-                Markdown renders inline. Move the cursor into a block to edit its raw markers.
-              </p>
-            </div>
-          </div>
           <RetroMarkdownEditor value={draft} onChange={setDraft} />
         </div>
 
         <div className="space-y-3">
           <div className="rounded-lg border p-4 space-y-2">
-            <h3 className="text-sm font-medium">Draft summary</h3>
+            <h3 className="text-sm font-medium">Draft sources</h3>
             <dl className="space-y-2 text-sm">
               <div>
-                <dt className="text-muted-foreground">Date</dt>
-                <dd>{formattedDate}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Repository</dt>
-                <dd>{trimmedRepositoryId || "Not configured"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Branch</dt>
-                <dd>{trimmedBranchName || "Not configured"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Folder</dt>
-                <dd>{normalizedFolder || "/"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Source template</dt>
+                <dt className="text-muted-foreground">Template</dt>
                 <dd className="break-all">
-                  {templatePath || (targetAlreadyExists ? "Not used (loaded existing draft)" : "Not loaded yet")}
+                  {templatePath ||
+                    (targetAlreadyExists ? "Not used (loaded existing draft)" : "Not loaded yet")}
                 </dd>
               </div>
               <div>
@@ -410,7 +380,9 @@ export function RetroPrepView({
             {seededFollowUpTitles.length > 0 ? (
               <ul className="space-y-1 text-sm">
                 {seededFollowUpTitles.map((item) => (
-                  <li key={item} className="break-words">{item}</li>
+                  <li key={item} className="break-words">
+                    {item}
+                  </li>
                 ))}
               </ul>
             ) : (
