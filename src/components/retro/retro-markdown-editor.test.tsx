@@ -1,9 +1,10 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-const { codeMirrorProps, draftlyMock } = vi.hoisted(() => ({
+const { codeMirrorProps, draftlyMock, editorViewThemeMock } = vi.hoisted(() => ({
   codeMirrorProps: [] as Array<Record<string, unknown>>,
   draftlyMock: vi.fn((config) => ({ extension: "draftly", config })),
+  editorViewThemeMock: vi.fn((config) => ({ extension: "theme", config })),
 }));
 
 vi.mock("@uiw/react-codemirror", () => ({
@@ -22,6 +23,12 @@ vi.mock("draftly/editor", () => ({
 
 vi.mock("draftly/plugins", () => ({
   essentialPlugins: ["essential-plugin"],
+}));
+
+vi.mock("@codemirror/view", () => ({
+  EditorView: {
+    theme: editorViewThemeMock,
+  },
 }));
 
 describe("RetroMarkdownEditor", () => {
@@ -50,6 +57,44 @@ describe("RetroMarkdownEditor", () => {
       minHeight: "28rem",
       placeholder: "Retro draft will appear here.",
     });
+    const themeConfig = editorViewThemeMock.mock.calls[0]?.[0];
+    expect(themeConfig).toMatchObject({
+      "&.cm-draftly .cm-content .cm-draftly-h1": {
+        fontSize: "1.5rem",
+      },
+      "&.cm-draftly .cm-content .cm-draftly-h2": {
+        fontSize: "1.25rem",
+      },
+      "&.cm-draftly .cm-content .cm-draftly-h3": {
+        fontSize: "1rem",
+      },
+      "&.cm-draftly .cm-content .cm-draftly-h4": {
+        fontSize: "0.75rem",
+      },
+      "&.cm-draftly .cm-content .cm-draftly-h5": {
+        fontSize: "0.5rem",
+      },
+      "&.cm-draftly .cm-content .cm-draftly-h6": {
+        fontSize: "0.25rem",
+      },
+      "&.cm-draftly .cm-content .cm-draftly-line-h1": {
+        paddingTop: "0.125em",
+        paddingBottom: "0.125em",
+      },
+      "&.cm-draftly .cm-content .cm-draftly-line-h2": {
+        paddingTop: "0.125em",
+        paddingBottom: "0.125em",
+      },
+      "&.cm-draftly .cm-content .cm-draftly-line-h3, &.cm-draftly .cm-content .cm-draftly-line-h4, &.cm-draftly .cm-content .cm-draftly-line-h5, &.cm-draftly .cm-content .cm-draftly-line-h6":
+        {
+          paddingTop: "0.125em",
+          paddingBottom: "0.125em",
+        },
+    });
+    expect(codeMirrorProps[0].extensions).toEqual([
+      { extension: "draftly", config: expect.any(Object) },
+      { extension: "theme", config: expect.any(Object) },
+    ]);
 
     const fakeView = {
       contentDOM: {

@@ -1,3 +1,4 @@
+import { EditorView } from "@codemirror/view";
 import CodeMirror from "@uiw/react-codemirror";
 import { draftly, ThemeEnum } from "draftly/editor";
 import { essentialPlugins } from "draftly/plugins";
@@ -8,6 +9,40 @@ interface RetroMarkdownEditorProps {
   placeholder?: string;
 }
 
+const retroHeadingSpacingTheme = EditorView.theme({
+  "&.cm-draftly .cm-content .cm-draftly-h1": {
+    fontSize: "1.5rem",
+  },
+  "&.cm-draftly .cm-content .cm-draftly-h2": {
+    fontSize: "1.25rem",
+  },
+  "&.cm-draftly .cm-content .cm-draftly-h3": {
+    fontSize: "1rem",
+  },
+  "&.cm-draftly .cm-content .cm-draftly-h4": {
+    fontSize: "0.75rem",
+  },
+  "&.cm-draftly .cm-content .cm-draftly-h5": {
+    fontSize: "0.5rem",
+  },
+  "&.cm-draftly .cm-content .cm-draftly-h6": {
+    fontSize: "0.25rem",
+  },
+  "&.cm-draftly .cm-content .cm-draftly-line-h1": {
+    paddingTop: "0.125em",
+    paddingBottom: "0.125em",
+  },
+  "&.cm-draftly .cm-content .cm-draftly-line-h2": {
+    paddingTop: "0.125em",
+    paddingBottom: "0.125em",
+  },
+  "&.cm-draftly .cm-content .cm-draftly-line-h3, &.cm-draftly .cm-content .cm-draftly-line-h4, &.cm-draftly .cm-content .cm-draftly-line-h5, &.cm-draftly .cm-content .cm-draftly-line-h6":
+    {
+      paddingTop: "0.125em",
+      paddingBottom: "0.125em",
+    },
+});
+
 const retroDraftExtensions = [
   draftly({
     theme: ThemeEnum.AUTO,
@@ -17,6 +52,7 @@ const retroDraftExtensions = [
     indentWithTab: true,
     baseStyles: true,
   }),
+  retroHeadingSpacingTheme,
 ];
 
 export function RetroMarkdownEditor({
