@@ -131,14 +131,15 @@ function getPullRequestStatusMetadata(pr: RelatedPullRequest): {
     }
     if (hasMergeFailure) statusMessages.push("Cannot merge: merge failed");
     if (hasFailingStatusChecks) {
-      statusMessages.push(`Failing required checks: ${failingStatusChecks.join(", ")}`);
+      statusMessages.push("Failing required checks:");
+      statusMessages.push(...failingStatusChecks);
     }
     if (hasPendingRequiredReviewers) statusMessages.push(getRequiredReviewerTooltip(pr));
     return {
       icon: hasMergeConflicts ? GitPullRequestClosed : GitPullRequestDraft,
       iconVariant: hasMergeConflicts ? "conflict" : "build-error",
       iconClassName: "text-red-600",
-      tooltip: statusMessages.join(" | "),
+      tooltip: statusMessages.join("\n"),
     };
   }
 
@@ -562,7 +563,9 @@ export function BoardCard({
                               />
                             </span>
                           </TooltipTrigger>
-                          <TooltipContent>{metadata.tooltip}</TooltipContent>
+                          <TooltipContent className="whitespace-pre-line">
+                            {metadata.tooltip}
+                          </TooltipContent>
                         </Tooltip>
                       )}
                       <span

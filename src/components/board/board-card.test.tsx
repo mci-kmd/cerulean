@@ -1226,6 +1226,7 @@ describe("BoardCard related PR links", () => {
             title: "Blocked by build and reviewers",
             status: "active",
             mergeStatus: "rejectedByPolicy",
+            failingStatusChecks: ["CI Build", "Unit Tests"],
             requiredReviewersApproved: false,
             requiredReviewersPendingCount: 2,
             url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/305",
@@ -1239,8 +1240,15 @@ describe("BoardCard related PR links", () => {
     expect(icon).toHaveAttribute("data-pr-icon-variant", "build-error");
     await user.hover(icon);
     const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip).toHaveTextContent("Cannot merge: build or policy checks failed");
-    expect(tooltip).toHaveTextContent("Waiting for 2 required reviewers approval");
+    expect(tooltip.textContent).toBe(
+      [
+        "Cannot merge: build or policy checks failed",
+        "Failing required checks:",
+        "CI Build",
+        "Unit Tests",
+        "Waiting for 2 required reviewers approval",
+      ].join("\n"),
+    );
   });
 
   it("uses red icon when checks fail even if merge status is succeeded and reviewers are pending", async () => {
@@ -1269,8 +1277,11 @@ describe("BoardCard related PR links", () => {
     expect(icon).toHaveAttribute("data-pr-icon-variant", "build-error");
     await user.hover(icon);
     const tooltip = await screen.findByRole("tooltip");
-    expect(tooltip).toHaveTextContent("Failing required checks: CI Build");
-    expect(tooltip).toHaveTextContent("Waiting for 1 required reviewer approval");
+    expect(tooltip.textContent).toBe(
+      ["Failing required checks:", "CI Build", "Waiting for 1 required reviewer approval"].join(
+        "\n",
+      ),
+    );
   });
 
   it("shows red build-error icon when pull request merge status is failure", async () => {
