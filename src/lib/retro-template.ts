@@ -12,8 +12,6 @@ const datePlaceholderPattern = /\bDATE\b/;
 const sectionHeadingPattern = /^(#{1,6})\s+(.*\S)\s*$/;
 const carryForwardSourcePattern = /solution|decision|action item|follow[- ]?up|review/i;
 const followUpTargetPattern = /^follow up on previous retrospectives$/i;
-const listItemPattern = /^\s*(?:[-*+]|\d+\.)\s+(.*\S)\s*$/;
-const checklistItemPattern = /^\s*[-*+]\s+\[(?: |x|X)\]\s+(.*\S)\s*$/;
 
 interface RetroSection {
   headingLine: string;
@@ -24,7 +22,7 @@ interface RetroSection {
 
 export interface PreparedRetroDraft {
   content: string;
-  reviewItems: string[];
+  seededFollowUpTitles: string[];
 }
 
 function escapeRegex(value: string): string {
@@ -133,18 +131,6 @@ export function findLatestRetroFile(
 
 function replaceDateTokens(line: string, nextDate: string): string {
   return line.replace(isoDatePattern, nextDate).replace(datePlaceholderPattern, nextDate);
-}
-
-function normalizeCarryForwardItem(text: string): string {
-  return `- [ ] ${text.trim()}`;
-}
-
-function extractCarryForwardItems(lines: string[]): string[] {
-  return lines
-    .map((line) => checklistItemPattern.exec(line)?.[1] ?? listItemPattern.exec(line)?.[1] ?? "")
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map(normalizeCarryForwardItem);
 }
 
 function parseSections(markdown: string): RetroSection[] {
@@ -265,8 +251,27 @@ function uniqueItems(items: string[]): string[] {
   });
 }
 
-function collectFollowUpLines(previousSections: RetroSection[], targetHeadingDepth: number): string[] {
+function collectSummaryHeadings(block: string[], headingDepth: number): string[] {
+  return block
+    .map((line) => {
+      const headingMatch = sectionHeadingPattern.exec(line);
+      if (!headingMatch || headingMatch[1].length !== headingDepth) {
+        return "";
+      }
+      return headingMatch[2].trim();
+    })
+    .filter(Boolean);
+}
+
+function collectFollowUpLines(
+  previousSections: RetroSection[],
+  targetHeadingDepth: number,
+): {
+  followUpLines: string[];
+  seededFollowUpTitles: string[];
+} {
   const followUpLines: string[] = [];
+  const seededFollowUpTitles: string[] = [];
   const consumedRanges: Array<[number, number]> = [];
   const followUpIndex = previousSections.findIndex((section) =>
     followUpTargetPattern.test(section.headingText),
@@ -285,14 +290,18 @@ function collectFollowUpLines(previousSections: RetroSection[], targetHeadingDep
       continue;
     }
 
-    appendBlock(
-      followUpLines,
-      renderCarryForwardBlock(previousSections, index, targetHeadingDepth),
+    const carryForwardBlock = renderCarryForwardBlock(previousSections, index, targetHeadingDepth);
+    appendBlock(followUpLines, carryForwardBlock);
+    seededFollowUpTitles.push(
+      ...collectSummaryHeadings(carryForwardBlock, Math.min(targetHeadingDepth + 1, 6)),
     );
     consumedRanges.push([index, getSectionRangeEnd(previousSections, index)]);
   }
 
-  return followUpLines;
+  return {
+    followUpLines,
+    seededFollowUpTitles: uniqueItems(seededFollowUpTitles),
+  };
 }
 
 export function prepareRetroDraft(
@@ -316,8 +325,10 @@ export function prepareRetroDraft(
     followUpTargetPattern.test(section.headingText),
   );
   const followUpHeadingDepth = followUpSectionIndex >= 0 ? sections[followUpSectionIndex].headingDepth : 2;
-  const followUpLines = collectFollowUpLines(previousSections, followUpHeadingDepth);
-  const followUpItems = uniqueItems(extractCarryForwardItems(followUpLines));
+  const { followUpLines, seededFollowUpTitles } = collectFollowUpLines(
+    previousSections,
+    followUpHeadingDepth,
+  );
 
   if (followUpLines.length > 0) {
     const nextBodyLines = ["", ...followUpLines];
@@ -343,6 +354,6 @@ export function prepareRetroDraft(
 
   return {
     content: rendered,
-    reviewItems: followUpItems,
+    seededFollowUpTitles,
   };
 }

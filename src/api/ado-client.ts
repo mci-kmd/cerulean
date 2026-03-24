@@ -4,6 +4,8 @@ import type {
   AdoBoardReference,
   AdoBatchResponse,
   AdoBuild,
+  AdoGitItem,
+  AdoGitPush,
   AdoGitRef,
   AdoGitRepository,
   AdoPolicyEvaluationRecord,
@@ -41,6 +43,23 @@ export interface AdoClient {
   getCurrentUser(): Promise<AdoCurrentUser>;
   listRepositories(): Promise<AdoGitRepository[]>;
   listRefs(repositoryId: string, filter?: string): Promise<AdoGitRef[]>;
+  listRepositoryItems(
+    repositoryId: string,
+    scopePath?: string,
+    branchName?: string,
+  ): Promise<AdoGitItem[]>;
+  getRepositoryItemText(
+    repositoryId: string,
+    path: string,
+    branchName?: string,
+  ): Promise<string>;
+  createRepositoryFile(
+    repositoryId: string,
+    path: string,
+    content: string,
+    branchName: string,
+    comment?: string,
+  ): Promise<AdoGitPush>;
   listBuilds(branchName?: string, top?: number): Promise<AdoBuild[]>;
   listPullRequests(status?: string): Promise<AdoPullRequest[]>;
   getPullRequest(repositoryId: string, pullRequestId: string): Promise<AdoPullRequest>;
@@ -159,6 +178,26 @@ interface WorkItemBatchGetRequest {
   $expand?: "Relations";
 }
 
+interface AdoGitPushCreateRequest {
+  refUpdates: Array<{
+    name: string;
+    oldObjectId: string;
+  }>;
+  commits: Array<{
+    comment: string;
+    changes: Array<{
+      changeType: "add";
+      item: {
+        path: string;
+      };
+      newContent: {
+        content: string;
+        contentType: "rawtext";
+      };
+    }>;
+  }>;
+}
+
 function normalizeAdoPathPart(value: string): string {
   return decodeAdoValue(value).trim().replace(/^\/+|\/+$/g, "");
 }
@@ -169,6 +208,29 @@ function decodeAdoValue(value: string): string {
   } catch {
     return value;
   }
+}
+
+function normalizeGitBranchName(branchName: string): string {
+  const trimmed = branchName.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("refs/heads/")) {
+    return trimmed.slice("refs/heads/".length);
+  }
+  if (trimmed.startsWith("heads/")) {
+    return trimmed.slice("heads/".length);
+  }
+  return trimmed;
+}
+
+function toGitBranchRef(branchName: string): string {
+  const shortName = normalizeGitBranchName(branchName);
+  return shortName ? `refs/heads/${shortName}` : "";
+}
+
+function normalizeGitItemPath(path: string): string {
+  const normalized = path.trim().replace(/\\/g, "/");
+  if (!normalized) return "";
+  return normalized.startsWith("/") ? normalized : `/${normalized}`;
 }
 
 function parseAdoUrl(
@@ -280,6 +342,13 @@ export class HttpAdoClient implements AdoClient {
         `${operation} returned non-JSON response (${contentType}): ${preview}${authHint}`,
       );
     }
+  }
+
+  private applyGitVersionParams(params: URLSearchParams, branchName?: string) {
+    const normalizedBranchName = normalizeGitBranchName(branchName ?? "");
+    if (!normalizedBranchName) return;
+    params.set("versionDescriptor.version", normalizedBranchName);
+    params.set("versionDescriptor.versionType", "branch");
   }
 
   private async fetchWorkItemsBatch(
@@ -457,6 +526,128 @@ export class HttpAdoClient implements AdoClient {
       continuationToken = res.headers.get("x-ms-continuationtoken");
     } while (continuationToken);
     return refs;
+  }
+
+  async listRepositoryItems(
+    repositoryId: string,
+    scopePath?: string,
+    branchName?: string,
+  ): Promise<AdoGitItem[]> {
+    const params = new URLSearchParams({
+      "api-version": "7.1",
+      recursionLevel: "Full",
+      includeContentMetadata: "true",
+    });
+    const normalizedScopePath = normalizeGitItemPath(scopePath ?? "");
+    if (normalizedScopePath) {
+      params.set("scopePath", normalizedScopePath);
+    }
+    this.applyGitVersionParams(params, branchName);
+    const res = await fetch(
+      `${this.baseUrl}/_apis/git/repositories/${encodeURIComponent(repositoryId)}/items?${params.toString()}`,
+      {
+        method: "GET",
+        headers: this.jsonHeaders(),
+      },
+    );
+    if (!res.ok) throw new Error(`Repository items fetch failed: ${res.status}`);
+    const data = await this.readJson<AdoGitItem[] | { value?: AdoGitItem[] }>(
+      res,
+      "Repository items fetch",
+    );
+    return Array.isArray(data) ? data : (data.value ?? []);
+  }
+
+  async getRepositoryItemText(
+    repositoryId: string,
+    path: string,
+    branchName?: string,
+  ): Promise<string> {
+    const normalizedPath = normalizeGitItemPath(path);
+    if (!normalizedPath) {
+      throw new Error("Repository item path is required");
+    }
+    const params = new URLSearchParams({
+      "api-version": "7.1",
+      path: normalizedPath,
+      includeContent: "true",
+      "$format": "json",
+    });
+    this.applyGitVersionParams(params, branchName);
+    const res = await fetch(
+      `${this.baseUrl}/_apis/git/repositories/${encodeURIComponent(repositoryId)}/items?${params.toString()}`,
+      {
+        method: "GET",
+        headers: this.jsonHeaders(),
+      },
+    );
+    if (!res.ok) throw new Error(`Repository item fetch failed: ${res.status}`);
+    const item = await this.readJson<AdoGitItem>(res, "Repository item fetch");
+    if (typeof item.content !== "string") {
+      throw new Error(`Repository item fetch returned no text content for ${normalizedPath}`);
+    }
+    return item.content;
+  }
+
+  async createRepositoryFile(
+    repositoryId: string,
+    path: string,
+    content: string,
+    branchName: string,
+    comment?: string,
+  ): Promise<AdoGitPush> {
+    const normalizedPath = normalizeGitItemPath(path);
+    if (!normalizedPath) {
+      throw new Error("Repository file path is required");
+    }
+    const branchRef = toGitBranchRef(branchName);
+    if (!branchRef) {
+      throw new Error("Branch name is required");
+    }
+    const refs = await this.listRefs(repositoryId, branchRef);
+    const branch = refs.find(
+      (ref) => ref.name.trim().toLowerCase() === branchRef.toLowerCase(),
+    );
+    if (!branch?.objectId) {
+      throw new Error(`Branch ${branchRef} not found`);
+    }
+
+    const body: AdoGitPushCreateRequest = {
+      refUpdates: [
+        {
+          name: branchRef,
+          oldObjectId: branch.objectId,
+        },
+      ],
+      commits: [
+        {
+          comment: comment?.trim() || `Create ${normalizedPath}`,
+          changes: [
+            {
+              changeType: "add",
+              item: {
+                path: normalizedPath,
+              },
+              newContent: {
+                content,
+                contentType: "rawtext",
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const res = await fetch(
+      `${this.baseUrl}/_apis/git/repositories/${encodeURIComponent(repositoryId)}/pushes?api-version=7.1`,
+      {
+        method: "POST",
+        headers: this.jsonHeaders(),
+        body: JSON.stringify(body),
+      },
+    );
+    if (!res.ok) throw new Error(`Create repository file failed: ${res.status}`);
+    return this.readJson<AdoGitPush>(res, "Create repository file");
   }
 
   async listBuilds(branchName?: string, top = 200): Promise<AdoBuild[]> {

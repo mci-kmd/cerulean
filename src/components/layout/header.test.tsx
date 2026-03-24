@@ -54,4 +54,24 @@ describe("Header", () => {
       await screen.findByRole("tooltip", { name: "Board" }),
     ).toBeInTheDocument();
   });
+
+  it("renders a retro toggle when requested", async () => {
+    const user = userEvent.setup();
+    let toggled = false;
+
+    renderWithProviders(
+      <Header
+        onOpenSettings={() => undefined}
+        showRetroButton={true}
+        onToggleRetro={() => {
+          toggled = true;
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Retro prep" }));
+
+    expect(toggled).toBe(true);
+    expect(screen.getByText("Retro")).toBeInTheDocument();
+  });
 });

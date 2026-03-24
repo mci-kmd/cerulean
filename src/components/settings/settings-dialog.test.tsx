@@ -18,6 +18,10 @@ describe("SettingsDialog", () => {
     expect(screen.getByLabelText("Team")).toBeInTheDocument();
     expect(screen.getByLabelText("GitHub Username")).toBeInTheDocument();
     expect(screen.getByLabelText("GitHub Repository")).toBeInTheDocument();
+    expect(screen.getByLabelText("Retro Repository")).toBeInTheDocument();
+    expect(screen.getByLabelText("Retro Branch")).toBeInTheDocument();
+    expect(screen.getByLabelText("Retro Folder")).toBeInTheDocument();
+    expect(screen.getByLabelText("Retro Filename Pattern")).toBeInTheDocument();
     expect(screen.getByLabelText("UI review tag")).toBeInTheDocument();
     expect(screen.getAllByText(/Code \(Read & write\)/i).length).toBeGreaterThan(0);
   });
@@ -29,6 +33,7 @@ describe("SettingsDialog", () => {
 
     expect(screen.getByText("Connection")).toBeInTheDocument();
     expect(screen.getByText("Source")).toBeInTheDocument();
+    expect(screen.getByText("Retro Prep")).toBeInTheDocument();
     expect(screen.getByText("Board Columns")).toBeInTheDocument();
   });
 
@@ -94,6 +99,29 @@ describe("SettingsDialog", () => {
     const settings = collections.settings.get("settings");
     expect(settings?.githubUsername).toBe("octocat");
     expect(settings?.githubRepository).toBe("octo-org/widgets");
+  });
+
+  it("saves retro settings to collection", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderWithProviders(
+      <SettingsDialog open={true} onOpenChange={() => {}} />,
+    );
+
+    await user.type(screen.getByLabelText("Retro Repository"), "  retro-repo  ");
+    await user.clear(screen.getByLabelText("Retro Branch"));
+    await user.type(screen.getByLabelText("Retro Branch"), "  sprint-notes  ");
+    await user.type(screen.getByLabelText("Retro Folder"), "  retros\\team-a  ");
+    const patternInput = screen.getByLabelText("Retro Filename Pattern");
+    await user.clear(patternInput);
+    await user.click(patternInput);
+    await user.paste("retro-{date}.md");
+    await user.click(screen.getByText("Save"));
+
+    const settings = collections.settings.get("settings");
+    expect(settings?.retroRepository).toBe("retro-repo");
+    expect(settings?.retroBranch).toBe("sprint-notes");
+    expect(settings?.retroFolder).toBe("retros\\team-a");
+    expect(settings?.retroFilenamePattern).toBe("retro-{date}.md");
   });
 
   it("saves source, new-work, and approval board columns to collection", async () => {

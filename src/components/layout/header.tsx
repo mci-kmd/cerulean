@@ -1,4 +1,5 @@
 import {
+  FileText,
   FolderGit2,
   Presentation,
   RefreshCw,
@@ -23,6 +24,9 @@ interface HeaderProps {
   demoMode?: boolean;
   onToggleDemo?: () => void;
   showDemoButton?: boolean;
+  retroMode?: boolean;
+  onToggleRetro?: () => void;
+  showRetroButton?: boolean;
   onOpenSettings?: () => void;
 }
 
@@ -57,6 +61,9 @@ export function Header({
   demoMode,
   onToggleDemo,
   showDemoButton,
+  retroMode,
+  onToggleRetro,
+  showRetroButton,
   onOpenSettings,
 }: HeaderProps) {
   const statusColor = hasError
@@ -143,6 +150,24 @@ export function Header({
             <TooltipContent>
               {demoMode ? "Exit Demo" : "Demo Mode"}
             </TooltipContent>
+          </Tooltip>
+        )}
+
+        {showRetroButton && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={retroMode ? "default" : "ghost"}
+                size="sm"
+                className={`h-8 gap-1.5 ${retroMode ? "bg-primary text-primary-foreground" : ""}`}
+                onClick={onToggleRetro}
+                aria-label="Retro prep"
+              >
+                <FileText className="h-4 w-4" />
+                <span className="text-xs">{retroMode ? "Exit Retro" : "Retro"}</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{retroMode ? "Exit Retro" : "Retro Prep"}</TooltipContent>
           </Tooltip>
         )}
 

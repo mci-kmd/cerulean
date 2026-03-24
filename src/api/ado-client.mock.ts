@@ -4,6 +4,8 @@ import type {
   AdoBoard,
   AdoBoardReference,
   AdoBuild,
+  AdoGitItem,
+  AdoGitPush,
   AdoGitRef,
   AdoGitRepository,
   AdoPolicyEvaluationRecord,
@@ -43,6 +45,9 @@ export class MockAdoClient implements AdoClient {
   public boardDetails = new Map<string, AdoBoard>();
   public repositories: AdoGitRepository[] = [];
   public refs = new Map<string, AdoGitRef[]>();
+  public repositoryItems = new Map<string, AdoGitItem[]>();
+  public repositoryTexts = new Map<string, string>();
+  public repositoryPushes: AdoGitPush[] = [];
   public callLog: { method: string; args: unknown[] }[] = [];
 
   async queryWorkItems(wiql: string): Promise<WiqlResponse> {
@@ -101,6 +106,63 @@ export class MockAdoClient implements AdoClient {
     return (this.refs.get(repositoryId) ?? []).filter(
       (ref) => !normalizedFilter || ref.name.startsWith(normalizedFilter),
     );
+  }
+
+  async listRepositoryItems(
+    repositoryId: string,
+    scopePath?: string,
+    branchName?: string,
+  ): Promise<AdoGitItem[]> {
+    this.callLog.push({
+      method: "listRepositoryItems",
+      args: [repositoryId, scopePath, branchName],
+    });
+    if (this.shouldFail) throw new Error("Mock repository items error");
+    return this.repositoryItems.get(repositoryId) ?? [];
+  }
+
+  async getRepositoryItemText(
+    repositoryId: string,
+    path: string,
+    branchName?: string,
+  ): Promise<string> {
+    this.callLog.push({
+      method: "getRepositoryItemText",
+      args: [repositoryId, path, branchName],
+    });
+    if (this.shouldFail) throw new Error("Mock repository item text error");
+    const text = this.repositoryTexts.get(`${repositoryId}:${path}`);
+    if (text === undefined) {
+      throw new Error(`Mock repository item ${path} not found`);
+    }
+    return text;
+  }
+
+  async createRepositoryFile(
+    repositoryId: string,
+    path: string,
+    content: string,
+    branchName: string,
+    comment?: string,
+  ): Promise<AdoGitPush> {
+    this.callLog.push({
+      method: "createRepositoryFile",
+      args: [repositoryId, path, content, branchName, comment],
+    });
+    if (this.shouldFail) throw new Error("Mock create repository file error");
+    const push: AdoGitPush = {
+      pushId: this.repositoryPushes.length + 1,
+      repository: {
+        id: repositoryId,
+        name:
+          this.repositories.find((repository) => repository.id === repositoryId)?.name ?? repositoryId,
+      },
+      commits: [{ commitId: `commit-${this.repositoryPushes.length + 1}`, comment }],
+      refUpdates: [{ name: branchName }],
+    };
+    this.repositoryPushes.push(push);
+    this.repositoryTexts.set(`${repositoryId}:${path}`, content);
+    return push;
   }
 
   async listBuilds(branchName?: string, top = 200): Promise<AdoBuild[]> {

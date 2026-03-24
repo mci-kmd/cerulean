@@ -37,11 +37,13 @@ describe("RetroPrepView", () => {
         "",
         "## Follow up on previous retrospectives",
         "",
-        "### Agent queue",
+        "### Existing track",
         "",
         "- Existing follow-up item",
         "",
         "## Solutions",
+        "",
+        "### Agent queue",
         "",
         "- Follow up on flaky login tests",
       ].join("\n"),
@@ -71,8 +73,15 @@ describe("RetroPrepView", () => {
     expect(screen.getByText("/retros/Template.md")).toBeInTheDocument();
     expect(screen.getByText("/retros/2026-03-16.md")).toBeInTheDocument();
     expect(screen.getByText("/retros/2026-03-23.md")).toBeInTheDocument();
-    expect(screen.getByText("- [ ] Existing follow-up item")).toBeInTheDocument();
-    expect(screen.getByText("- [ ] Follow up on flaky login tests")).toBeInTheDocument();
+    expect((screen.getByLabelText("Draft markdown") as HTMLTextAreaElement).value).toContain(
+      "### Existing track\n\n- Existing follow-up item",
+    );
+    expect((screen.getByLabelText("Draft markdown") as HTMLTextAreaElement).value).toContain(
+      "### Agent queue\n\n- Follow up on flaky login tests",
+    );
+    expect(screen.getByText("Agent queue")).toBeInTheDocument();
+    expect(screen.queryByText("Existing track")).not.toBeInTheDocument();
+    expect(screen.queryByText("- Follow up on flaky login tests")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Create in ADO" }));
 

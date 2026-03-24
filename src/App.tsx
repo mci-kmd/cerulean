@@ -7,6 +7,7 @@ import { Board } from "@/components/board/board";
 import { BoardSkeleton } from "@/components/board/board-skeleton";
 import { EmptyState } from "@/components/board/empty-state";
 import { DemoView } from "@/components/demo/demo-view";
+import { RetroPrepView } from "@/components/retro/retro-prep-view";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { TaskDialog } from "@/components/board/task-dialog";
 import { useBoardCollections } from "@/db/use-board-collections";
@@ -71,6 +72,7 @@ export function App() {
   const customTasks = useCustomTasks();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+  const [retroMode, setRetroMode] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [isBoardDragging, setIsBoardDragging] = useState(false);
 
@@ -640,11 +642,30 @@ export function App() {
           lastUpdated={dataUpdatedAt}
           hasError={!!error}
           demoMode={demoMode}
-          onToggleDemo={() => setDemoMode((d) => !d)}
+          onToggleDemo={() => {
+            setRetroMode(false);
+            setDemoMode((d) => !d);
+          }}
           showDemoButton={showDemoButton}
+          retroMode={retroMode}
+          onToggleRetro={() => {
+            setDemoMode(false);
+            setRetroMode((value) => !value);
+          }}
+          showRetroButton={!!client}
           onOpenSettings={() => setSettingsOpen(true)}
         />
-        {demoMode && client ? (
+        {retroMode && client ? (
+          <RetroPrepView
+            client={client}
+            org={settings.org}
+            project={settings.project}
+            repositoryId={settings.retroRepository}
+            branchName={settings.retroBranch}
+            folder={settings.retroFolder}
+            filenamePattern={settings.retroFilenamePattern}
+          />
+        ) : demoMode && client ? (
           <DemoView
             client={client}
             approvalBoardColumn={settings.approvalBoardColumn}

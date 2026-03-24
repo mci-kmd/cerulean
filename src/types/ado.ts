@@ -127,6 +127,47 @@ export interface AdoGitRef {
   url?: string;
 }
 
+export interface AdoGitItemContentMetadata {
+  fileName?: string;
+}
+
+export interface AdoGitItem {
+  objectId?: string;
+  gitObjectType?: string;
+  commitId?: string;
+  path: string;
+  isFolder?: boolean;
+  url?: string;
+  content?: string;
+  contentMetadata?: AdoGitItemContentMetadata;
+}
+
+export interface AdoGitPushCommit {
+  commitId?: string;
+  comment?: string;
+}
+
+export interface AdoGitPushRefUpdate {
+  repositoryId?: string;
+  name?: string;
+  oldObjectId?: string;
+  newObjectId?: string;
+}
+
+export interface AdoGitPushRepository {
+  id?: string;
+  name?: string;
+}
+
+export interface AdoGitPush {
+  pushId: number;
+  date?: string;
+  commits?: AdoGitPushCommit[];
+  refUpdates?: AdoGitPushRefUpdate[];
+  repository?: AdoGitPushRepository;
+  url?: string;
+}
+
 export interface AdoBuildDefinition {
   id?: number;
   name?: string;

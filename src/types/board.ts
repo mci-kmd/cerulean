@@ -6,6 +6,10 @@ export interface AdoSettings {
   team: string;
   githubUsername: string;
   githubRepository: string;
+  retroRepository: string;
+  retroBranch: string;
+  retroFolder: string;
+  retroFilenamePattern: string;
   sourceState: string;
   sourceBoardColumn: string;
   candidateBoardColumn: string;
@@ -28,6 +32,10 @@ export const DEFAULT_SETTINGS: AdoSettings = {
   team: "",
   githubUsername: "",
   githubRepository: "",
+  retroRepository: "",
+  retroBranch: "main",
+  retroFolder: "",
+  retroFilenamePattern: "{date}.md",
   sourceState: "Active",
   sourceBoardColumn: "",
   candidateBoardColumn: "",

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, Filter, Columns3 } from "lucide-react";
+import { Link, Filter, Columns3, FileText } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ConnectionForm } from "./connection-form";
 import { SourceStateInput } from "./source-state-input";
+import { RetroSettingsInput } from "./retro-settings-input";
 import { ColumnsEditor } from "./columns-editor";
 import { useBoardCollections } from "@/db/use-board-collections";
 import { useSettings, useColumns } from "@/hooks/use-board";
@@ -79,6 +80,10 @@ function SettingsDialogContent({
       team: draft.team.trim(),
       githubUsername: normalizedGithubReview.username,
       githubRepository: normalizedGithubReview.repository,
+      retroRepository: draft.retroRepository.trim(),
+      retroBranch: draft.retroBranch.trim(),
+      retroFolder: draft.retroFolder.trim(),
+      retroFilenamePattern: draft.retroFilenamePattern.trim() || "{date}.md",
       sourceState: "",
       sourceBoardColumn: draft.sourceBoardColumn.trim(),
       candidateBoardColumn: draft.candidateBoardColumn.trim(),
@@ -166,6 +171,22 @@ function SettingsDialogContent({
             uiReviewTag={draft.uiReviewTag}
             pollInterval={draft.pollInterval}
             onChange={handleFieldChange}
+          />
+        </div>
+
+        <Separator />
+
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-medium">Retro Prep</h3>
+          </div>
+          <RetroSettingsInput
+            retroRepository={draft.retroRepository}
+            retroBranch={draft.retroBranch}
+            retroFolder={draft.retroFolder}
+            retroFilenamePattern={draft.retroFilenamePattern}
+            onChange={handleFieldChange as (field: string, value: string) => void}
           />
         </div>
 

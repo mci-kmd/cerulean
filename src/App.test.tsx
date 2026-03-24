@@ -195,6 +195,66 @@ describe("App integration", () => {
     });
   });
 
+  it("opens retro prep mode and prepares a draft", async () => {
+    const user = userEvent.setup();
+    installBoardHandlers();
+    server.use(
+      http.post(`${BASE}/_apis/wit/wiql`, () => HttpResponse.json({ workItems: [] })),
+      http.get(`${BASE}/_apis/git/repositories`, () =>
+        HttpResponse.json({
+          value: [{ id: "repo-1", name: "Retro Repo", defaultBranch: "refs/heads/main" }],
+        }),
+      ),
+      http.get(`${BASE}/_apis/git/repositories/repo-1/items`, ({ request }) => {
+        const url = new URL(request.url);
+        if (url.searchParams.get("includeContent") === "true") {
+          return HttpResponse.json({
+            path: "/retros/2026-03-16.md",
+            content: [
+              "# Sprint retro 2026-03-16",
+              "",
+              "## Decisions",
+              "- Keep the release checklist tighter",
+              "",
+              "## Went well",
+              "- Team swarmed fast",
+            ].join("\n"),
+          });
+        }
+        return HttpResponse.json({
+          value: [{ path: "/retros/2026-03-16.md", gitObjectType: "blob" }],
+        });
+      }),
+    );
+
+    const { collections } = renderWithProviders(<App />);
+
+    collections.settings.insert(
+      createSettings({
+        id: "settings",
+        retroRepository: "repo-1",
+        retroBranch: "main",
+        retroFolder: "retros",
+        retroFilenamePattern: "{date}.md",
+        pollInterval: 60,
+      }),
+    );
+    collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Retro prep" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Retro prep" }));
+
+    await waitFor(() => {
+      expect(
+        (screen.getByLabelText("Draft markdown") as HTMLTextAreaElement).value,
+      ).toContain("# Sprint retro");
+    });
+    expect(screen.getByText("/retros/2026-03-16.md")).toBeInTheDocument();
+  });
+
   it("queries candidate intake from the source board incoming column", async () => {
     const capturedQueries: string[] = [];
 

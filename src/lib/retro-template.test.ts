@@ -108,12 +108,7 @@ describe("retro-template", () => {
       new Date(2026, 2, 23),
     );
 
-    expect(result.reviewItems).toEqual([
-      "- [ ] Going forward, HR should be more involved.",
-      "- [ ] We should move faster when processing applicants.",
-      "- [ ] **MCI** creates a POC user story for setting up our own agent.",
-      "- [ ] Try removing releases from the steps that are a part of release windows.",
-    ]);
+    expect(result.seededFollowUpTitles).toEqual(["Agent queue"]);
     expect(result.content).toContain("# Retrospective 2026-03-23");
     expect(result.content).toContain("## Follow up on previous retrospectives");
     expect(result.content).toContain("### Hiring process");
@@ -136,7 +131,7 @@ describe("retro-template", () => {
       new Date(2026, 2, 23),
     );
 
-    expect(result.reviewItems).toEqual([]);
+    expect(result.seededFollowUpTitles).toEqual([]);
     expect(result.content).toBe(
       ["# Retrospective 2026-03-23", "", "## Follow up on previous retrospectives", "", "## Solutions"]
         .join("\n"),
@@ -159,6 +154,7 @@ describe("retro-template", () => {
       new Date(2026, 2, 23),
     );
 
+    expect(result.seededFollowUpTitles).toEqual(["Decisions"]);
     expect(result.content).toContain(
       "## Follow up on previous retrospectives\n\n### Decisions\n- Follow up on flaky test cleanup",
     );

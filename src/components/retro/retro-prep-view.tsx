@@ -85,7 +85,7 @@ export function RetroPrepView({
   const [targetPath, setTargetPath] = useState("");
   const [repositoryName, setRepositoryName] = useState("");
   const [editorUrl, setEditorUrl] = useState("");
-  const [reviewItems, setReviewItems] = useState<string[]>([]);
+  const [seededFollowUpTitles, setSeededFollowUpTitles] = useState<string[]>([]);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [hasPrepared, setHasPrepared] = useState(false);
@@ -135,7 +135,7 @@ export function RetroPrepView({
         setEditorUrl(
           buildAdoFileEditUrl(org, project, resolvedRepositoryName, nextPath, trimmedBranchName),
         );
-        setReviewItems([]);
+        setSeededFollowUpTitles([]);
         setTargetAlreadyExists(true);
         setHasPrepared(true);
         toast.message("Loaded existing retro draft", {
@@ -197,7 +197,7 @@ export function RetroPrepView({
       setEditorUrl(
         buildAdoFileEditUrl(org, project, resolvedRepositoryName, nextPath, trimmedBranchName),
       );
-      setReviewItems(preparedDraft.reviewItems);
+      setSeededFollowUpTitles(preparedDraft.seededFollowUpTitles);
       setTargetAlreadyExists(false);
       setHasPrepared(true);
     } catch (caughtError) {
@@ -408,9 +408,9 @@ export function RetroPrepView({
               <CheckCircle2 className="h-4 w-4 text-emerald-500" />
               <h3 className="text-sm font-medium">Seeded follow-up</h3>
             </div>
-            {reviewItems.length > 0 ? (
+            {seededFollowUpTitles.length > 0 ? (
               <ul className="space-y-1 text-sm">
-                {reviewItems.map((item) => (
+                {seededFollowUpTitles.map((item) => (
                   <li key={item} className="break-words">{item}</li>
                 ))}
               </ul>

@@ -412,6 +412,143 @@ describe("HttpAdoClient", () => {
     await expect(client.listRefs("repo-1", "heads/1234")).rejects.toThrow("403");
   });
 
+  it("lists repository items with scope path and branch", async () => {
+    let capturedScopePath = "";
+    let capturedBranch = "";
+    let capturedVersionType = "";
+    server.use(
+      http.get(`${BASE}/_apis/git/repositories/repo-1/items`, ({ request }) => {
+        const url = new URL(request.url);
+        capturedScopePath = url.searchParams.get("scopePath") ?? "";
+        capturedBranch = url.searchParams.get("versionDescriptor.version") ?? "";
+        capturedVersionType = url.searchParams.get("versionDescriptor.versionType") ?? "";
+        return HttpResponse.json({
+          value: [
+            {
+              path: "/retros/2026-03-01.md",
+              gitObjectType: "blob",
+              contentMetadata: { fileName: "2026-03-01.md" },
+            },
+          ],
+        });
+      }),
+    );
+
+    const items = await client.listRepositoryItems("repo-1", "\\retros", "main");
+
+    expect(capturedScopePath).toBe("/retros");
+    expect(capturedBranch).toBe("main");
+    expect(capturedVersionType).toBe("branch");
+    expect(items).toEqual([
+      {
+        path: "/retros/2026-03-01.md",
+        gitObjectType: "blob",
+        contentMetadata: { fileName: "2026-03-01.md" },
+      },
+    ]);
+  });
+
+  it("fetches repository item text content", async () => {
+    let capturedPath = "";
+    let capturedIncludeContent = "";
+    server.use(
+      http.get(`${BASE}/_apis/git/repositories/repo-1/items`, ({ request }) => {
+        const url = new URL(request.url);
+        capturedPath = url.searchParams.get("path") ?? "";
+        capturedIncludeContent = url.searchParams.get("includeContent") ?? "";
+        return HttpResponse.json({
+          path: "/retros/2026-03-01.md",
+          content: "# Retro\n\nOld notes",
+        });
+      }),
+    );
+
+    const text = await client.getRepositoryItemText("repo-1", "retros\\2026-03-01.md", "main");
+
+    expect(capturedPath).toBe("/retros/2026-03-01.md");
+    expect(capturedIncludeContent).toBe("true");
+    expect(text).toBe("# Retro\n\nOld notes");
+  });
+
+  it("creates a repository file from the target branch head", async () => {
+    let capturedFilter = "";
+    let capturedBody: unknown = null;
+    server.use(
+      http.get(`${BASE}/_apis/git/repositories/repo-1/refs`, ({ request }) => {
+        capturedFilter = new URL(request.url).searchParams.get("filter") ?? "";
+        return HttpResponse.json({
+          value: [{ name: "refs/heads/main", objectId: "abc123" }],
+        });
+      }),
+      http.post(`${BASE}/_apis/git/repositories/repo-1/pushes`, async ({ request }) => {
+        capturedBody = await request.json();
+        return HttpResponse.json({
+          pushId: 77,
+          repository: {
+            id: "repo-1",
+            name: "Retro Repo",
+          },
+          commits: [{ commitId: "commit-1" }],
+        });
+      }),
+    );
+
+    const push = await client.createRepositoryFile(
+      "repo-1",
+      "retros\\2026-03-23.md",
+      "# Retro\n",
+      "main",
+      "Create retro notes",
+    );
+
+    expect(capturedFilter).toBe("refs/heads/main");
+    expect(capturedBody).toEqual({
+      refUpdates: [
+        {
+          name: "refs/heads/main",
+          oldObjectId: "abc123",
+        },
+      ],
+      commits: [
+        {
+          comment: "Create retro notes",
+          changes: [
+            {
+              changeType: "add",
+              item: {
+                path: "/retros/2026-03-23.md",
+              },
+              newContent: {
+                content: "# Retro\n",
+                contentType: "rawtext",
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(push).toEqual({
+      pushId: 77,
+      repository: {
+        id: "repo-1",
+        name: "Retro Repo",
+      },
+      commits: [{ commitId: "commit-1" }],
+    });
+  });
+
+  it("throws when the target branch cannot be resolved for file creation", async () => {
+    server.use(
+      http.get(`${BASE}/_apis/git/repositories/repo-1/refs`, () => {
+        return HttpResponse.json({ value: [] });
+      }),
+    );
+
+    await expect(
+      client.createRepositoryFile("repo-1", "/retros/2026-03-23.md", "# Retro", "main"),
+    ).rejects.toThrow("Branch refs/heads/main not found");
+  });
+
   it("fetches pull request details with auth header", async () => {
     let capturedAuth = "";
     server.use(
