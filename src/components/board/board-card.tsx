@@ -590,7 +590,7 @@ export function BoardCard({
                   <span
                     data-testid={`pr-merged-release-summary-${pr.id}`}
                     className={`inline-flex items-center gap-0.5 ${getMergedReleaseSummaryClassName(pr)}`}
-                    aria-label={`Release deployments ${mergedReleaseSummary.inProgressCount} in progress and ${mergedReleaseSummary.deployedCount} deployed`}
+                    aria-label={`Release deployments ${mergedReleaseSummary.deployedCount} of ${mergedReleaseSummary.totalCount} deployed${mergedReleaseSummary.inProgressCount > 0 ? `, ${mergedReleaseSummary.inProgressCount} in progress` : ""}`}
                   >
                     <Rocket
                       data-testid={`pr-merged-release-icon-${pr.id}`}
@@ -598,7 +598,7 @@ export function BoardCard({
                       aria-hidden="true"
                     />
                     <span>
-                      {mergedReleaseSummary.inProgressCount}/{mergedReleaseSummary.deployedCount}
+                      {mergedReleaseSummary.deployedCount}/{mergedReleaseSummary.totalCount}
                     </span>
                   </span>
                 ) : null;

@@ -1167,10 +1167,10 @@ describe("BoardCard related PR links", () => {
 
     expect(within(prLink).queryByTestId("pr-merged-build-summary-315")).toBeNull();
     expect(within(prLink).queryByTestId("pr-merged-release-summary-315")).toBeNull();
-    expect(releaseSummary).toHaveTextContent("0/1");
+    expect(releaseSummary).toHaveTextContent("1/1");
     expect(releaseSummary).toHaveAttribute(
       "aria-label",
-      "Release deployments 0 in progress and 1 deployed",
+      "Release deployments 1 of 1 deployed",
     );
 
     await user.hover(buildSummary);
