@@ -748,6 +748,28 @@ describe("App column change behavior", () => {
     );
   });
 
+  it.each(["active", "completed"] as const)(
+    "does not reset review state when dragging an already-assigned %s review from New Work into an active column",
+    async (reviewState) => {
+      mocks.workItems = [];
+      mocks.reviewWorkItems = [createReviewWorkItem(-505, reviewState)];
+      const { collections } = renderWithProviders(<App />);
+
+      act(() => {
+        insertSettings(collections);
+        collections.columns.insert({ id: "col-1", name: "To Do", order: 0 });
+      });
+
+      await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+      act(() => {
+        mocks.boardOnColumnChange?.(-505, NEW_WORK_COLUMN_ID, "col-1");
+      });
+
+      expect(mocks.reviewMutate).not.toHaveBeenCalled();
+    },
+  );
+
   it("approves review work when dragging it into Completed", async () => {
     mocks.workItems = [];
     mocks.reviewWorkItems = [createReviewWorkItem(-502, "active")];

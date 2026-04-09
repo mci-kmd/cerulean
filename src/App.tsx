@@ -404,7 +404,7 @@ export function App() {
         return;
       }
 
-      const { repositoryId, pullRequestId } = boardWorkItem.review;
+      const { repositoryId, pullRequestId, reviewState } = boardWorkItem.review;
 
       if (movingToNewWork) {
         reviewPullRequest.mutate(
@@ -443,6 +443,9 @@ export function App() {
       }
 
       if (movingFromNewWork) {
+        if (reviewState !== "new") {
+          return;
+        }
         reviewPullRequest.mutate(
           {
             repositoryId,
