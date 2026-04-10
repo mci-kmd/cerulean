@@ -848,6 +848,42 @@ describe("BoardCard related PR links", () => {
     expect(completedPrLink.parentElement).toHaveClass("opacity-60");
   });
 
+  it("hides abandoned pull requests on user story cards", () => {
+    renderCard({
+      workItemOverrides: {
+        type: "User Story",
+        relatedPullRequests: [
+          {
+            id: "130",
+            label: "PR #130",
+            title: "Still in review",
+            status: "active",
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/130",
+          },
+          {
+            id: "131",
+            label: "PR #131",
+            title: "Abandoned draft",
+            status: "abandoned",
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/131",
+          },
+          {
+            id: "132",
+            label: "PR #132",
+            title: "Already merged",
+            status: "completed",
+            isCompleted: true,
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/132",
+          },
+        ],
+      },
+    });
+
+    expect(screen.queryByRole("link", { name: "Abandoned draft" })).toBeNull();
+    const links = within(screen.getByRole("list")).getAllByRole("link");
+    expect(links.map((link) => link.textContent)).toEqual(["Still in review", "Already merged"]);
+  });
+
   it("orders active pull requests before completed ones", () => {
     renderCard({
       workItemOverrides: {

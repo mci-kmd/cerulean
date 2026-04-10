@@ -58,6 +58,10 @@ function isPullRequestCompleted(pr: RelatedPullRequest): boolean {
   return pr.status?.trim().toLowerCase() === "completed";
 }
 
+function isPullRequestAbandoned(pr: RelatedPullRequest): boolean {
+  return pr.status?.trim().toLowerCase() === "abandoned";
+}
+
 function getPullRequestTitle(pr: RelatedPullRequest): string {
   return pr.title?.trim() || pr.label.trim() || "Pull Request";
 }
@@ -248,7 +252,12 @@ export function BoardCard({
   const isCustomTask = workItem.type === CUSTOM_TASK_TYPE && !workItem.url;
   const isTaskLikeCard = isCustomTask || isUiReviewCard;
   const displayId = workItem.displayId ?? workItem.id;
-  const relatedPullRequests = !isTaskLikeCard ? (workItem.relatedPullRequests ?? []) : [];
+  const isUserStoryCard = workItem.type === "User Story";
+  const relatedPullRequests = !isTaskLikeCard
+    ? (workItem.relatedPullRequests ?? []).filter(
+        (pr) => !isUserStoryCard || !isPullRequestAbandoned(pr),
+      )
+    : [];
   const isGithubReviewCard = isReviewCard && workItem.review.provider === "github";
   const canCreateAdoPullRequest =
     !isTaskLikeCard &&
