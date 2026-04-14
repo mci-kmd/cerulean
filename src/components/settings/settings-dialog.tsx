@@ -1,5 +1,12 @@
-import { useState } from "react";
-import { Link, Filter, Columns3, FileText } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import {
+  Link,
+  Filter,
+  Columns3,
+  FileText,
+  ChevronRight,
+  type LucideIcon,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +16,6 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { ConnectionForm } from "./connection-form";
 import { SourceStateInput } from "./source-state-input";
 import { RetroSettingsInput } from "./retro-settings-input";
@@ -24,6 +30,8 @@ interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
+
+type SettingsSectionId = "connection" | "source" | "retro" | "columns";
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const collections = useBoardCollections();
@@ -57,9 +65,22 @@ function SettingsDialogContent({
 }) {
   const [draft, setDraft] = useState<AdoSettings>(currentSettings);
   const [draftColumns, setDraftColumns] = useState<BoardColumn[]>(currentColumns);
+  const [openSections, setOpenSections] = useState<Record<SettingsSectionId, boolean>>({
+    connection: false,
+    source: false,
+    retro: false,
+    columns: false,
+  });
 
   const handleFieldChange = (field: string, value: string | number) => {
     setDraft((d) => ({ ...d, [field]: value }));
+  };
+
+  const toggleSection = (section: SettingsSectionId) => {
+    setOpenSections((sections) => ({
+      ...sections,
+      [section]: !sections[section],
+    }));
   };
 
   const handleSave = async () => {
@@ -129,7 +150,7 @@ function SettingsDialogContent({
   };
 
   return (
-    <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto">
+    <DialogContent className="max-w-[72rem] max-h-[85vh] overflow-y-auto sm:max-w-[72rem]">
       <DialogHeader>
         <DialogTitle className="font-heading">Settings</DialogTitle>
         <DialogDescription>
@@ -137,12 +158,14 @@ function SettingsDialogContent({
         </DialogDescription>
       </DialogHeader>
 
-      <div className="space-y-6 py-4">
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <Link className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-medium">Connection</h3>
-          </div>
+      <div className="space-y-3 py-4">
+        <SettingsSection
+          id="connection"
+          title="Connection"
+          icon={Link}
+          open={openSections.connection}
+          onToggle={() => toggleSection("connection")}
+        >
           <ConnectionForm
             pat={draft.pat}
             org={draft.org}
@@ -152,15 +175,15 @@ function SettingsDialogContent({
             githubRepository={draft.githubRepository}
             onChange={handleFieldChange}
           />
-        </div>
+        </SettingsSection>
 
-        <Separator />
-
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-medium">Source</h3>
-          </div>
+        <SettingsSection
+          id="source"
+          title="Source"
+          icon={Filter}
+          open={openSections.source}
+          onToggle={() => toggleSection("source")}
+        >
           <SourceStateInput
             sourceBoardColumn={draft.sourceBoardColumn}
             candidateBoardColumn={draft.candidateBoardColumn}
@@ -172,15 +195,15 @@ function SettingsDialogContent({
             pollInterval={draft.pollInterval}
             onChange={handleFieldChange}
           />
-        </div>
+        </SettingsSection>
 
-        <Separator />
-
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <FileText className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-medium">Retro Prep</h3>
-          </div>
+        <SettingsSection
+          id="retro"
+          title="Retro Prep"
+          icon={FileText}
+          open={openSections.retro}
+          onToggle={() => toggleSection("retro")}
+        >
           <RetroSettingsInput
             retroRepository={draft.retroRepository}
             retroBranch={draft.retroBranch}
@@ -188,15 +211,15 @@ function SettingsDialogContent({
             retroFilenamePattern={draft.retroFilenamePattern}
             onChange={handleFieldChange as (field: string, value: string) => void}
           />
-        </div>
+        </SettingsSection>
 
-        <Separator />
-
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <Columns3 className="h-4 w-4 text-muted-foreground" />
-            <h3 className="text-sm font-medium">Board Columns</h3>
-          </div>
+        <SettingsSection
+          id="columns"
+          title="Board Columns"
+          icon={Columns3}
+          open={openSections.columns}
+          onToggle={() => toggleSection("columns")}
+        >
           <ColumnsEditor
             columns={draftColumns}
             onAdd={(col) => setDraftColumns((c) => [...c, col])}
@@ -209,7 +232,7 @@ function SettingsDialogContent({
               )
             }
           />
-        </div>
+        </SettingsSection>
       </div>
 
       <DialogFooter>
@@ -221,5 +244,63 @@ function SettingsDialogContent({
         </Button>
       </DialogFooter>
     </DialogContent>
+  );
+}
+
+function SettingsSection({
+  id,
+  title,
+  icon: Icon,
+  open,
+  onToggle,
+  children,
+}: {
+  id: SettingsSectionId;
+  title: string;
+  icon: LucideIcon;
+  open: boolean;
+  onToggle: () => void;
+  children: ReactNode;
+}) {
+  const contentId = `settings-section-${id}`;
+
+  return (
+    <section className="overflow-hidden rounded-lg border">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={contentId}
+      >
+        <span className="flex items-center gap-2">
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-medium">{title}</span>
+        </span>
+        <ChevronRight
+          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+            open ? "rotate-90" : ""
+          }`}
+        />
+      </button>
+
+      <div
+        className="grid transition-[grid-template-rows] duration-200 ease-out"
+        style={{ gridTemplateRows: open ? "1fr" : "0fr" }}
+      >
+        <div className="overflow-hidden">
+          <div
+            id={contentId}
+            aria-hidden={!open}
+            inert={!open}
+            className={`border-t px-4 py-4 transition-opacity duration-200 ease-out ${
+              open ? "opacity-100" : "pointer-events-none opacity-0"
+            }`}
+          >
+            {children}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }

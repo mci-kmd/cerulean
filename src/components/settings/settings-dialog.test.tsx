@@ -5,36 +5,80 @@ import { DEFAULT_SETTINGS } from "@/types/board";
 import { createTestCollections, renderWithProviders } from "@/test/helpers/render";
 import { SettingsDialog } from "./settings-dialog";
 
+async function expandSection(
+  user: ReturnType<typeof userEvent.setup>,
+  name: string,
+) {
+  const section = screen.getByRole("button", { name });
+
+  if (section.getAttribute("aria-expanded") !== "true") {
+    await user.click(section);
+  }
+
+  return section;
+}
+
+function getSectionContent(name: string) {
+  const section = screen.getByRole("button", { name });
+  const contentId = section.getAttribute("aria-controls");
+
+  expect(contentId).toBeTruthy();
+
+  return document.getElementById(contentId!);
+}
+
 describe("SettingsDialog", () => {
-  it("renders when open", () => {
+  it("renders section controls collapsed by default", () => {
     renderWithProviders(
       <SettingsDialog open={true} onOpenChange={() => {}} />,
     );
 
     expect(screen.getByText("Settings")).toBeInTheDocument();
-    expect(screen.getByLabelText("Personal Access Token")).toBeInTheDocument();
-    expect(screen.getByLabelText("Organization")).toBeInTheDocument();
-    expect(screen.getByLabelText("Project")).toBeInTheDocument();
-    expect(screen.getByLabelText("Team")).toBeInTheDocument();
-    expect(screen.getByLabelText("GitHub Username")).toBeInTheDocument();
-    expect(screen.getByLabelText("GitHub Repository")).toBeInTheDocument();
-    expect(screen.getByLabelText("Retro Repository")).toBeInTheDocument();
-    expect(screen.getByLabelText("Retro Branch")).toBeInTheDocument();
-    expect(screen.getByLabelText("Retro Folder")).toBeInTheDocument();
-    expect(screen.getByLabelText("Retro Filename Pattern")).toBeInTheDocument();
-    expect(screen.getByLabelText("UI review tag")).toBeInTheDocument();
-    expect(screen.getAllByText(/Code \(Read & write\)/i).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Connection" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Source" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Retro Prep" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.getByRole("button", { name: "Board Columns" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(getSectionContent("Connection")).toHaveAttribute("aria-hidden", "true");
+    expect(getSectionContent("Connection")).toHaveClass("opacity-0");
+    expect(getSectionContent("Source")).toHaveAttribute("aria-hidden", "true");
+    expect(getSectionContent("Source")).toHaveClass("opacity-0");
+    expect(getSectionContent("Retro Prep")).toHaveAttribute("aria-hidden", "true");
+    expect(getSectionContent("Retro Prep")).toHaveClass("opacity-0");
+    expect(getSectionContent("Board Columns")).toHaveAttribute("aria-hidden", "true");
+    expect(getSectionContent("Board Columns")).toHaveClass("opacity-0");
   });
 
-  it("shows connection, source, and columns sections", () => {
+  it("expands and collapses sections", async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <SettingsDialog open={true} onOpenChange={() => {}} />,
     );
 
-    expect(screen.getByText("Connection")).toBeInTheDocument();
-    expect(screen.getByText("Source")).toBeInTheDocument();
-    expect(screen.getByText("Retro Prep")).toBeInTheDocument();
-    expect(screen.getByText("Board Columns")).toBeInTheDocument();
+    const connection = screen.getByRole("button", { name: "Connection" });
+
+    await user.click(connection);
+    expect(connection).toHaveAttribute("aria-expanded", "true");
+    expect(getSectionContent("Connection")).toHaveAttribute("aria-hidden", "false");
+    expect(getSectionContent("Connection")).toHaveClass("opacity-100");
+    expect(screen.getByLabelText("Personal Access Token")).toBeInTheDocument();
+    expect(screen.getAllByText(/Code \(Read & write\)/i).length).toBeGreaterThan(0);
+
+    await user.click(connection);
+    expect(connection).toHaveAttribute("aria-expanded", "false");
+    expect(getSectionContent("Connection")).toHaveAttribute("aria-hidden", "true");
+    expect(getSectionContent("Connection")).toHaveClass("opacity-0");
   });
 
   it("calls onOpenChange when cancel is clicked", async () => {
@@ -54,6 +98,7 @@ describe("SettingsDialog", () => {
       <SettingsDialog open={true} onOpenChange={() => {}} />,
     );
 
+    await expandSection(user, "Connection");
     const patInput = screen.getByLabelText("Personal Access Token");
     const orgInput = screen.getByLabelText("Organization");
     const projInput = screen.getByLabelText("Project");
@@ -76,6 +121,7 @@ describe("SettingsDialog", () => {
       <SettingsDialog open={true} onOpenChange={() => {}} />,
     );
 
+    await expandSection(user, "Connection");
     await user.type(screen.getByLabelText("Team"), "my-team");
     await user.click(screen.getByText("Save"));
 
@@ -89,6 +135,7 @@ describe("SettingsDialog", () => {
       <SettingsDialog open={true} onOpenChange={() => {}} />,
     );
 
+    await expandSection(user, "Connection");
     await user.type(screen.getByLabelText("GitHub Username"), "@octocat");
     await user.type(
       screen.getByLabelText("GitHub Repository"),
@@ -107,6 +154,7 @@ describe("SettingsDialog", () => {
       <SettingsDialog open={true} onOpenChange={() => {}} />,
     );
 
+    await expandSection(user, "Retro Prep");
     await user.type(screen.getByLabelText("Retro Repository"), "  retro-repo  ");
     await user.clear(screen.getByLabelText("Retro Branch"));
     await user.type(screen.getByLabelText("Retro Branch"), "  sprint-notes  ");
@@ -130,6 +178,7 @@ describe("SettingsDialog", () => {
       <SettingsDialog open={true} onOpenChange={() => {}} />,
     );
 
+    await expandSection(user, "Source");
     await user.type(screen.getByLabelText("Active Work Board Column"), "Approved");
     await user.type(screen.getByLabelText("New Work Board Column"), "Ideas");
     await user.type(screen.getByLabelText("Approval Board Column"), "Approved");
@@ -147,6 +196,7 @@ describe("SettingsDialog", () => {
       <SettingsDialog open={true} onOpenChange={() => {}} />,
     );
 
+    await expandSection(user, "Connection");
     await user.type(screen.getByLabelText("Personal Access Token"), "  my-pat  ");
     await user.type(screen.getByLabelText("Organization"), " https://dev.azure.com/my-org/ ");
     await user.type(screen.getByLabelText("Project"), " my project ");
@@ -159,11 +209,13 @@ describe("SettingsDialog", () => {
     expect(settings?.project).toBe("my project");
   });
 
-  it("renders area path input", () => {
+  it("renders area path input", async () => {
+    const user = userEvent.setup();
     renderWithProviders(
       <SettingsDialog open={true} onOpenChange={() => {}} />,
     );
 
+    await expandSection(user, "Source");
     expect(screen.getByLabelText("Area Path")).toBeInTheDocument();
   });
 
@@ -173,6 +225,7 @@ describe("SettingsDialog", () => {
       <SettingsDialog open={true} onOpenChange={() => {}} />,
     );
 
+    await expandSection(user, "Source");
     const areaInput = screen.getByLabelText("Area Path");
     await user.type(areaInput, "MyProject\\MyTeam");
     await user.click(screen.getByText("Save"));
@@ -187,6 +240,7 @@ describe("SettingsDialog", () => {
       <SettingsDialog open={true} onOpenChange={() => {}} />,
     );
 
+    await expandSection(user, "Source");
     await user.type(screen.getByLabelText("UI review tag"), "  UI Review  ");
     await user.click(screen.getByText("Save"));
 

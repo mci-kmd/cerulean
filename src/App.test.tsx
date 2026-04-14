@@ -213,8 +213,14 @@ describe("App integration", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Settings")).toBeInTheDocument();
-      expect(screen.getByLabelText("Personal Access Token")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Connection" })).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
     });
+
+    await user.click(screen.getByRole("button", { name: "Connection" }));
+    expect(screen.getByLabelText("Personal Access Token")).toBeInTheDocument();
   });
 
   it("shows demo button when approval board column is configured", async () => {
