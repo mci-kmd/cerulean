@@ -1,8 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { DEFAULT_SETTINGS } from "@/types/board";
 import { createTestCollections, renderWithProviders } from "@/test/helpers/render";
+import { createBoardBackup } from "@/lib/board-backup";
 import { SettingsDialog } from "./settings-dialog";
 
 async function expandSection(
@@ -277,5 +278,214 @@ describe("SettingsDialog", () => {
     expect(settings?.approvalState).toBe("");
     expect(settings?.candidateState).toBe("");
     expect(settings?.candidateStatesByType).toBe("");
+  });
+
+  it("exports current settings draft with stored app data", async () => {
+    const user = userEvent.setup();
+    const collections = createTestCollections();
+    collections.settings.insert({
+      ...DEFAULT_SETTINGS,
+      team: "saved-team",
+      org: "saved-org",
+    });
+    collections.columns.insert({ id: "col-1", name: "Doing", order: 0 });
+    collections.assignments.insert({
+      id: "assignment-1",
+      workItemId: 101,
+      columnId: "col-1",
+      position: 0,
+      statusMessage: "blocked",
+    });
+    collections.demoChecklist.insert({
+      id: "check-1",
+      workItemId: 101,
+      text: "demo step",
+      checked: true,
+      order: 0,
+    });
+    collections.demoOrder.insert({
+      id: "demo-1",
+      workItemId: 101,
+      position: 0,
+    });
+    collections.customTasks.insert({
+      id: "task-1",
+      workItemId: 101,
+      title: "Follow up",
+      completedAt: 42,
+    });
+
+    const createObjectURL = vi.fn((object: Blob | MediaSource) => {
+      void object;
+      return "blob:backup";
+    });
+    const revokeObjectURL = vi.fn();
+    const clickSpy = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => {});
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      writable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      writable: true,
+      value: revokeObjectURL,
+    });
+
+    try {
+      renderWithProviders(
+        <SettingsDialog open={true} onOpenChange={() => {}} />,
+        { collections },
+      );
+
+      await expandSection(user, "Connection");
+      await user.clear(screen.getByLabelText("Team"));
+      await user.type(screen.getByLabelText("Team"), "draft-team");
+      await user.click(screen.getByRole("button", { name: "Export" }));
+
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(clickSpy).toHaveBeenCalledTimes(1);
+      expect(revokeObjectURL).toHaveBeenCalledWith("blob:backup");
+
+      const firstCreateObjectUrlCall = createObjectURL.mock.calls[0];
+      expect(firstCreateObjectUrlCall).toBeDefined();
+      const [blob] = firstCreateObjectUrlCall!;
+      expect(blob).toBeInstanceOf(Blob);
+      const exported = JSON.parse(await (blob as Blob).text());
+      expect(exported).toMatchObject({
+        format: "cerulean-backup",
+        version: 1,
+        settings: {
+          id: "settings",
+          team: "draft-team",
+          org: "saved-org",
+        },
+        columns: [{ id: "col-1", name: "Doing", order: 0 }],
+        assignments: [{
+          id: "assignment-1",
+          workItemId: 101,
+          columnId: "col-1",
+          position: 0,
+          statusMessage: "blocked",
+        }],
+        demoChecklist: [{
+          id: "check-1",
+          workItemId: 101,
+          text: "demo step",
+          checked: true,
+          order: 0,
+        }],
+        demoOrder: [{
+          id: "demo-1",
+          workItemId: 101,
+          position: 0,
+        }],
+        customTasks: [{
+          id: "task-1",
+          workItemId: 101,
+          title: "Follow up",
+          completedAt: 42,
+        }],
+      });
+      expect(exported.exportedAt).toEqual(expect.any(String));
+    } finally {
+      clickSpy.mockRestore();
+      Object.defineProperty(URL, "createObjectURL", {
+        configurable: true,
+        writable: true,
+        value: originalCreateObjectURL,
+      });
+      Object.defineProperty(URL, "revokeObjectURL", {
+        configurable: true,
+        writable: true,
+        value: originalRevokeObjectURL,
+      });
+    }
+  });
+
+  it("imports settings and stored app data from backup json", async () => {
+    const user = userEvent.setup();
+    const collections = createTestCollections();
+    collections.settings.insert({
+      ...DEFAULT_SETTINGS,
+      team: "old-team",
+    });
+    collections.columns.insert({ id: "old-col", name: "Old", order: 0 });
+    collections.assignments.insert({
+      id: "old-assignment",
+      workItemId: 1,
+      columnId: "old-col",
+      position: 0,
+    });
+
+    const backupCollections = createTestCollections();
+    backupCollections.assignments.insert({
+      id: "new-assignment",
+      workItemId: 202,
+      columnId: "new-col",
+      position: 1,
+      mockupUrl: "https://example.com/mockup",
+    });
+    backupCollections.demoChecklist.insert({
+      id: "new-check",
+      workItemId: 202,
+      text: "Verify flow",
+      checked: false,
+      order: 2,
+    });
+    backupCollections.demoOrder.insert({
+      id: "new-demo",
+      workItemId: 202,
+      position: 3,
+    });
+    backupCollections.customTasks.insert({
+      id: "new-task",
+      workItemId: 202,
+      title: "Draft QA notes",
+    });
+    const backupJson = JSON.stringify(
+      createBoardBackup({
+        collections: backupCollections,
+        settings: {
+          ...DEFAULT_SETTINGS,
+          team: "imported-team",
+          org: "imported-org",
+          project: "imported-project",
+        },
+        columns: [{ id: "new-col", name: "Imported", order: 0 }],
+      }),
+    );
+
+    renderWithProviders(
+      <SettingsDialog open={true} onOpenChange={() => {}} />,
+      { collections },
+    );
+
+    const importInput = screen.getByLabelText("Import settings and data");
+    await user.upload(
+      importInput,
+      new File([backupJson], "cerulean-backup.json", { type: "application/json" }),
+    );
+
+    expect(collections.settings.get("settings")?.team).toBe("imported-team");
+    expect(collections.settings.get("settings")?.org).toBe("imported-org");
+    expect(collections.columns.get("old-col")).toBeUndefined();
+    expect(collections.columns.get("new-col")?.name).toBe("Imported");
+    expect(collections.assignments.get("old-assignment")).toBeUndefined();
+    expect(collections.assignments.get("new-assignment")?.mockupUrl).toBe(
+      "https://example.com/mockup",
+    );
+    expect(collections.demoChecklist.get("new-check")?.text).toBe("Verify flow");
+    expect(collections.demoOrder.get("new-demo")?.position).toBe(3);
+    expect(collections.customTasks.get("new-task")?.title).toBe("Draft QA notes");
+
+    await expandSection(user, "Connection");
+    expect(screen.getByLabelText("Team")).toHaveValue("imported-team");
+    expect(screen.getByLabelText("Organization")).toHaveValue("imported-org");
+    expect(screen.getByLabelText("Project")).toHaveValue("imported-project");
   });
 });

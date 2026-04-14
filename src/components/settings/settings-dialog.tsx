@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import {
   Link,
   Filter,
@@ -7,6 +7,7 @@ import {
   ChevronRight,
   type LucideIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,12 @@ import { useSettings, useColumns } from "@/hooks/use-board";
 import { normalizeAdoClientConfig } from "@/api/ado-client";
 import { normalizeGithubReviewConfig } from "@/api/github-client";
 import { DEFAULT_SETTINGS, type BoardColumn, type AdoSettings } from "@/types/board";
+import {
+  BOARD_BACKUP_FILENAME,
+  applyBoardBackup,
+  createBoardBackup,
+  parseBoardBackup,
+} from "@/lib/board-backup";
 
 interface SettingsDialogProps {
   open: boolean;
@@ -32,6 +39,48 @@ interface SettingsDialogProps {
 }
 
 type SettingsSectionId = "connection" | "source" | "retro" | "columns";
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown error";
+}
+
+function buildSavedSettings(draft: AdoSettings): AdoSettings {
+  const normalizedConnection = normalizeAdoClientConfig({
+    pat: draft.pat,
+    org: draft.org,
+    project: draft.project,
+  });
+  const normalizedGithubReview = normalizeGithubReviewConfig({
+    username: draft.githubUsername,
+    repository: draft.githubRepository,
+  });
+
+  return {
+    id: "settings",
+    pat: normalizedConnection.pat,
+    org: normalizedConnection.org,
+    project: normalizedConnection.project,
+    team: draft.team.trim(),
+    githubUsername: normalizedGithubReview.username,
+    githubRepository: normalizedGithubReview.repository,
+    retroRepository: draft.retroRepository.trim(),
+    retroBranch: draft.retroBranch.trim(),
+    retroFolder: draft.retroFolder.trim(),
+    retroFilenamePattern: draft.retroFilenamePattern.trim() || "{date}.md",
+    sourceState: "",
+    sourceBoardColumn: draft.sourceBoardColumn.trim(),
+    candidateBoardColumn: draft.candidateBoardColumn.trim(),
+    approvalState: "",
+    approvalBoardColumn: draft.approvalBoardColumn.trim(),
+    closedState: draft.closedState,
+    candidateState: "",
+    candidateStatesByType: "",
+    areaPath: draft.areaPath,
+    workItemTypes: draft.workItemTypes,
+    uiReviewTag: draft.uiReviewTag.trim(),
+    pollInterval: draft.pollInterval,
+  };
+}
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const collections = useBoardCollections();
@@ -65,6 +114,7 @@ function SettingsDialogContent({
 }) {
   const [draft, setDraft] = useState<AdoSettings>(currentSettings);
   const [draftColumns, setDraftColumns] = useState<BoardColumn[]>(currentColumns);
+  const importInputRef = useRef<HTMLInputElement>(null);
   const [openSections, setOpenSections] = useState<Record<SettingsSectionId, boolean>>({
     connection: false,
     source: false,
@@ -84,40 +134,7 @@ function SettingsDialogContent({
   };
 
   const handleSave = async () => {
-    const normalizedConnection = normalizeAdoClientConfig({
-      pat: draft.pat,
-      org: draft.org,
-      project: draft.project,
-    });
-    const normalizedGithubReview = normalizeGithubReviewConfig({
-      username: draft.githubUsername,
-      repository: draft.githubRepository,
-    });
-    const nextDraft: AdoSettings = {
-      id: "settings",
-      pat: normalizedConnection.pat,
-      org: normalizedConnection.org,
-      project: normalizedConnection.project,
-      team: draft.team.trim(),
-      githubUsername: normalizedGithubReview.username,
-      githubRepository: normalizedGithubReview.repository,
-      retroRepository: draft.retroRepository.trim(),
-      retroBranch: draft.retroBranch.trim(),
-      retroFolder: draft.retroFolder.trim(),
-      retroFilenamePattern: draft.retroFilenamePattern.trim() || "{date}.md",
-      sourceState: "",
-      sourceBoardColumn: draft.sourceBoardColumn.trim(),
-      candidateBoardColumn: draft.candidateBoardColumn.trim(),
-      approvalState: "",
-      approvalBoardColumn: draft.approvalBoardColumn.trim(),
-      closedState: draft.closedState,
-      candidateState: "",
-      candidateStatesByType: "",
-      areaPath: draft.areaPath,
-      workItemTypes: draft.workItemTypes,
-      uiReviewTag: draft.uiReviewTag.trim(),
-      pollInterval: draft.pollInterval,
-    };
+    const nextDraft = buildSavedSettings(draft);
 
     const existing = collections.settings.get("settings");
     if (existing) {
@@ -147,6 +164,59 @@ function SettingsDialogContent({
     }
 
     onOpenChange(false);
+  };
+
+  const handleExport = () => {
+    try {
+      const backup = createBoardBackup({
+        collections,
+        settings: buildSavedSettings(draft),
+        columns: draftColumns,
+      });
+      const blob = new Blob([JSON.stringify(backup, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = BOARD_BACKUP_FILENAME;
+      link.style.display = "none";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success("Downloaded settings backup");
+    } catch (error) {
+      toast.error("Failed to export settings backup", {
+        description: formatError(error),
+      });
+    }
+  };
+
+  const handleImportClick = () => {
+    importInputRef.current?.click();
+  };
+
+  const handleImport = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const backup = parseBoardBackup(await file.text());
+      await applyBoardBackup(collections, backup);
+      setDraft(backup.settings);
+      setDraftColumns(backup.columns);
+      toast.success("Imported settings backup");
+    } catch (error) {
+      toast.error("Failed to import settings backup", {
+        description: formatError(error),
+      });
+    } finally {
+      input.value = "";
+    }
   };
 
   return (
@@ -235,13 +305,35 @@ function SettingsDialogContent({
         </SettingsSection>
       </div>
 
-      <DialogFooter>
-        <Button variant="outline" onClick={() => onOpenChange(false)}>
-          Cancel
-        </Button>
-        <Button onClick={handleSave} className="bg-primary text-primary-foreground hover:bg-primary/90">
-          Save
-        </Button>
+      <DialogFooter className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".json,application/json"
+            aria-label="Import settings and data"
+            className="sr-only"
+            onChange={handleImport}
+          />
+          <Button type="button" variant="outline" onClick={handleExport}>
+            Export
+          </Button>
+          <Button type="button" variant="outline" onClick={handleImportClick}>
+            Import
+          </Button>
+        </div>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSave}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            Save
+          </Button>
+        </div>
       </DialogFooter>
     </DialogContent>
   );
