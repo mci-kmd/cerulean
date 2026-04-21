@@ -429,6 +429,7 @@ describe("SettingsDialog", () => {
       columnId: "new-col",
       position: 1,
       mockupUrl: "https://example.com/mockup",
+      candidateOptOut: true,
     });
     backupCollections.demoChecklist.insert({
       id: "new-check",
@@ -479,6 +480,7 @@ describe("SettingsDialog", () => {
     expect(collections.assignments.get("new-assignment")?.mockupUrl).toBe(
       "https://example.com/mockup",
     );
+    expect(collections.assignments.get("new-assignment")?.candidateOptOut).toBe(true);
     expect(collections.demoChecklist.get("new-check")?.text).toBe("Verify flow");
     expect(collections.demoOrder.get("new-demo")?.position).toBe(3);
     expect(collections.customTasks.get("new-task")?.title).toBe("Draft QA notes");

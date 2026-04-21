@@ -64,6 +64,7 @@ export interface ColumnAssignment {
   statusMessage?: string;
   mockupUrl?: string;
   discussionUrl?: string;
+  candidateOptOut?: boolean;
 }
 
 export interface ReviewWorkItem {

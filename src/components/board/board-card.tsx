@@ -1,6 +1,8 @@
 import { createElement, useEffect, useRef, useState } from "react";
 import {
   Check,
+  Eye,
+  EyeOff,
   GitPullRequestArrow,
   GitPullRequest,
   GitPullRequestClosed,
@@ -47,6 +49,7 @@ interface BoardCardProps {
   statusMessage?: string;
   mockupUrl?: string;
   discussionUrl?: string;
+  candidateOptOut?: boolean;
   index: number;
   columnId: string;
 }
@@ -225,6 +228,7 @@ export function BoardCard({
   statusMessage,
   mockupUrl,
   discussionUrl,
+  candidateOptOut,
   index,
   columnId,
 }: BoardCardProps) {
@@ -250,6 +254,7 @@ export function BoardCard({
   const isReviewCard = isReviewWorkItem(workItem);
   const isUiReviewCard = isUiReviewWorkItem(workItem);
   const isCustomTask = workItem.type === CUSTOM_TASK_TYPE && !workItem.url;
+  const isNativeAdoCard = !isReviewCard && !isUiReviewCard && !isCustomTask;
   const isTaskLikeCard = isCustomTask || isUiReviewCard;
   const displayId = workItem.displayId ?? workItem.id;
   const isUserStoryCard = workItem.type === "User Story";
@@ -270,7 +275,10 @@ export function BoardCard({
     (a, b) => Number(isPullRequestCompleted(a)) - Number(isPullRequestCompleted(b)),
   );
   const showPullRequestBuildStatus = shouldShowPullRequestBuildStatus(columnId);
-  const showStatusEditor = columnId !== COMPLETED_COLUMN_ID;
+  const showCandidateOptOutToggle = columnId === NEW_WORK_COLUMN_ID && isNativeAdoCard;
+  const hideCandidateDetails = showCandidateOptOutToggle && candidateOptOut === true;
+  const CandidateToggleIcon = hideCandidateDetails ? EyeOff : Eye;
+  const showStatusEditor = columnId !== COMPLETED_COLUMN_ID && !hideCandidateDetails;
   const showUiReviewLinks = isUiReviewCard && showStatusEditor;
   const trimmedMockupUrl = mockupUrlValue.trim();
   const trimmedDiscussionUrl = discussionUrlValue.trim();
@@ -304,6 +312,15 @@ export function BoardCard({
       });
     }
     setUiReviewLinkEditor((current) => (current === link ? null : current));
+  };
+
+  const toggleCandidateOptOut = () => {
+    scheduleDndMutation(() => {
+      if (!assignments.get(assignmentId)) return;
+      assignments.update(assignmentId, (draft) => {
+        draft.candidateOptOut = candidateOptOut ? undefined : true;
+      });
+    });
   };
 
   const handleEditSave = (newTitle: string) => {
@@ -480,10 +497,43 @@ export function BoardCard({
           className={`pointer-events-none absolute inset-x-0 top-0 -bottom-px rounded-lg border-l-[3px] border border-border shadow-sm ${surfaceClassName} ${style.border}`}
         />
         <div className="relative z-10 p-3">
-          <div className="flex items-center gap-1.5 mb-1.5">
+          <div className="mb-1.5 flex min-w-0 items-center gap-1.5">
             {createElement(typeIcon, {
               className: `h-3.5 w-3.5 shrink-0 ${style.text}`,
             })}
+            {showCandidateOptOutToggle && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleCandidateOptOut();
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className={`shrink-0 rounded p-0.5 transition-colors ${
+                      hideCandidateDetails
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground group-hover/card:opacity-100"
+                    }`}
+                    aria-label={
+                      hideCandidateDetails
+                        ? "Show full candidate details"
+                        : "Don't expect to work on this item"
+                    }
+                    aria-pressed={hideCandidateDetails}
+                    data-testid="candidate-opt-out-toggle"
+                  >
+                    <CandidateToggleIcon data-testid="candidate-opt-out-icon" className="h-3 w-3" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {hideCandidateDetails
+                    ? "Show full candidate details"
+                    : "Don't expect to work on this item"}
+                </TooltipContent>
+              </Tooltip>
+            )}
             {isReviewCard && (
               <span
                 data-testid="review-label"
@@ -492,17 +542,32 @@ export function BoardCard({
                 REVIEW
               </span>
             )}
-            <span className="flex-1" />
-              {isCustomTask ? (
+            {hideCandidateDetails ? (
+              <a
+                data-testid="board-card-title"
+                href={workItem.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={workItem.title}
+                className="min-w-0 flex-1 truncate text-sm font-medium leading-snug hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {workItem.title}
+              </a>
+            ) : (
+              <span className="flex-1" />
+            )}
+            {!hideCandidateDetails &&
+              (isCustomTask ? (
                 <button
-                 type="button"
-                 onClick={(e) => {
-                  e.stopPropagation();
-                  setEditOpen(true);
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                className="text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover/card:opacity-100"
-                 aria-label="Edit task"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditOpen(true);
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  className="text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover/card:opacity-100"
+                  aria-label="Edit task"
                 >
                   <Pencil className="h-3 w-3" />
                 </button>
@@ -510,25 +575,25 @@ export function BoardCard({
                 <div className="flex items-center gap-1">
                   {canCreateAdoPullRequest && (
                     <Tooltip>
-                     <TooltipTrigger asChild>
-                       <button
-                         type="button"
-                         onClick={handleCreatePullRequest}
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={handleCreatePullRequest}
                          onPointerDown={(e) => e.stopPropagation()}
                          className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
                          aria-label={`Create pull request for work item ${displayId}`}
                        >
-                         <GitPullRequestArrow className="h-3 w-3" />
-                       </button>
-                     </TooltipTrigger>
-                     <TooltipContent>Create ADO pull request</TooltipContent>
-                   </Tooltip>
-                 )}
-                 <CopyableId id={displayId} className="text-[10px]" />
-               </div>
-             )}
-           </div>
-          {isCustomTask ? (
+                          <GitPullRequestArrow className="h-3 w-3" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Create ADO pull request</TooltipContent>
+                    </Tooltip>
+                  )}
+                  <CopyableId id={displayId} className="text-[10px]" />
+                </div>
+              ))}
+          </div>
+          {!hideCandidateDetails && isCustomTask ? (
             <button
               type="button"
               onClick={(e) => {
@@ -536,22 +601,25 @@ export function BoardCard({
                 setEditOpen(true);
               }}
               onPointerDown={(e) => e.stopPropagation()}
-              className="block text-left text-sm font-medium leading-snug hover:underline mb-2 w-full"
+              className="mb-2 block w-full text-left text-sm font-medium leading-snug hover:underline"
+              title={workItem.title}
             >
               {workItem.title}
             </button>
-          ) : (
+          ) : !hideCandidateDetails ? (
             <a
+              data-testid="board-card-title"
               href={workItem.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="block text-sm font-medium leading-snug hover:underline mb-2"
+              title={workItem.title}
+              className="mb-2 block text-sm font-medium leading-snug hover:underline"
               onClick={(e) => e.stopPropagation()}
             >
               {workItem.title}
             </a>
-          )}
-          {sortedPullRequests.length > 0 && (
+          ) : null}
+          {!hideCandidateDetails && sortedPullRequests.length > 0 && (
             <ul className="mb-2 space-y-0.5">
               {sortedPullRequests.map((pr) => {
                 const isCompleted = isPullRequestCompleted(pr);

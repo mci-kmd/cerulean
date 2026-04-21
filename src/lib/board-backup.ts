@@ -65,6 +65,17 @@ function expectOptionalString(record: JsonRecord, key: string, label: string): s
   return value;
 }
 
+function expectOptionalBoolean(record: JsonRecord, key: string, label: string): boolean | undefined {
+  const value = record[key];
+  if (value === undefined) {
+    return undefined;
+  }
+  if (typeof value !== "boolean") {
+    throw new Error(`${label} is invalid.`);
+  }
+  return value;
+}
+
 function expectBoolean(record: JsonRecord, key: string, label: string): boolean {
   const value = record[key];
   if (typeof value !== "boolean") {
@@ -130,6 +141,7 @@ function parseAssignment(value: unknown): ColumnAssignment {
     statusMessage: expectOptionalString(record, "statusMessage", "Assignment status message"),
     mockupUrl: expectOptionalString(record, "mockupUrl", "Assignment mockup URL"),
     discussionUrl: expectOptionalString(record, "discussionUrl", "Assignment discussion URL"),
+    candidateOptOut: expectOptionalBoolean(record, "candidateOptOut", "Assignment candidate opt-out"),
   };
 }
 

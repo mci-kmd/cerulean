@@ -23,6 +23,7 @@ function renderCard(props: {
   statusMessage?: string;
   mockupUrl?: string;
   discussionUrl?: string;
+  candidateOptOut?: boolean;
   assignmentId?: string;
   columnId?: string;
   workItemOverrides?: Partial<WorkItem>;
@@ -34,6 +35,7 @@ function renderCard(props: {
     statusMessage: props.statusMessage,
     mockupUrl: props.mockupUrl,
     discussionUrl: props.discussionUrl,
+    candidateOptOut: props.candidateOptOut,
   });
 
   const result = renderWithProviders(
@@ -43,6 +45,7 @@ function renderCard(props: {
       statusMessage={assignment.statusMessage}
       mockupUrl={assignment.mockupUrl}
       discussionUrl={assignment.discussionUrl}
+      candidateOptOut={assignment.candidateOptOut}
       index={0}
       columnId={props.columnId ?? "col-todo"}
     />,
@@ -71,6 +74,7 @@ function renderCustomTaskCard() {
       workItem={workItem}
       assignmentId={assignment.id}
       statusMessage={undefined}
+      candidateOptOut={assignment.candidateOptOut}
       index={0}
       columnId="col-todo"
     />,
@@ -492,6 +496,173 @@ describe("BoardCard create PR button", () => {
         workItemId: 42,
       }),
     );
+  });
+});
+
+describe("BoardCard candidate opt-out toggle", () => {
+  it("renders the toggle only for native ADO cards in New Work", () => {
+    renderCard({ columnId: NEW_WORK_COLUMN_ID });
+
+    const toggle = screen.getByRole("button", {
+      name: "Don't expect to work on this item",
+    });
+
+    expect(toggle).toBeInTheDocument();
+    expect(toggle).toHaveClass("opacity-0");
+    expect(toggle).toHaveClass("group-hover/card:opacity-100");
+    expect(toggle.querySelector(".lucide-eye")).not.toBeNull();
+    expect(toggle.querySelector(".lucide-eye-off")).toBeNull();
+  });
+
+  it("does not render the toggle outside New Work or for virtual cards", () => {
+    const { rerender } = renderWithProviders(
+      <BoardCard
+        workItem={createWorkItem({ id: 1, title: "Regular work item" })}
+        assignmentId="asgn-native-default"
+        candidateOptOut={false}
+        index={0}
+        columnId="col-todo"
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Don't expect to work on this item" }),
+    ).toBeNull();
+
+    rerender(
+      <BoardCard
+        workItem={createWorkItem({
+          id: -1200,
+          displayId: 42,
+          title: "UI review login flow",
+          type: "Task",
+          url: "https://dev.azure.com/test-org/test-project/_workitems/edit/42",
+          kind: "ui-review",
+          uiReview: {
+            sourceWorkItemId: 42,
+            reviewTag: "UI Review",
+          },
+        })}
+        assignmentId="asgn-ui-review"
+        candidateOptOut={false}
+        index={0}
+        columnId={NEW_WORK_COLUMN_ID}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Don't expect to work on this item" }),
+    ).toBeNull();
+  });
+
+  it("hides candidate details, related PRs, and swaps to the crossed-eye icon when toggled", async () => {
+    const user = userEvent.setup();
+    const title = "Candidate item with a long name that should truncate instead of wrapping";
+    const { collections, rerender } = renderCard({
+      assignmentId: "asgn-candidate-toggle",
+      columnId: NEW_WORK_COLUMN_ID,
+      statusMessage: "Waiting on design",
+      workItemOverrides: {
+        title,
+        relatedPullRequests: [
+          {
+            id: "7001",
+            label: "PR #7001",
+            title: "Candidate PR",
+            status: "active",
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/7001",
+          },
+        ],
+      },
+    });
+    insertAdoSettings(collections);
+
+    const toggle = screen.getByRole("button", {
+      name: "Don't expect to work on this item",
+    });
+
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(screen.getByPlaceholderText("Set status...")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "Create pull request for work item 1" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy ID 1" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Candidate PR" })).toBeInTheDocument();
+
+    await user.click(toggle);
+    await waitFor(() => {
+      expect(collections.assignments.get("asgn-candidate-toggle")?.candidateOptOut).toBe(true);
+    });
+
+    rerender(
+      <BoardCard
+        workItem={createWorkItem({
+          id: 1,
+          title,
+          relatedPullRequests: [
+            {
+              id: "7001",
+              label: "PR #7001",
+              title: "Candidate PR",
+              status: "active",
+              url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/7001",
+            },
+          ],
+        })}
+        assignmentId="asgn-candidate-toggle"
+        statusMessage="Waiting on design"
+        candidateOptOut={true}
+        index={0}
+        columnId={NEW_WORK_COLUMN_ID}
+      />,
+    );
+
+    const compactTitle = screen.getByTestId("board-card-title");
+    const toggledButton = screen.getByRole("button", {
+      name: "Show full candidate details",
+    });
+
+    expect(toggledButton).toHaveAttribute("aria-pressed", "true");
+    expect(toggledButton).not.toHaveClass("opacity-0");
+    expect(toggledButton.querySelector(".lucide-eye")).toBeNull();
+    expect(toggledButton.querySelector(".lucide-eye-off")).not.toBeNull();
+    expect(compactTitle).toHaveClass("truncate");
+    expect(compactTitle).toHaveAttribute("title", title);
+    expect(compactTitle).toHaveAttribute(
+      "href",
+      "https://dev.azure.com/test-org/test-project/_workitems/edit/1",
+    );
+    expect(compactTitle.parentElement).toContainElement(toggledButton);
+    expect(screen.queryByPlaceholderText("Set status...")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Create pull request for work item 1" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy ID 1" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Candidate PR" })).toBeNull();
+  });
+
+  it("restores the compact state from persisted assignment data", () => {
+    renderCard({
+      columnId: NEW_WORK_COLUMN_ID,
+      candidateOptOut: true,
+      workItemOverrides: {
+        title: "Persisted compact candidate",
+        relatedPullRequests: [
+          {
+            id: "7002",
+            label: "PR #7002",
+            title: "Persisted PR",
+            status: "active",
+            url: "https://dev.azure.com/org/proj/_git/repo/pullrequest/7002",
+          },
+        ],
+      },
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Show full candidate details" }),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("board-card-title")).toHaveClass("truncate");
+    expect(screen.queryByPlaceholderText("Set status...")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Persisted PR" })).toBeNull();
   });
 });
 
