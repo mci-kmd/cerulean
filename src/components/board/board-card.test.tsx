@@ -695,6 +695,59 @@ describe("BoardCard status message", () => {
     expect(editor).toHaveAttribute("wrap", "soft");
   });
 
+  it("recalculates status height when the editor width changes after mount", () => {
+    const resizeObserverCallbacks: ResizeObserverCallback[] = [];
+    const originalResizeObserver = globalThis.ResizeObserver;
+    let observedTarget: Element | null = null;
+    let scrollHeight = 64;
+
+    class ResizeObserverMock implements ResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        resizeObserverCallbacks.push(callback);
+      }
+      observe(target: Element) {
+        observedTarget = target;
+      }
+      unobserve(target: Element) {
+        void target;
+      }
+      disconnect() {}
+      takeRecords(): ResizeObserverEntry[] {
+        return [];
+      }
+    }
+
+    const scrollHeightSpy = vi
+      .spyOn(HTMLTextAreaElement.prototype, "scrollHeight", "get")
+      .mockImplementation(() => scrollHeight);
+
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+
+    try {
+      renderCard({ statusMessage: "Needs extra details before review" });
+      const editor = screen.getByDisplayValue(
+        "Needs extra details before review",
+      ) as HTMLTextAreaElement;
+
+      expect(editor.style.height).toBe("64px");
+      expect(observedTarget).toBe(editor);
+      expect(resizeObserverCallbacks).toHaveLength(1);
+
+      scrollHeight = 24;
+      act(() => {
+        resizeObserverCallbacks[0](
+          [{ contentRect: { width: 180 } } as ResizeObserverEntry],
+          {} as ResizeObserver,
+        );
+      });
+
+      expect(editor.style.height).toBe("24px");
+    } finally {
+      scrollHeightSpy.mockRestore();
+      vi.stubGlobal("ResizeObserver", originalResizeObserver);
+    }
+  });
+
   it("updates collection on blur", async () => {
     const user = userEvent.setup();
     const { collections } = renderCard({ assignmentId: "asgn-blur" });

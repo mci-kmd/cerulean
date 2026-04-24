@@ -1,4 +1,4 @@
-import { createElement, useEffect, useRef, useState } from "react";
+import { createElement, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Check,
   Eye,
@@ -55,6 +55,12 @@ interface BoardCardProps {
 }
 
 type UiReviewLinkEditor = "mockup" | "discussion";
+
+function resizeTextareaHeight(editor: HTMLTextAreaElement | null) {
+  if (!editor) return;
+  editor.style.height = "0px";
+  editor.style.height = `${editor.scrollHeight}px`;
+}
 
 function isPullRequestCompleted(pr: RelatedPullRequest): boolean {
   if (pr.isCompleted !== undefined) return pr.isCompleted;
@@ -345,12 +351,48 @@ export function BoardCard({
     return found?.id ?? null;
   }
 
+  useLayoutEffect(() => {
+    if (!showStatusEditor) return;
+    resizeTextareaHeight(statusRef.current);
+  }, [showStatusEditor, statusValue]);
+
   useEffect(() => {
+    if (!showStatusEditor) return;
+
     const editor = statusRef.current;
     if (!editor) return;
-    editor.style.height = "0px";
-    editor.style.height = `${editor.scrollHeight}px`;
-  }, [statusValue]);
+
+    let frameId: number | null = null;
+    if (typeof globalThis.requestAnimationFrame === "function") {
+      frameId = globalThis.requestAnimationFrame(() => {
+        resizeTextareaHeight(editor);
+      });
+    }
+
+    if (typeof ResizeObserver !== "function") {
+      return () => {
+        if (frameId !== null && typeof globalThis.cancelAnimationFrame === "function") {
+          globalThis.cancelAnimationFrame(frameId);
+        }
+      };
+    }
+
+    let lastWidth = editor.getBoundingClientRect().width;
+    const observer = new ResizeObserver((entries) => {
+      const nextWidth = entries[0]?.contentRect.width;
+      if (typeof nextWidth !== "number" || nextWidth === lastWidth) return;
+      lastWidth = nextWidth;
+      resizeTextareaHeight(editor);
+    });
+    observer.observe(editor);
+
+    return () => {
+      if (frameId !== null && typeof globalThis.cancelAnimationFrame === "function") {
+        globalThis.cancelAnimationFrame(frameId);
+      }
+      observer.disconnect();
+    };
+  }, [showStatusEditor]);
 
   useEffect(() => {
     const editor =
