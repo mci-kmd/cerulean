@@ -1,4 +1,4 @@
-import { act, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import { flushSync } from "react-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "@/test/helpers/render";
@@ -172,6 +172,83 @@ describe("App custom-task drag E2E", () => {
         ),
       ),
     ).toBe(false);
+  });
+
+  it("persists New Work reorder across reload", async () => {
+    const { collections, unmount } = renderWithProviders(<App />);
+
+    act(() => {
+      collections.settings.insert({
+        ...DEFAULT_SETTINGS,
+        id: "settings",
+        pat: "test-pat",
+        org: "test-org",
+        project: "test-project",
+        sourceState: "Active",
+        candidateState: "New",
+        approvalState: "Resolved",
+      });
+      collections.columns.insert({ id: "col-1", name: "In Progress", order: 0 });
+      collections.customTasks.insert({
+        id: "ct-4",
+        workItemId: -1004,
+        title: "First persisted task",
+      });
+      collections.customTasks.insert({
+        id: "ct-5",
+        workItemId: -1005,
+        title: "Second persisted task",
+      });
+      collections.assignments.insert({
+        id: "a-custom-4",
+        workItemId: -1004,
+        columnId: NEW_WORK_COLUMN_ID,
+        position: 1,
+      });
+      collections.assignments.insert({
+        id: "a-custom-5",
+        workItemId: -1005,
+        columnId: NEW_WORK_COLUMN_ID,
+        position: 2,
+      });
+    });
+
+    await waitFor(() => expect(dndMocks.onDragEnd).toBeTypeOf("function"));
+
+    act(() => {
+      dndMocks.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: { id: "a-custom-5" },
+          target: { id: "a-custom-4", group: NEW_WORK_COLUMN_ID, index: 0 },
+        },
+      });
+    });
+
+    await waitFor(() => {
+      expect(collections.assignments.get("a-custom-5")?.position).toBeLessThan(
+        collections.assignments.get("a-custom-4")?.position ?? Number.POSITIVE_INFINITY,
+      );
+    });
+
+    await waitFor(() => {
+      const firstTask = screen.getByText("First persisted task");
+      const secondTask = screen.getByText("Second persisted task");
+      expect(
+        secondTask.compareDocumentPosition(firstTask) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    unmount();
+    renderWithProviders(<App />, { collections });
+
+    await waitFor(() => {
+      const firstTask = screen.getByText("First persisted task");
+      const secondTask = screen.getByText("Second persisted task");
+      expect(
+        secondTask.compareDocumentPosition(firstTask) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
   });
 
   it("moves custom task through completed column without flushSync lifecycle crash", async () => {

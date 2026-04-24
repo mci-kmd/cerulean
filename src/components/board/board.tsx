@@ -58,7 +58,10 @@ export function Board({
       setOptimisticMove(null);
       return;
     }
-    if (latestAssignment.columnId === optimisticMove.targetColumnId) {
+    if (
+      latestAssignment.columnId === optimisticMove.targetColumnId &&
+      latestAssignment.position === optimisticMove.position
+    ) {
       setOptimisticMove(null);
     }
   }, [data.assignments, optimisticMove]);
@@ -234,7 +237,12 @@ export function Board({
           newPosition = lastPos + 1;
         }
 
-        if (sourceAssignment.columnId === targetColumnId) return;
+        if (
+          sourceAssignment.columnId === targetColumnId &&
+          sourceAssignment.position === newPosition
+        ) {
+          return;
+        }
         setOptimisticMove({
           sourceId,
           targetColumnId,
@@ -251,7 +259,12 @@ export function Board({
             setOptimisticMove((prev) => (prev?.sourceId === sourceId ? null : prev));
             return;
           }
-          if (currentAssignment.columnId === targetColumnId) return;
+          if (
+            currentAssignment.columnId === targetColumnId &&
+            currentAssignment.position === newPosition
+          ) {
+            return;
+          }
           const fromColumnId = currentAssignment.columnId;
           const workItemId = currentAssignment.workItemId;
 
@@ -260,7 +273,7 @@ export function Board({
             draft.position = newPosition;
           });
 
-          if (onColumnChange) {
+          if (onColumnChange && fromColumnId !== targetColumnId) {
             scheduleColumnChange(
               onColumnChange,
               workItemId,
