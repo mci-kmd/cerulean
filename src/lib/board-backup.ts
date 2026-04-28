@@ -1,6 +1,7 @@
 import type { BoardCollections } from "@/db/create-collections";
 import { type AdoSettings, type BoardColumn, type ColumnAssignment, type CustomTask } from "@/types/board";
 import type { DemoChecklistItem, DemoOrderItem } from "@/types/demo";
+import type { LauncherResource, LauncherResourceType } from "@/types/resources";
 
 export const BOARD_BACKUP_FILENAME = "cerulean-backup.json";
 export const BOARD_BACKUP_FORMAT = "cerulean-backup";
@@ -16,6 +17,8 @@ export interface BoardBackupData {
   demoChecklist: DemoChecklistItem[];
   demoOrder: DemoOrderItem[];
   customTasks: CustomTask[];
+  resourceTypes: LauncherResourceType[];
+  launcherResources: LauncherResource[];
 }
 
 type JsonRecord = Record<string, unknown>;
@@ -36,6 +39,13 @@ function expectArray(value: unknown, label: string): unknown[] {
     throw new Error(`${label} is missing or invalid.`);
   }
   return value;
+}
+
+function expectOptionalArray(value: unknown, label: string): unknown[] {
+  if (value === undefined) {
+    return [];
+  }
+  return expectArray(value, label);
 }
 
 function expectString(record: JsonRecord, key: string, label: string): string {
@@ -183,6 +193,29 @@ function parseCustomTask(value: unknown): CustomTask {
   };
 }
 
+function parseResourceType(value: unknown): LauncherResourceType {
+  const record = expectRecord(value, "Resource type");
+  return {
+    id: expectString(record, "id", "Resource type id"),
+    name: expectString(record, "name", "Resource type name"),
+    iconName: expectString(record, "iconName", "Resource type icon"),
+    order: expectNumber(record, "order", "Resource type order"),
+  };
+}
+
+function parseLauncherResource(value: unknown): LauncherResource {
+  const record = expectRecord(value, "Launcher resource");
+  return {
+    id: expectString(record, "id", "Launcher resource id"),
+    name: expectString(record, "name", "Launcher resource name"),
+    typeId: expectString(record, "typeId", "Launcher resource type"),
+    sandboxUrl: expectString(record, "sandboxUrl", "Launcher sandbox URL"),
+    devUrl: expectString(record, "devUrl", "Launcher dev URL"),
+    prodUrl: expectString(record, "prodUrl", "Launcher prod URL"),
+    order: expectNumber(record, "order", "Launcher resource order"),
+  };
+}
+
 async function replaceCollectionItems<T extends { id: string }>(
   collection: { keys(): IterableIterator<string>; delete(keys: string[]): { isPersisted: { promise: Promise<unknown> } }; insert(items: T[]): { isPersisted: { promise: Promise<unknown> } } },
   items: T[],
@@ -215,6 +248,8 @@ export function createBoardBackup({
     demoChecklist: cloneItems(collections.demoChecklist.toArray),
     demoOrder: cloneItems(collections.demoOrder.toArray),
     customTasks: cloneItems(collections.customTasks.toArray),
+    resourceTypes: cloneItems(collections.resourceTypes.toArray),
+    launcherResources: cloneItems(collections.launcherResources.toArray),
   };
 }
 
@@ -247,6 +282,12 @@ export function parseBoardBackup(text: string): BoardBackupData {
     demoChecklist: expectArray(record.demoChecklist, "Demo checklist").map(parseDemoChecklistItem),
     demoOrder: expectArray(record.demoOrder, "Demo order").map(parseDemoOrderItem),
     customTasks: expectArray(record.customTasks, "Custom tasks").map(parseCustomTask),
+    resourceTypes: expectOptionalArray(record.resourceTypes, "Resource types").map(
+      parseResourceType,
+    ),
+    launcherResources: expectOptionalArray(record.launcherResources, "Launcher resources").map(
+      parseLauncherResource,
+    ),
   };
 }
 
@@ -260,4 +301,6 @@ export async function applyBoardBackup(
   await replaceCollectionItems(collections.demoChecklist, cloneItems(backup.demoChecklist));
   await replaceCollectionItems(collections.demoOrder, cloneItems(backup.demoOrder));
   await replaceCollectionItems(collections.customTasks, cloneItems(backup.customTasks));
+  await replaceCollectionItems(collections.resourceTypes, cloneItems(backup.resourceTypes));
+  await replaceCollectionItems(collections.launcherResources, cloneItems(backup.launcherResources));
 }

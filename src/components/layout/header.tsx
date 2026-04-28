@@ -1,4 +1,5 @@
 import {
+  Cloud,
   FileText,
   FolderGit2,
   Presentation,
@@ -9,6 +10,7 @@ import {
   Workflow,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
@@ -28,6 +30,7 @@ interface HeaderProps {
   onToggleRetro?: () => void;
   showRetroButton?: boolean;
   onOpenSettings?: () => void;
+  onOpenLauncher?: () => void;
 }
 
 const adoHeaderLinks = [
@@ -65,6 +68,7 @@ export function Header({
   onToggleRetro,
   showRetroButton,
   onOpenSettings,
+  onOpenLauncher,
 }: HeaderProps) {
   const statusColor = hasError
     ? "bg-red-400"
@@ -90,27 +94,46 @@ export function Header({
         ) : null}
       </div>
 
-      <nav
-        aria-label="Azure DevOps quick links"
-        className="flex items-center justify-self-center gap-1"
-      >
-        {adoHeaderLinks.map(({ label, href, icon: Icon }) => (
-          <Tooltip key={label}>
-            <TooltipTrigger asChild>
-              <Button asChild variant="ghost" size="icon" className="h-8 w-8">
-                <a
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label={label}
+      <nav aria-label="Azure quick links" className="flex items-center justify-self-center gap-1">
+        <div className="flex items-center gap-1">
+          {adoHeaderLinks.map(({ label, href, icon: Icon }) => (
+            <Tooltip key={label}>
+              <TooltipTrigger asChild>
+                <Button asChild variant="ghost" size="icon" className="h-8 w-8">
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={label}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </a>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{label}</TooltipContent>
+            </Tooltip>
+          ))}
+        </div>
+
+        {onOpenLauncher && (
+          <>
+            <Separator orientation="vertical" className="mx-1 h-5" />
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={onOpenLauncher}
+                  aria-label="Azure Portal launcher"
                 >
-                  <Icon className="h-4 w-4" />
-                </a>
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{label}</TooltipContent>
-          </Tooltip>
-        ))}
+                  <Cloud className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Azure Portal launcher</TooltipContent>
+            </Tooltip>
+          </>
+        )}
       </nav>
 
       <div className="flex items-center justify-self-end gap-1">

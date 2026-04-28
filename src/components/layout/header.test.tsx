@@ -24,12 +24,17 @@ const adoHeaderLinks = [
 ] as const;
 
 describe("Header", () => {
-  it("renders centered Azure DevOps quick links", () => {
-    renderWithProviders(<Header onOpenSettings={() => undefined} />);
+  it("renders centered Azure quick links", () => {
+    renderWithProviders(
+      <Header
+        onOpenSettings={() => undefined}
+        onOpenLauncher={() => undefined}
+      />,
+    );
 
     const banner = screen.getByRole("banner");
     const nav = screen.getByRole("navigation", {
-      name: "Azure DevOps quick links",
+      name: "Azure quick links",
     });
 
     expect(banner).toHaveClass("grid-cols-[1fr_auto_1fr]");
@@ -42,6 +47,11 @@ describe("Header", () => {
       expect(link).toHaveAttribute("target", "_blank");
       expect(link).toHaveAttribute("rel", "noopener noreferrer");
     }
+
+    expect(
+      within(nav).getByRole("button", { name: "Azure Portal launcher" }),
+    ).toBeInTheDocument();
+    expect(nav.querySelector('[data-slot="separator"]')).toBeTruthy();
   });
 
   it("shows tooltip for Azure DevOps quick links", async () => {
@@ -73,5 +83,23 @@ describe("Header", () => {
 
     expect(toggled).toBe(true);
     expect(screen.getByText("Retro")).toBeInTheDocument();
+  });
+
+  it("opens the Azure Portal launcher when requested", async () => {
+    const user = userEvent.setup();
+    let opened = false;
+
+    renderWithProviders(
+      <Header
+        onOpenSettings={() => undefined}
+        onOpenLauncher={() => {
+          opened = true;
+        }}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Azure Portal launcher" }));
+
+    expect(opened).toBe(true);
   });
 });

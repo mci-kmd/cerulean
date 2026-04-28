@@ -314,6 +314,21 @@ describe("SettingsDialog", () => {
       title: "Follow up",
       completedAt: 42,
     });
+    collections.resourceTypes.insert({
+      id: "app-service",
+      name: "App Service",
+      iconName: "AppWindow",
+      order: 0,
+    });
+    collections.launcherResources.insert({
+      id: "resource-1",
+      name: "Identity API",
+      typeId: "app-service",
+      sandboxUrl: "https://sandbox.example.com/apps/identity-api",
+      devUrl: "https://dev.example.com/apps/identity-api",
+      prodUrl: "https://prod.example.com/apps/identity-api",
+      order: 0,
+    });
 
     const createObjectURL = vi.fn((object: Blob | MediaSource) => {
       void object;
@@ -390,6 +405,21 @@ describe("SettingsDialog", () => {
           title: "Follow up",
           completedAt: 42,
         }],
+        resourceTypes: [{
+          id: "app-service",
+          name: "App Service",
+          iconName: "AppWindow",
+          order: 0,
+        }],
+        launcherResources: [{
+          id: "resource-1",
+          name: "Identity API",
+          typeId: "app-service",
+          sandboxUrl: "https://sandbox.example.com/apps/identity-api",
+          devUrl: "https://dev.example.com/apps/identity-api",
+          prodUrl: "https://prod.example.com/apps/identity-api",
+          order: 0,
+        }],
       });
       expect(exported.exportedAt).toEqual(expect.any(String));
     } finally {
@@ -448,6 +478,21 @@ describe("SettingsDialog", () => {
       workItemId: 202,
       title: "Draft QA notes",
     });
+    backupCollections.resourceTypes.insert({
+      id: "function-app",
+      name: "Function App",
+      iconName: "Workflow",
+      order: 0,
+    });
+    backupCollections.launcherResources.insert({
+      id: "resource-1",
+      name: "Token API",
+      typeId: "function-app",
+      sandboxUrl: "https://sandbox.example.com/api/token",
+      devUrl: "https://dev.example.com/api/token",
+      prodUrl: "https://prod.example.com/api/token",
+      order: 0,
+    });
     const backupJson = JSON.stringify(
       createBoardBackup({
         collections: backupCollections,
@@ -484,6 +529,10 @@ describe("SettingsDialog", () => {
     expect(collections.demoChecklist.get("new-check")?.text).toBe("Verify flow");
     expect(collections.demoOrder.get("new-demo")?.position).toBe(3);
     expect(collections.customTasks.get("new-task")?.title).toBe("Draft QA notes");
+    expect(collections.resourceTypes.get("function-app")?.iconName).toBe("Workflow");
+    expect(collections.launcherResources.get("resource-1")?.prodUrl).toBe(
+      "https://prod.example.com/api/token",
+    );
 
     await expandSection(user, "Connection");
     expect(screen.getByLabelText("Team")).toHaveValue("imported-team");

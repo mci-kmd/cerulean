@@ -6,6 +6,7 @@ import {
 import type { Collection, NonSingleResult } from "@tanstack/db";
 import type { AdoSettings, BoardColumn, ColumnAssignment, CustomTask } from "@/types/board";
 import type { DemoChecklistItem, DemoOrderItem } from "@/types/demo";
+import type { LauncherResource, LauncherResourceType } from "@/types/resources";
 
 export type AppCollection<T extends object, TKey extends string | number> =
   Collection<T, TKey> & NonSingleResult;
@@ -17,6 +18,8 @@ export interface BoardCollections {
   demoChecklist: AppCollection<DemoChecklistItem, string>;
   demoOrder: AppCollection<DemoOrderItem, string>;
   customTasks: AppCollection<CustomTask, string>;
+  resourceTypes: AppCollection<LauncherResourceType, string>;
+  launcherResources: AppCollection<LauncherResource, string>;
 }
 
 function createSettingsCollection(inMemory: boolean): AppCollection<AdoSettings, string> {
@@ -115,6 +118,42 @@ function createCustomTasksCollection(inMemory: boolean): AppCollection<CustomTas
   );
 }
 
+function createResourceTypesCollection(
+  inMemory: boolean,
+): AppCollection<LauncherResourceType, string> {
+  if (inMemory) {
+    return createCollection(
+      localOnlyCollectionOptions<LauncherResourceType, string>({
+        getKey: (item: LauncherResourceType) => item.id,
+      }),
+    );
+  }
+  return createCollection(
+    localStorageCollectionOptions<LauncherResourceType, string>({
+      getKey: (item: LauncherResourceType) => item.id,
+      storageKey: "cerulean-launcher-resource-types",
+    }),
+  );
+}
+
+function createLauncherResourcesCollection(
+  inMemory: boolean,
+): AppCollection<LauncherResource, string> {
+  if (inMemory) {
+    return createCollection(
+      localOnlyCollectionOptions<LauncherResource, string>({
+        getKey: (item: LauncherResource) => item.id,
+      }),
+    );
+  }
+  return createCollection(
+    localStorageCollectionOptions<LauncherResource, string>({
+      getKey: (item: LauncherResource) => item.id,
+      storageKey: "cerulean-launcher-resources",
+    }),
+  );
+}
+
 export function createBoardCollections(inMemory = false): BoardCollections {
   return {
     settings: createSettingsCollection(inMemory),
@@ -123,5 +162,7 @@ export function createBoardCollections(inMemory = false): BoardCollections {
     demoChecklist: createDemoChecklistCollection(inMemory),
     demoOrder: createDemoOrderCollection(inMemory),
     customTasks: createCustomTasksCollection(inMemory),
+    resourceTypes: createResourceTypesCollection(inMemory),
+    launcherResources: createLauncherResourcesCollection(inMemory),
   };
 }

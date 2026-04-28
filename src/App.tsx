@@ -10,6 +10,7 @@ import { DemoView } from "@/components/demo/demo-view";
 import { RetroPrepView } from "@/components/retro/retro-prep-view";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { TaskDialog } from "@/components/board/task-dialog";
+import { AzureResourceLauncher } from "@/components/launcher/azure-resource-launcher";
 import { useBoardCollections } from "@/db/use-board-collections";
 import { useBoard, useSettings, useColumns, useAssignments } from "@/hooks/use-board";
 import { useAssignedBoardWorkItems } from "@/hooks/use-assigned-board-work-items";
@@ -74,6 +75,7 @@ export function App() {
   const [demoMode, setDemoMode] = useState(false);
   const [retroMode, setRetroMode] = useState(false);
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
+  const [launcherOpen, setLauncherOpen] = useState(false);
   const [isBoardDragging, setIsBoardDragging] = useState(false);
 
   const client: AdoClient | null = (() => {
@@ -614,13 +616,17 @@ export function App() {
     return (
       <TooltipProvider>
         <div className="min-h-screen">
-          <Header onOpenSettings={() => setSettingsOpen(true)} />
+          <Header
+            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenLauncher={() => setLauncherOpen(true)}
+          />
           <EmptyState
             hasSettings={hasSettings}
             hasColumns={hasColumns}
             onOpenSettings={() => setSettingsOpen(true)}
           />
           <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+          <AzureResourceLauncher open={launcherOpen} onOpenChange={setLauncherOpen} />
           <Toaster />
         </div>
       </TooltipProvider>
@@ -657,6 +663,7 @@ export function App() {
           }}
           showRetroButton={!!client}
           onOpenSettings={() => setSettingsOpen(true)}
+          onOpenLauncher={() => setLauncherOpen(true)}
         />
         {retroMode && client ? (
           <RetroPrepView
@@ -694,6 +701,7 @@ export function App() {
           />
         )}
         <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+        <AzureResourceLauncher open={launcherOpen} onOpenChange={setLauncherOpen} />
         <TaskDialog
           open={taskDialogOpen}
           onOpenChange={setTaskDialogOpen}

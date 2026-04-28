@@ -223,6 +223,16 @@ describe("App integration", () => {
     expect(screen.getByLabelText("Personal Access Token")).toBeInTheDocument();
   });
 
+  it("opens Azure Portal launcher from header", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<App />);
+
+    await user.click(screen.getByRole("button", { name: "Azure Portal launcher" }));
+
+    expect(await screen.findByText("Favorited resources")).toBeInTheDocument();
+    expect(screen.getByText("No favorited resources yet")).toBeInTheDocument();
+  });
+
   it("shows demo button when approval board column is configured", async () => {
     installBoardHandlers();
     server.use(http.post(`${BASE}/_apis/wit/wiql`, () => HttpResponse.json({ workItems: [] })));
