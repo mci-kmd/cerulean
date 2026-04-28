@@ -5,6 +5,7 @@ import {
   DEFAULT_LAUNCHER_RESOURCE_TYPES,
   type LauncherResource,
   type LauncherResourceType,
+  normalizeLauncherResource,
 } from "@/types/resources";
 
 function sortByOrder<T extends { order: number; name: string }>(items: readonly T[]) {
@@ -26,7 +27,10 @@ export function useLauncherResources(): LauncherResource[] {
   const { launcherResources } = useBoardCollections();
   const result = useLiveQuery(launcherResources);
 
-  return useMemo(() => sortByOrder(result.data), [result.data]);
+  return useMemo(
+    () => sortByOrder(result.data.map((resource) => normalizeLauncherResource(resource))),
+    [result.data],
+  );
 }
 
 export function useLauncherResourceTypes(): LauncherResourceTypesState {

@@ -1,7 +1,12 @@
 import type { BoardCollections } from "@/db/create-collections";
 import { type AdoSettings, type BoardColumn, type ColumnAssignment, type CustomTask } from "@/types/board";
 import type { DemoChecklistItem, DemoOrderItem } from "@/types/demo";
-import type { LauncherResource, LauncherResourceType } from "@/types/resources";
+import {
+  normalizeLauncherResource,
+  type LauncherResource,
+  type LauncherResourceChild,
+  type LauncherResourceType,
+} from "@/types/resources";
 
 export const BOARD_BACKUP_FILENAME = "cerulean-backup.json";
 export const BOARD_BACKUP_FORMAT = "cerulean-backup";
@@ -203,9 +208,22 @@ function parseResourceType(value: unknown): LauncherResourceType {
   };
 }
 
+function parseLauncherResourceChild(value: unknown): LauncherResourceChild {
+  const record = expectRecord(value, "Launcher child resource");
+  return {
+    id: expectString(record, "id", "Launcher child resource id"),
+    name: expectString(record, "name", "Launcher child resource name"),
+    typeId: expectString(record, "typeId", "Launcher child resource type"),
+    sandboxUrl: expectString(record, "sandboxUrl", "Launcher child sandbox URL"),
+    devUrl: expectString(record, "devUrl", "Launcher child dev URL"),
+    prodUrl: expectString(record, "prodUrl", "Launcher child prod URL"),
+    order: expectNumber(record, "order", "Launcher child resource order"),
+  };
+}
+
 function parseLauncherResource(value: unknown): LauncherResource {
   const record = expectRecord(value, "Launcher resource");
-  return {
+  return normalizeLauncherResource({
     id: expectString(record, "id", "Launcher resource id"),
     name: expectString(record, "name", "Launcher resource name"),
     typeId: expectString(record, "typeId", "Launcher resource type"),
@@ -213,7 +231,20 @@ function parseLauncherResource(value: unknown): LauncherResource {
     devUrl: expectString(record, "devUrl", "Launcher dev URL"),
     prodUrl: expectString(record, "prodUrl", "Launcher prod URL"),
     order: expectNumber(record, "order", "Launcher resource order"),
-  };
+    children: expectOptionalArray(record.children, "Launcher child resources").map(
+      parseLauncherResourceChild,
+    ),
+  });
+}
+
+function cloneLauncherResources(resources: readonly LauncherResource[]) {
+  return resources.map((resource) => {
+    const normalized = normalizeLauncherResource(resource);
+    return {
+      ...normalized,
+      children: normalized.children.map((child) => ({ ...child })),
+    };
+  });
 }
 
 async function replaceCollectionItems<T extends { id: string }>(
@@ -249,7 +280,7 @@ export function createBoardBackup({
     demoOrder: cloneItems(collections.demoOrder.toArray),
     customTasks: cloneItems(collections.customTasks.toArray),
     resourceTypes: cloneItems(collections.resourceTypes.toArray),
-    launcherResources: cloneItems(collections.launcherResources.toArray),
+    launcherResources: cloneLauncherResources(collections.launcherResources.toArray),
   };
 }
 
@@ -302,5 +333,8 @@ export async function applyBoardBackup(
   await replaceCollectionItems(collections.demoOrder, cloneItems(backup.demoOrder));
   await replaceCollectionItems(collections.customTasks, cloneItems(backup.customTasks));
   await replaceCollectionItems(collections.resourceTypes, cloneItems(backup.resourceTypes));
-  await replaceCollectionItems(collections.launcherResources, cloneItems(backup.launcherResources));
+  await replaceCollectionItems(
+    collections.launcherResources,
+    cloneLauncherResources(backup.launcherResources),
+  );
 }

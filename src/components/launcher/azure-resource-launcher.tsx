@@ -1,8 +1,8 @@
-import { createElement, useId, useMemo, useState } from "react";
+import { Fragment, createElement, useId, useMemo, useState } from "react";
 import { nanoid } from "nanoid";
 import {
   Cloud,
-  ExternalLink,
+  Pencil,
   Plus,
   Save,
   Shapes,
@@ -17,7 +17,12 @@ import {
   LAUNCHER_ICON_NAMES,
 } from "@/lib/launcher-icons";
 import {
+  getLauncherResourceUrl,
+  LAUNCHER_ENVIRONMENTS,
   LAUNCHER_ENVIRONMENT_LABELS,
+  type LauncherEnvironment,
+  type LauncherResource,
+  type LauncherResourceChild,
   type LauncherResourceType,
 } from "@/types/resources";
 import { Button } from "@/components/ui/button";
@@ -36,12 +41,20 @@ interface AzureResourceLauncherProps {
   onOpenChange: (open: boolean) => void;
 }
 
+type ResourceDraftField = "name" | "typeId" | "sandboxUrl" | "devUrl" | "prodUrl";
+
 interface ResourceDraft {
   name: string;
   typeId: string;
   sandboxUrl: string;
   devUrl: string;
   prodUrl: string;
+  children: LauncherResourceChild[];
+}
+
+interface ResourceEditorState {
+  mode: "add" | "edit";
+  resourceId?: string;
 }
 
 const SELECT_CLASS_NAME =
@@ -54,6 +67,30 @@ function createEmptyResourceDraft(typeId: string): ResourceDraft {
     sandboxUrl: "",
     devUrl: "",
     prodUrl: "",
+    children: [],
+  };
+}
+
+function createEmptyChildDraft(typeId: string, order: number): LauncherResourceChild {
+  return {
+    id: nanoid(),
+    name: "",
+    typeId,
+    sandboxUrl: "",
+    devUrl: "",
+    prodUrl: "",
+    order,
+  };
+}
+
+function createDraftFromResource(resource: LauncherResource): ResourceDraft {
+  return {
+    name: resource.name,
+    typeId: resource.typeId,
+    sandboxUrl: resource.sandboxUrl,
+    devUrl: resource.devUrl,
+    prodUrl: resource.prodUrl,
+    children: resource.children.map((child) => ({ ...child })),
   };
 }
 
@@ -70,6 +107,153 @@ function isValidWebUrl(value: string) {
   return parsed.protocol === "http:" || parsed.protocol === "https:";
 }
 
+function resolveTypeId(typeId: string, resourceTypes: readonly LauncherResourceType[]) {
+  return resourceTypes.some((type) => type.id === typeId)
+    ? typeId
+    : (resourceTypes[0]?.id ?? "");
+}
+
+function ResourceDraftFields({
+  title,
+  description,
+  prefix,
+  item,
+  resourceTypes,
+  onChange,
+  onRemove,
+}: {
+  title: string;
+  description: string;
+  prefix: string;
+  item: Pick<LauncherResourceChild, ResourceDraftField>;
+  resourceTypes: LauncherResourceType[];
+  onChange: (field: ResourceDraftField, value: string) => void;
+  onRemove?: () => void;
+}) {
+  return (
+    <section className="rounded-md border bg-muted/10 p-4">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h4 className="font-medium">{title}</h4>
+          <p className="text-sm text-muted-foreground">{description}</p>
+        </div>
+
+        {onRemove ? (
+          <Button type="button" variant="ghost" size="sm" onClick={onRemove}>
+            <Trash2 className="h-4 w-4" />
+            Remove
+          </Button>
+        ) : null}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <div className="space-y-2 xl:col-span-2">
+          <Label htmlFor={`${prefix}-name`}>Resource name</Label>
+          <Input
+            id={`${prefix}-name`}
+            value={item.name}
+            onChange={(event) => onChange("name", event.target.value)}
+            placeholder="Identity API"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-type`}>Resource type</Label>
+          <select
+            id={`${prefix}-type`}
+            className={SELECT_CLASS_NAME}
+            value={resolveTypeId(item.typeId, resourceTypes)}
+            onChange={(event) => onChange("typeId", event.target.value)}
+          >
+            {resourceTypes.map((type) => (
+              <option key={type.id} value={type.id}>
+                {type.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-sandbox`}>Sandbox link</Label>
+          <Input
+            id={`${prefix}-sandbox`}
+            type="url"
+            value={item.sandboxUrl}
+            onChange={(event) => onChange("sandboxUrl", event.target.value)}
+            placeholder="https://..."
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor={`${prefix}-dev`}>Dev link</Label>
+          <Input
+            id={`${prefix}-dev`}
+            type="url"
+            value={item.devUrl}
+            onChange={(event) => onChange("devUrl", event.target.value)}
+            placeholder="https://..."
+          />
+        </div>
+
+        <div className="space-y-2 xl:col-span-2">
+          <Label htmlFor={`${prefix}-prod`}>Prod link</Label>
+          <Input
+            id={`${prefix}-prod`}
+            type="url"
+            value={item.prodUrl}
+            onChange={(event) => onChange("prodUrl", event.target.value)}
+            placeholder="https://..."
+          />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function EnvironmentLinks({
+  environment,
+  resource,
+  resourceTypeMap,
+}: {
+  environment: LauncherEnvironment;
+  resource: LauncherResource;
+  resourceTypeMap: Map<string, LauncherResourceType>;
+}) {
+  const links = [
+    {
+      id: resource.id,
+      name: resource.name,
+      typeName: resourceTypeMap.get(resource.typeId)?.name ?? resource.name,
+      url: getLauncherResourceUrl(resource, environment),
+    },
+    ...resource.children.map((child) => ({
+      id: child.id,
+      name: child.name,
+      typeName: resourceTypeMap.get(child.typeId)?.name ?? child.name,
+      url: getLauncherResourceUrl(child, environment),
+    })),
+  ];
+
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-1.5 py-1.5 text-sm">
+      {links.map((link, index) => (
+        <Fragment key={`${environment}-${link.id}`}>
+          {index > 0 ? <span className="text-muted-foreground">|</span> : null}
+          <a
+            href={link.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open ${link.name} ${link.typeName} ${LAUNCHER_ENVIRONMENT_LABELS[environment]}`}
+            className="font-medium text-primary hover:underline"
+          >
+            {link.typeName}
+          </a>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
 export function AzureResourceLauncher({
   open,
   onOpenChange,
@@ -77,10 +261,13 @@ export function AzureResourceLauncher({
   const collections = useBoardCollections();
   const resources = useLauncherResources();
   const { storedTypes, types: resourceTypes } = useLauncherResourceTypes();
-  const [isAddFormOpen, setIsAddFormOpen] = useState(false);
+  const defaultTypeId = resourceTypes[0]?.id ?? "";
+  const [resourceEditorState, setResourceEditorState] = useState<ResourceEditorState | null>(
+    null,
+  );
   const [isTypeEditorOpen, setIsTypeEditorOpen] = useState(false);
   const [resourceDraft, setResourceDraft] = useState<ResourceDraft>(() =>
-    createEmptyResourceDraft(resourceTypes[0]?.id ?? ""),
+    createEmptyResourceDraft(defaultTypeId),
   );
   const [typeDrafts, setTypeDrafts] = useState<LauncherResourceType[]>([]);
   const [newTypeName, setNewTypeName] = useState("");
@@ -91,27 +278,65 @@ export function AzureResourceLauncher({
     () => new Map(resourceTypes.map((type) => [type.id, type])),
     [resourceTypes],
   );
-  const selectedTypeId = resourceTypes.some(
-    (type) => type.id === resourceDraft.typeId,
-  )
-    ? resourceDraft.typeId
-    : (resourceTypes[0]?.id ?? "");
 
-  const handleResourceDraftChange = (
-    field: keyof ResourceDraft,
-    value: string,
-  ) => {
+  const closeResourceEditor = () => {
+    setResourceEditorState(null);
+    setResourceDraft(createEmptyResourceDraft(defaultTypeId));
+  };
+
+  const startAddResource = () => {
+    setResourceEditorState({ mode: "add" });
+    setResourceDraft(createEmptyResourceDraft(defaultTypeId));
+  };
+
+  const startEditResource = (resource: LauncherResource) => {
+    setResourceEditorState({ mode: "edit", resourceId: resource.id });
+    setResourceDraft(createDraftFromResource(resource));
+  };
+
+  const handleResourceDraftChange = (field: ResourceDraftField, value: string) => {
     setResourceDraft((current) => ({ ...current, [field]: value }));
   };
 
-  const handleAddResource = () => {
+  const handleChildDraftChange = (
+    childId: string,
+    field: ResourceDraftField,
+    value: string,
+  ) => {
+    setResourceDraft((current) => ({
+      ...current,
+      children: current.children.map((child) =>
+        child.id === childId ? { ...child, [field]: value } : child,
+      ),
+    }));
+  };
+
+  const handleAddChildDraft = () => {
+    setResourceDraft((current) => ({
+      ...current,
+      children: [
+        ...current.children,
+        createEmptyChildDraft(defaultTypeId, current.children.length),
+      ],
+    }));
+  };
+
+  const handleRemoveChildDraft = (childId: string) => {
+    setResourceDraft((current) => ({
+      ...current,
+      children: current.children.filter((child) => child.id !== childId),
+    }));
+  };
+
+  const handleSaveResource = () => {
     const name = normalizeLabel(resourceDraft.name);
     if (!name) {
       toast.error("Resource name is required");
       return;
     }
 
-    if (!selectedTypeId) {
+    const typeId = resourceDraft.typeId.trim();
+    if (!resourceTypeMap.has(typeId)) {
       toast.error("Select a valid resource type");
       return;
     }
@@ -134,27 +359,104 @@ export function AzureResourceLauncher({
       return;
     }
 
-    collections.launcherResources.insert({
-      id: nanoid(),
-      name,
-      typeId: selectedTypeId,
-      sandboxUrl,
-      devUrl,
-      prodUrl,
-      order:
-        resources.reduce(
-          (highestOrder, resource) => Math.max(highestOrder, resource.order),
-          -1,
-        ) + 1,
-    });
+    const editorState = resourceEditorState;
+    if (!editorState) {
+      return;
+    }
 
-    setResourceDraft(createEmptyResourceDraft(resourceTypes[0]?.id ?? ""));
-    setIsAddFormOpen(false);
+    let nextResource: LauncherResource;
+    try {
+      const children = resourceDraft.children.map((child, index) => {
+        const childName = normalizeLabel(child.name);
+        if (!childName) {
+          throw new Error(`Child resource ${index + 1} needs a name`);
+        }
+
+        const childTypeId = child.typeId.trim();
+        if (!resourceTypeMap.has(childTypeId)) {
+          throw new Error(`Child resource ${index + 1} needs a valid type`);
+        }
+
+        const childSandboxUrl = child.sandboxUrl.trim();
+        if (!isValidWebUrl(childSandboxUrl)) {
+          throw new Error(`Child resource ${index + 1} has an invalid sandbox link`);
+        }
+
+        const childDevUrl = child.devUrl.trim();
+        if (!isValidWebUrl(childDevUrl)) {
+          throw new Error(`Child resource ${index + 1} has an invalid dev link`);
+        }
+
+        const childProdUrl = child.prodUrl.trim();
+        if (!isValidWebUrl(childProdUrl)) {
+          throw new Error(`Child resource ${index + 1} has an invalid prod link`);
+        }
+
+        return {
+          ...child,
+          name: childName,
+          typeId: childTypeId,
+          sandboxUrl: childSandboxUrl,
+          devUrl: childDevUrl,
+          prodUrl: childProdUrl,
+          order: index,
+        };
+      });
+
+      nextResource = {
+        id: editorState.resourceId ?? nanoid(),
+        name,
+        typeId,
+        sandboxUrl,
+        devUrl,
+        prodUrl,
+        order:
+          editorState.mode === "edit"
+            ? (resources.find((resource) => resource.id === editorState.resourceId)?.order ?? 0)
+            : resources.reduce(
+                (highestOrder, resource) => Math.max(highestOrder, resource.order),
+                -1,
+              ) + 1,
+        children,
+      };
+    } catch (error) {
+      toast.error("Couldn't save resource", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+      return;
+    }
+
+    if (editorState.mode === "edit") {
+      const existing = editorState.resourceId
+        ? collections.launcherResources.get(editorState.resourceId)
+        : undefined;
+      if (!existing || !editorState.resourceId) {
+        toast.error("Resource no longer exists");
+        return;
+      }
+
+      collections.launcherResources.update(editorState.resourceId, (draft) => {
+        draft.name = nextResource.name;
+        draft.typeId = nextResource.typeId;
+        draft.sandboxUrl = nextResource.sandboxUrl;
+        draft.devUrl = nextResource.devUrl;
+        draft.prodUrl = nextResource.prodUrl;
+        draft.children = nextResource.children;
+      });
+    } else {
+      collections.launcherResources.insert(nextResource);
+    }
+
+    closeResourceEditor();
   };
 
   const handleDeleteResource = (resourceId: string) => {
     if (!collections.launcherResources.get(resourceId)) {
       return;
+    }
+
+    if (resourceEditorState?.resourceId === resourceId) {
+      closeResourceEditor();
     }
 
     collections.launcherResources.delete(resourceId);
@@ -248,11 +550,18 @@ export function AzureResourceLauncher({
 
     const allowedTypeIds = new Set(normalizedTypes.map((type) => type.id));
     const resourceUsingRemovedType = resources.find(
-      (resource) => !allowedTypeIds.has(resource.typeId),
+      (resource) =>
+        !allowedTypeIds.has(resource.typeId) ||
+        resource.children.some((child) => !allowedTypeIds.has(child.typeId)),
     );
     if (resourceUsingRemovedType) {
+      const blockedChild = resourceUsingRemovedType.children.find(
+        (child) => !allowedTypeIds.has(child.typeId),
+      );
       toast.error("Can't remove a type that is already in use", {
-        description: `${resourceUsingRemovedType.name} still references it.`,
+        description: blockedChild
+          ? `${resourceUsingRemovedType.name} -> ${blockedChild.name} still references it.`
+          : `${resourceUsingRemovedType.name} still references it.`,
       });
       return;
     }
@@ -292,7 +601,10 @@ export function AzureResourceLauncher({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-[88rem] overflow-hidden sm:max-w-[88rem]">
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-h-[90vh] max-w-[88rem] overflow-hidden sm:max-w-[88rem]"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 font-heading">
             <Cloud className="h-5 w-5 text-primary" />
@@ -317,8 +629,8 @@ export function AzureResourceLauncher({
           </Button>
           <Button
             type="button"
-            variant={isAddFormOpen ? "secondary" : "default"}
-            onClick={() => setIsAddFormOpen((current) => !current)}
+            variant={resourceEditorState?.mode === "add" ? "secondary" : "default"}
+            onClick={startAddResource}
           >
             <Plus className="h-4 w-4" />
             Add resource
@@ -327,104 +639,91 @@ export function AzureResourceLauncher({
 
         <ScrollArea className="max-h-[calc(90vh-11rem)]">
           <div className="space-y-6 pb-1">
-            {isAddFormOpen && (
+            {resourceEditorState ? (
               <section className="rounded-lg border p-4">
-                <div className="mb-4">
-                  <h3 className="font-medium">Add resource</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Give the resource a name, pick its icon-driven type, and add one
-                    link per environment.
-                  </p>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                  <div className="space-y-2 xl:col-span-2">
-                    <Label htmlFor="launcher-resource-name">Resource name</Label>
-                    <Input
-                      id="launcher-resource-name"
-                      value={resourceDraft.name}
-                      onChange={(event) =>
-                        handleResourceDraftChange("name", event.target.value)
-                      }
-                      placeholder="Identity API"
-                    />
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-medium">
+                      {resourceEditorState.mode === "edit" ? "Edit resource" : "Add resource"}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">
+                      The root resource launches first in each environment column.
+                      Add child resources to append more typed links beside it.
+                    </p>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="launcher-resource-type">Resource type</Label>
-                    <select
-                      id="launcher-resource-type"
-                      className={SELECT_CLASS_NAME}
-                      value={selectedTypeId}
-                      onChange={(event) =>
-                        handleResourceDraftChange("typeId", event.target.value)
-                      }
-                    >
-                      {resourceTypes.map((type) => (
-                        <option key={type.id} value={type.id}>
-                          {type.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="launcher-resource-sandbox-url">Sandbox link</Label>
-                    <Input
-                      id="launcher-resource-sandbox-url"
-                      type="url"
-                      value={resourceDraft.sandboxUrl}
-                      onChange={(event) =>
-                        handleResourceDraftChange("sandboxUrl", event.target.value)
-                      }
-                      placeholder="https://..."
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="launcher-resource-dev-url">Dev link</Label>
-                    <Input
-                      id="launcher-resource-dev-url"
-                      type="url"
-                      value={resourceDraft.devUrl}
-                      onChange={(event) =>
-                        handleResourceDraftChange("devUrl", event.target.value)
-                      }
-                      placeholder="https://..."
-                    />
-                  </div>
-
-                  <div className="space-y-2 xl:col-span-2">
-                    <Label htmlFor="launcher-resource-prod-url">Prod link</Label>
-                    <Input
-                      id="launcher-resource-prod-url"
-                      type="url"
-                      value={resourceDraft.prodUrl}
-                      onChange={(event) =>
-                        handleResourceDraftChange("prodUrl", event.target.value)
-                      }
-                      placeholder="https://..."
-                    />
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="button" variant="outline" onClick={closeResourceEditor}>
+                      Cancel
+                    </Button>
+                    <Button type="button" onClick={handleSaveResource}>
+                      <Save className="h-4 w-4" />
+                      {resourceEditorState.mode === "edit" ? "Save changes" : "Save resource"}
+                    </Button>
                   </div>
                 </div>
 
-                <div className="mt-4 flex justify-end">
-                  <Button type="button" onClick={handleAddResource}>
-                    <Plus className="h-4 w-4" />
-                    Add resource
-                  </Button>
+                <div className="space-y-4">
+                  <ResourceDraftFields
+                    title="Root resource"
+                    description="Main entry shown in the launcher table."
+                    prefix="launcher-resource-root"
+                    item={resourceDraft}
+                    resourceTypes={resourceTypes}
+                    onChange={handleResourceDraftChange}
+                  />
+
+                  <section className="rounded-md border border-dashed p-4">
+                    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <h4 className="font-medium">Child resources</h4>
+                        <p className="text-sm text-muted-foreground">
+                          Each child adds one more typed link in every environment
+                          column.
+                        </p>
+                      </div>
+
+                      <Button type="button" variant="outline" onClick={handleAddChildDraft}>
+                        <Plus className="h-4 w-4" />
+                        Add child resource
+                      </Button>
+                    </div>
+
+                    {resourceDraft.children.length === 0 ? (
+                      <div className="rounded-md border border-dashed px-4 py-6 text-sm text-muted-foreground">
+                        No child resources yet.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {resourceDraft.children.map((child, index) => (
+                          <ResourceDraftFields
+                            key={child.id}
+                            title={`Child resource ${index + 1}`}
+                            description="Appears after the root resource in each environment."
+                            prefix={`launcher-resource-child-${child.id}`}
+                            item={child}
+                            resourceTypes={resourceTypes}
+                            onChange={(field, value) =>
+                              handleChildDraftChange(child.id, field, value)
+                            }
+                            onRemove={() => handleRemoveChildDraft(child.id)}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </section>
                 </div>
               </section>
-            )}
+            ) : null}
 
-            {isTypeEditorOpen && (
+            {isTypeEditorOpen ? (
               <section className="rounded-lg border p-4">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <h3 className="font-medium">Resource types</h3>
                     <p className="text-sm text-muted-foreground">
-                      Define the labels and Lucide icons available when adding
-                      resources.
+                      Define the labels and Lucide icons available when editing
+                      resources and child resources.
                     </p>
                   </div>
                   <Button type="button" onClick={handleSaveTypeDrafts}>
@@ -530,7 +829,7 @@ export function AzureResourceLauncher({
                   </div>
                 </div>
               </section>
-            )}
+            ) : null}
 
             <section className="px-4 pt-1">
               {resources.length === 0 ? (
@@ -543,20 +842,19 @@ export function AzureResourceLauncher({
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <div className="grid min-w-[64rem] grid-cols-[minmax(18rem,2fr)_repeat(3,minmax(8rem,1fr))_auto]">
+                  <div className="grid min-w-[76rem] grid-cols-[minmax(18rem,2fr)_repeat(3,minmax(13rem,1fr))_auto]">
                     <div className="col-span-full grid items-center [grid-template-columns:subgrid]">
                       <div className="pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Resource
                       </div>
-                      <div className="pb-2 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        {LAUNCHER_ENVIRONMENT_LABELS.sandbox}
-                      </div>
-                      <div className="pb-2 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        {LAUNCHER_ENVIRONMENT_LABELS.dev}
-                      </div>
-                      <div className="pb-2 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        {LAUNCHER_ENVIRONMENT_LABELS.prod}
-                      </div>
+                      {LAUNCHER_ENVIRONMENTS.map((environment) => (
+                        <div
+                          key={environment}
+                          className="pb-2 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                        >
+                          {LAUNCHER_ENVIRONMENT_LABELS[environment]}
+                        </div>
+                      ))}
                       <div aria-hidden="true" />
                     </div>
 
@@ -569,63 +867,51 @@ export function AzureResourceLauncher({
                           key={resource.id}
                           className="col-span-full grid items-center [grid-template-columns:subgrid]"
                         >
-                          <div className="py-1.5">
-                            <div className="flex items-start gap-3">
-                              <div className="flex h-9 w-9 items-center justify-center rounded-md border bg-muted/30">
-                                {createElement(Icon, {
-                                  className: "h-4 w-4 text-muted-foreground",
-                                })}
-                              </div>
+                          <div className="py-2">
+                            <div className="flex items-center gap-2">
+                              {createElement(Icon, {
+                                className: "h-4 w-4 shrink-0 text-muted-foreground",
+                              })}
                               <div className="min-w-0">
                                 <p className="truncate font-medium">{resource.name}</p>
-                                <p className="text-sm text-muted-foreground">
-                                  {resourceType?.name ?? "Custom resource"}
-                                </p>
                               </div>
                             </div>
                           </div>
 
-                          {[
-                            {
-                              label: LAUNCHER_ENVIRONMENT_LABELS.sandbox,
-                              url: resource.sandboxUrl,
-                            },
-                            {
-                              label: LAUNCHER_ENVIRONMENT_LABELS.dev,
-                              url: resource.devUrl,
-                            },
-                            {
-                              label: LAUNCHER_ENVIRONMENT_LABELS.prod,
-                              url: resource.prodUrl,
-                            },
-                          ].map(({ label, url }) => (
+                          {LAUNCHER_ENVIRONMENTS.map((environment) => (
                             <div
-                              key={label}
-                              className="grid place-items-center py-1.5"
+                              key={`${resource.id}-${environment}`}
+                              className="grid place-items-center"
                             >
-                              <a
-                                href={url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label={`Open ${resource.name} ${label}`}
-                                className="inline-grid grid-flow-col items-center gap-1 text-sm font-medium text-primary hover:underline"
-                              >
-                                <span>Open</span>
-                                <ExternalLink className="h-3.5 w-3.5" />
-                              </a>
+                              <EnvironmentLinks
+                                environment={environment}
+                                resource={resource}
+                                resourceTypeMap={resourceTypeMap}
+                              />
                             </div>
                           ))}
 
-                          <div className="grid justify-items-end py-1.5">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon-sm"
-                              aria-label={`Delete ${resource.name}`}
-                              onClick={() => handleDeleteResource(resource.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                          <div className="grid justify-items-end py-2">
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Edit ${resource.name}`}
+                                onClick={() => startEditResource(resource)}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon-sm"
+                                aria-label={`Delete ${resource.name}`}
+                                onClick={() => handleDeleteResource(resource.id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       );

@@ -328,6 +328,15 @@ describe("SettingsDialog", () => {
       devUrl: "https://dev.example.com/apps/identity-api",
       prodUrl: "https://prod.example.com/apps/identity-api",
       order: 0,
+      children: [{
+        id: "child-1",
+        name: "Identity Insights",
+        typeId: "app-insights",
+        sandboxUrl: "https://sandbox.example.com/insights/identity-api",
+        devUrl: "https://dev.example.com/insights/identity-api",
+        prodUrl: "https://prod.example.com/insights/identity-api",
+        order: 0,
+      }],
     });
 
     const createObjectURL = vi.fn((object: Blob | MediaSource) => {
@@ -419,6 +428,15 @@ describe("SettingsDialog", () => {
           devUrl: "https://dev.example.com/apps/identity-api",
           prodUrl: "https://prod.example.com/apps/identity-api",
           order: 0,
+          children: [{
+            id: "child-1",
+            name: "Identity Insights",
+            typeId: "app-insights",
+            sandboxUrl: "https://sandbox.example.com/insights/identity-api",
+            devUrl: "https://dev.example.com/insights/identity-api",
+            prodUrl: "https://prod.example.com/insights/identity-api",
+            order: 0,
+          }],
         }],
       });
       expect(exported.exportedAt).toEqual(expect.any(String));
@@ -492,6 +510,15 @@ describe("SettingsDialog", () => {
       devUrl: "https://dev.example.com/api/token",
       prodUrl: "https://prod.example.com/api/token",
       order: 0,
+      children: [{
+        id: "child-1",
+        name: "Token Insights",
+        typeId: "app-insights",
+        sandboxUrl: "https://sandbox.example.com/insights/token",
+        devUrl: "https://dev.example.com/insights/token",
+        prodUrl: "https://prod.example.com/insights/token",
+        order: 0,
+      }],
     });
     const backupJson = JSON.stringify(
       createBoardBackup({
@@ -533,6 +560,15 @@ describe("SettingsDialog", () => {
     expect(collections.launcherResources.get("resource-1")?.prodUrl).toBe(
       "https://prod.example.com/api/token",
     );
+    expect(collections.launcherResources.get("resource-1")?.children).toEqual([{
+      id: "child-1",
+      name: "Token Insights",
+      typeId: "app-insights",
+      sandboxUrl: "https://sandbox.example.com/insights/token",
+      devUrl: "https://dev.example.com/insights/token",
+      prodUrl: "https://prod.example.com/insights/token",
+      order: 0,
+    }]);
 
     await expandSection(user, "Connection");
     expect(screen.getByLabelText("Team")).toHaveValue("imported-team");
