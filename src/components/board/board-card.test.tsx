@@ -695,6 +695,14 @@ describe("BoardCard status message", () => {
     expect(editor).toHaveAttribute("wrap", "soft");
   });
 
+  it("disables spellcheck on the status editor", () => {
+    renderCard({ statusMessage: "Needs extra details before review" });
+    expect(screen.getByDisplayValue("Needs extra details before review")).toHaveAttribute(
+      "spellcheck",
+      "false",
+    );
+  });
+
   it("recalculates status height when the editor width changes after mount", () => {
     const resizeObserverCallbacks: ResizeObserverCallback[] = [];
     const originalResizeObserver = globalThis.ResizeObserver;

@@ -847,6 +847,7 @@ export function BoardCard({
                 ref={statusRef}
                 rows={1}
                 wrap="soft"
+                spellCheck={false}
                 value={statusValue}
                 placeholder="Set status..."
                 onChange={(e) => setStatusValue(e.target.value)}
