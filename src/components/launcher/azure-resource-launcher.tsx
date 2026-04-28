@@ -16,7 +16,6 @@ import {
   isLauncherIconName,
   LAUNCHER_ICON_NAMES,
 } from "@/lib/launcher-icons";
-import { cn } from "@/lib/utils";
 import {
   LAUNCHER_ENVIRONMENT_LABELS,
   type LauncherResourceType,
@@ -25,7 +24,6 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -300,10 +298,6 @@ export function AzureResourceLauncher({
             <Cloud className="h-5 w-5 text-primary" />
             Azure Portal launcher
           </DialogTitle>
-          <DialogDescription>
-            Manual favorites for Azure Portal and other web resources across Sandbox,
-            Dev, and Prod.
-          </DialogDescription>
         </DialogHeader>
 
         <datalist id={iconOptionsId}>
@@ -312,31 +306,26 @@ export function AzureResourceLauncher({
           ))}
         </datalist>
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-muted-foreground">
-            No Azure API calls here - each link is registered manually.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant={isTypeEditorOpen ? "secondary" : "outline"}
-              onClick={toggleTypeEditor}
-            >
-              <Shapes className="h-4 w-4" />
-              Resource types
-            </Button>
-            <Button
-              type="button"
-              variant={isAddFormOpen ? "secondary" : "default"}
-              onClick={() => setIsAddFormOpen((current) => !current)}
-            >
-              <Plus className="h-4 w-4" />
-              Add resource
-            </Button>
-          </div>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button
+            type="button"
+            variant={isTypeEditorOpen ? "secondary" : "outline"}
+            onClick={toggleTypeEditor}
+          >
+            <Shapes className="h-4 w-4" />
+            Resource types
+          </Button>
+          <Button
+            type="button"
+            variant={isAddFormOpen ? "secondary" : "default"}
+            onClick={() => setIsAddFormOpen((current) => !current)}
+          >
+            <Plus className="h-4 w-4" />
+            Add resource
+          </Button>
         </div>
 
-        <ScrollArea className="max-h-[calc(90vh-11rem)] pr-4">
+        <ScrollArea className="max-h-[calc(90vh-11rem)]">
           <div className="space-y-6 pb-1">
             {isAddFormOpen && (
               <section className="rounded-lg border p-4">
@@ -543,16 +532,9 @@ export function AzureResourceLauncher({
               </section>
             )}
 
-            <section className="rounded-lg border">
-              <div className="border-b px-4 py-3">
-                <h3 className="font-medium">Favorited resources</h3>
-                <p className="text-sm text-muted-foreground">
-                  One row per resource, with direct links to each environment.
-                </p>
-              </div>
-
+            <section className="px-4 pt-1">
               {resources.length === 0 ? (
-                <div className="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
+                <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
                   <Cloud className="h-10 w-10 text-muted-foreground/70" />
                   <p className="font-medium">No favorited resources yet</p>
                   <p className="max-w-xl text-sm text-muted-foreground">
@@ -562,38 +544,34 @@ export function AzureResourceLauncher({
               ) : (
                 <div className="overflow-x-auto">
                   <div className="grid min-w-[64rem] grid-cols-[minmax(18rem,2fr)_repeat(3,minmax(8rem,1fr))_auto]">
-                    <div className="col-span-full grid items-center border-b [grid-template-columns:subgrid]">
-                      <div className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <div className="col-span-full grid items-center [grid-template-columns:subgrid]">
+                      <div className="pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         Resource
                       </div>
-                      <div className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <div className="pb-2 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {LAUNCHER_ENVIRONMENT_LABELS.sandbox}
                       </div>
-                      <div className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <div className="pb-2 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {LAUNCHER_ENVIRONMENT_LABELS.dev}
                       </div>
-                      <div className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      <div className="pb-2 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {LAUNCHER_ENVIRONMENT_LABELS.prod}
                       </div>
                       <div aria-hidden="true" />
                     </div>
 
-                    {resources.map((resource, index) => {
+                    {resources.map((resource) => {
                       const resourceType = resourceTypeMap.get(resource.typeId);
                       const Icon = getLauncherIcon(resourceType?.iconName);
-                      const rowBorderClass = index < resources.length - 1 ? "border-b" : "";
 
                       return (
                         <div
                           key={resource.id}
-                          className={cn(
-                            "col-span-full grid items-center [grid-template-columns:subgrid]",
-                            rowBorderClass,
-                          )}
+                          className="col-span-full grid items-center [grid-template-columns:subgrid]"
                         >
-                          <div className="px-4 py-3">
+                          <div className="py-1.5">
                             <div className="flex items-start gap-3">
-                              <div className="mt-0.5 flex h-9 w-9 items-center justify-center rounded-md border bg-muted/30">
+                              <div className="flex h-9 w-9 items-center justify-center rounded-md border bg-muted/30">
                                 {createElement(Icon, {
                                   className: "h-4 w-4 text-muted-foreground",
                                 })}
@@ -623,7 +601,7 @@ export function AzureResourceLauncher({
                           ].map(({ label, url }) => (
                             <div
                               key={label}
-                              className="grid place-items-center px-4 py-3"
+                              className="grid place-items-center py-1.5"
                             >
                               <a
                                 href={url}
@@ -638,7 +616,7 @@ export function AzureResourceLauncher({
                             </div>
                           ))}
 
-                          <div className="grid justify-items-end px-4 py-3">
+                          <div className="grid justify-items-end py-1.5">
                             <Button
                               type="button"
                               variant="ghost"

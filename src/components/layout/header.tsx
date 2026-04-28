@@ -10,7 +10,6 @@ import {
   Workflow,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
@@ -117,7 +116,10 @@ export function Header({
 
         {onOpenLauncher && (
           <>
-            <Separator orientation="vertical" className="mx-1 h-5" />
+            <div
+              aria-hidden="true"
+              className="mx-2 h-6 w-px shrink-0 self-center bg-black"
+            />
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button

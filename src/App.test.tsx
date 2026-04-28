@@ -229,8 +229,7 @@ describe("App integration", () => {
 
     await user.click(screen.getByRole("button", { name: "Azure Portal launcher" }));
 
-    expect(await screen.findByText("Favorited resources")).toBeInTheDocument();
-    expect(screen.getByText("No favorited resources yet")).toBeInTheDocument();
+    expect(await screen.findByText("No favorited resources yet")).toBeInTheDocument();
   });
 
   it("shows demo button when approval board column is configured", async () => {

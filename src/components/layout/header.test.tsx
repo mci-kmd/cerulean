@@ -51,7 +51,7 @@ describe("Header", () => {
     expect(
       within(nav).getByRole("button", { name: "Azure Portal launcher" }),
     ).toBeInTheDocument();
-    expect(nav.querySelector('[data-slot="separator"]')).toBeTruthy();
+    expect(nav.querySelector('[aria-hidden="true"].bg-black.w-px')).toBeTruthy();
   });
 
   it("shows tooltip for Azure DevOps quick links", async () => {
