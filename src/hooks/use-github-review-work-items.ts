@@ -5,12 +5,11 @@ import {
   normalizeGithubReviewConfig,
 } from "@/api/github-client";
 
-const MIN_GITHUB_POLL_INTERVAL_SECONDS = 300;
+const GITHUB_POLL_INTERVAL_MS = 10 * 60 * 1000;
 
 export function useGithubReviewWorkItems(
   username: string,
   repository: string,
-  pollInterval: number,
 ) {
   const normalized = useMemo(
     () => normalizeGithubReviewConfig({ username, repository }),
@@ -23,7 +22,7 @@ export function useGithubReviewWorkItems(
     enabled: !!normalized.username && !!normalized.repository,
     refetchInterval:
       normalized.username && normalized.repository
-        ? Math.max(pollInterval, MIN_GITHUB_POLL_INTERVAL_SECONDS) * 1000
+        ? GITHUB_POLL_INTERVAL_MS
         : false,
     refetchIntervalInBackground: false,
   });

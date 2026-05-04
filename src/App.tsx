@@ -155,7 +155,6 @@ export function App() {
   } = useGithubReviewWorkItems(
     settings?.githubUsername ?? "",
     settings?.githubRepository ?? "",
-    settings?.pollInterval ?? 30,
   );
   const {
     workItems: uiReviewWorkItems,

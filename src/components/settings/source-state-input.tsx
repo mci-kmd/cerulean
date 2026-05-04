@@ -130,6 +130,9 @@ export function SourceStateInput({
             onChange("pollInterval", parseInt(e.target.value, 10) || 30)
           }
         />
+        <p className="text-xs text-muted-foreground">
+          Applies to Azure DevOps-backed sources. Public GitHub refresh stays fixed at 10 minutes to avoid rate limits.
+        </p>
       </div>
     </div>
   );
