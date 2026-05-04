@@ -4,7 +4,13 @@ import {
   localOnlyCollectionOptions,
 } from "@tanstack/db";
 import type { Collection, NonSingleResult } from "@tanstack/db";
-import type { AdoSettings, BoardColumn, ColumnAssignment, CustomTask } from "@/types/board";
+import type {
+  AdoSettings,
+  BoardColumn,
+  ColumnAssignment,
+  CustomTask,
+  WorkItemChecklistItem,
+} from "@/types/board";
 import type { DemoChecklistItem, DemoOrderItem } from "@/types/demo";
 import type { LauncherResource, LauncherResourceType } from "@/types/resources";
 
@@ -15,6 +21,7 @@ export interface BoardCollections {
   settings: AppCollection<AdoSettings, string>;
   columns: AppCollection<BoardColumn, string>;
   assignments: AppCollection<ColumnAssignment, string>;
+  boardChecklist: AppCollection<WorkItemChecklistItem, string>;
   demoChecklist: AppCollection<DemoChecklistItem, string>;
   demoOrder: AppCollection<DemoOrderItem, string>;
   customTasks: AppCollection<CustomTask, string>;
@@ -66,6 +73,24 @@ function createAssignmentsCollection(inMemory: boolean): AppCollection<ColumnAss
     localStorageCollectionOptions<ColumnAssignment, string>({
       getKey: (item: ColumnAssignment) => item.id,
       storageKey: "cerulean-assignments",
+    }),
+  );
+}
+
+function createBoardChecklistCollection(
+  inMemory: boolean,
+): AppCollection<WorkItemChecklistItem, string> {
+  if (inMemory) {
+    return createCollection(
+      localOnlyCollectionOptions<WorkItemChecklistItem, string>({
+        getKey: (item: WorkItemChecklistItem) => item.id,
+      }),
+    );
+  }
+  return createCollection(
+    localStorageCollectionOptions<WorkItemChecklistItem, string>({
+      getKey: (item: WorkItemChecklistItem) => item.id,
+      storageKey: "cerulean-board-checklist",
     }),
   );
 }
@@ -159,6 +184,7 @@ export function createBoardCollections(inMemory = false): BoardCollections {
     settings: createSettingsCollection(inMemory),
     columns: createColumnsCollection(inMemory),
     assignments: createAssignmentsCollection(inMemory),
+    boardChecklist: createBoardChecklistCollection(inMemory),
     demoChecklist: createDemoChecklistCollection(inMemory),
     demoOrder: createDemoOrderCollection(inMemory),
     customTasks: createCustomTasksCollection(inMemory),

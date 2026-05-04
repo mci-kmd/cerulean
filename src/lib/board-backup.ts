@@ -1,5 +1,11 @@
 import type { BoardCollections } from "@/db/create-collections";
-import { type AdoSettings, type BoardColumn, type ColumnAssignment, type CustomTask } from "@/types/board";
+import {
+  type AdoSettings,
+  type BoardColumn,
+  type ColumnAssignment,
+  type CustomTask,
+  type WorkItemChecklistItem,
+} from "@/types/board";
 import type { DemoChecklistItem, DemoOrderItem } from "@/types/demo";
 import {
   normalizeLauncherResource,
@@ -19,6 +25,7 @@ export interface BoardBackupData {
   settings: AdoSettings;
   columns: BoardColumn[];
   assignments: ColumnAssignment[];
+  boardChecklist: WorkItemChecklistItem[];
   demoChecklist: DemoChecklistItem[];
   demoOrder: DemoOrderItem[];
   customTasks: CustomTask[];
@@ -171,6 +178,17 @@ function parseDemoChecklistItem(value: unknown): DemoChecklistItem {
   };
 }
 
+function parseBoardChecklistItem(value: unknown): WorkItemChecklistItem {
+  const record = expectRecord(value, "Board checklist item");
+  return {
+    id: expectString(record, "id", "Board checklist item id"),
+    workItemId: expectNumber(record, "workItemId", "Board checklist work item id"),
+    text: expectString(record, "text", "Board checklist text"),
+    checked: expectBoolean(record, "checked", "Board checklist checked state"),
+    order: expectNumber(record, "order", "Board checklist order"),
+  };
+}
+
 function parseDemoOrderItem(value: unknown): DemoOrderItem {
   const record = expectRecord(value, "Demo order item");
   return {
@@ -276,6 +294,7 @@ export function createBoardBackup({
     settings: { ...settings },
     columns: cloneItems(columns),
     assignments: cloneItems(collections.assignments.toArray),
+    boardChecklist: cloneItems(collections.boardChecklist.toArray),
     demoChecklist: cloneItems(collections.demoChecklist.toArray),
     demoOrder: cloneItems(collections.demoOrder.toArray),
     customTasks: cloneItems(collections.customTasks.toArray),
@@ -310,6 +329,9 @@ export function parseBoardBackup(text: string): BoardBackupData {
     settings: parseSettings(record.settings),
     columns: expectArray(record.columns, "Board columns").map(parseColumn),
     assignments: expectArray(record.assignments, "Assignments").map(parseAssignment),
+    boardChecklist: expectOptionalArray(record.boardChecklist, "Board checklist").map(
+      parseBoardChecklistItem,
+    ),
     demoChecklist: expectArray(record.demoChecklist, "Demo checklist").map(parseDemoChecklistItem),
     demoOrder: expectArray(record.demoOrder, "Demo order").map(parseDemoOrderItem),
     customTasks: expectArray(record.customTasks, "Custom tasks").map(parseCustomTask),
@@ -329,6 +351,7 @@ export async function applyBoardBackup(
   await replaceCollectionItems(collections.settings, [{ ...backup.settings }]);
   await replaceCollectionItems(collections.columns, cloneItems(backup.columns));
   await replaceCollectionItems(collections.assignments, cloneItems(backup.assignments));
+  await replaceCollectionItems(collections.boardChecklist, cloneItems(backup.boardChecklist));
   await replaceCollectionItems(collections.demoChecklist, cloneItems(backup.demoChecklist));
   await replaceCollectionItems(collections.demoOrder, cloneItems(backup.demoOrder));
   await replaceCollectionItems(collections.customTasks, cloneItems(backup.customTasks));

@@ -19,6 +19,13 @@ vi.mock("@/lib/ado-pr-create", () => ({
   openAdoPullRequestCreate: openAdoPullRequestCreateMock,
 }));
 
+vi.mock("nanoid", () => ({
+  nanoid: (() => {
+    let i = 0;
+    return () => `board-check-${++i}`;
+  })(),
+}));
+
 function renderCard(props: {
   statusMessage?: string;
   mockupUrl?: string;
@@ -496,6 +503,72 @@ describe("BoardCard create PR button", () => {
         workItemId: 42,
       }),
     );
+  });
+});
+
+describe("BoardCard checklist", () => {
+  it("renders the checklist button before create PR and shows its tooltip", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderCard({});
+    insertAdoSettings(collections);
+
+    const checklistButton = await screen.findByRole("button", {
+      name: "Add checklist item for work item 1",
+    });
+    const createPrButton = screen.getByRole("button", {
+      name: "Create pull request for work item 1",
+    });
+
+    expect(
+      checklistButton.compareDocumentPosition(createPrButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    await user.hover(checklistButton);
+    await waitFor(() => {
+      expect(checklistButton).toHaveAttribute("aria-describedby");
+    });
+  });
+
+  it("adds editable checklist items above the status field and removes them", async () => {
+    const user = userEvent.setup();
+    renderCard({
+      statusMessage: "Blocked on API review",
+    });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Add checklist item for work item 1",
+      }),
+    );
+
+    const checklistInput = await screen.findByDisplayValue("New checklist item");
+    const statusField = screen.getByPlaceholderText("Set status...");
+
+    expect(
+      checklistInput.compareDocumentPosition(statusField) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    await user.clear(checklistInput);
+    await user.type(checklistInput, "Wire API");
+    expect(screen.getByDisplayValue("Wire API")).toBeInTheDocument();
+
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Toggle checklist item Wire API",
+    });
+    await user.click(checkbox);
+    await waitFor(() => {
+      expect(checkbox).toHaveAttribute("data-state", "checked");
+    });
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Delete checklist item Wire API",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByDisplayValue("Wire API")).toBeNull();
+    });
   });
 });
 

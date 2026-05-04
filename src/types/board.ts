@@ -148,6 +148,14 @@ export interface CustomTask {
   completedAt?: number;
 }
 
+export interface WorkItemChecklistItem {
+  id: string;
+  workItemId: number;
+  text: string;
+  checked: boolean;
+  order: number;
+}
+
 export function isReviewWorkItem(
   workItem: WorkItem | undefined,
 ): workItem is WorkItem & { kind: "review"; review: ReviewWorkItem } {

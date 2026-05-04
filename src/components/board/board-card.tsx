@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   MessageCircle,
   Pencil,
+  Plus,
   Rocket,
   User,
   Workflow,
@@ -29,9 +30,11 @@ import {
 } from "@/lib/work-item-types";
 import { scheduleDndMutation } from "@/lib/schedule-dnd-mutation";
 import { useSettings } from "@/hooks/use-board";
+import { useWorkItemChecklist } from "@/hooks/use-work-item-checklist";
 import { createAdoClient } from "@/api/ado-client";
 import { openAdoPullRequestCreate } from "@/lib/ado-pr-create";
 import { TaskDialog } from "./task-dialog";
+import { WorkItemChecklist } from "./work-item-checklist";
 import {
   COMPLETED_COLUMN_ID,
   NEW_WORK_COLUMN_ID,
@@ -251,6 +254,7 @@ export function BoardCard({
   const [statusValue, setStatusValue] = useState(statusMessage ?? "");
   const [mockupUrlValue, setMockupUrlValue] = useState(mockupUrl ?? "");
   const [discussionUrlValue, setDiscussionUrlValue] = useState(discussionUrl ?? "");
+  const [checklistFocusItemId, setChecklistFocusItemId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [uiReviewLinkEditor, setUiReviewLinkEditor] = useState<UiReviewLinkEditor | null>(null);
   const statusRef = useRef<HTMLTextAreaElement | null>(null);
@@ -285,6 +289,13 @@ export function BoardCard({
   const hideCandidateDetails = showCandidateOptOutToggle && candidateOptOut === true;
   const CandidateToggleIcon = hideCandidateDetails ? EyeOff : Eye;
   const showStatusEditor = columnId !== COMPLETED_COLUMN_ID && !hideCandidateDetails;
+  const {
+    items: checklistItems,
+    addItem: addChecklistItem,
+    toggleItem: toggleChecklistItem,
+    updateText: updateChecklistText,
+    removeItem: removeChecklistItem,
+  } = useWorkItemChecklist(displayId);
   const showUiReviewLinks = isUiReviewCard && showStatusEditor;
   const trimmedMockupUrl = mockupUrlValue.trim();
   const trimmedDiscussionUrl = discussionUrlValue.trim();
@@ -450,6 +461,12 @@ export function BoardCard({
     }
   };
 
+  const handleAddChecklistItem = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+    const nextItemId = addChecklistItem();
+    setChecklistFocusItemId(nextItemId);
+  };
+
   const renderUiReviewLink = ({
     kind,
     label,
@@ -601,30 +618,66 @@ export function BoardCard({
             )}
             {!hideCandidateDetails &&
               (isCustomTask ? (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setEditOpen(true);
-                  }}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  className="text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover/card:opacity-100"
-                  aria-label="Edit task"
-                >
-                  <Pencil className="h-3 w-3" />
-                </button>
+                <div className="flex items-center gap-1">
+                  {showStatusEditor && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={handleAddChecklistItem}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          className="text-muted-foreground transition-colors hover:text-foreground"
+                          aria-label={`Add checklist item for work item ${displayId}`}
+                          data-testid="add-checklist-item-button"
+                        >
+                          <Plus className="h-3 w-3" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Add checklist item</TooltipContent>
+                    </Tooltip>
+                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditOpen(true);
+                    }}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    className="text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover/card:opacity-100"
+                    aria-label="Edit task"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                </div>
               ) : (
                 <div className="flex items-center gap-1">
+                  {showStatusEditor && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={handleAddChecklistItem}
+                          onPointerDown={(e) => e.stopPropagation()}
+                          className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                          aria-label={`Add checklist item for work item ${displayId}`}
+                          data-testid="add-checklist-item-button"
+                        >
+                          <Plus className="h-3 w-3" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>Add checklist item</TooltipContent>
+                    </Tooltip>
+                  )}
                   {canCreateAdoPullRequest && (
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <button
                           type="button"
                           onClick={handleCreatePullRequest}
-                         onPointerDown={(e) => e.stopPropagation()}
-                         className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                         aria-label={`Create pull request for work item ${displayId}`}
-                       >
+                          onPointerDown={(e) => e.stopPropagation()}
+                          className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                          aria-label={`Create pull request for work item ${displayId}`}
+                        >
                           <GitPullRequestArrow className="h-3 w-3" />
                         </button>
                       </TooltipTrigger>
@@ -839,6 +892,18 @@ export function BoardCard({
                 icon: MessageCircle,
                 onChange: setDiscussionUrlValue,
               })}
+            </div>
+          )}
+          {showStatusEditor && checklistItems.length > 0 && (
+            <div className="mb-2">
+              <WorkItemChecklist
+                items={checklistItems}
+                autoFocusItemId={checklistFocusItemId}
+                toggleItem={toggleChecklistItem}
+                updateText={updateChecklistText}
+                removeItem={removeChecklistItem}
+                onAutoFocusComplete={() => setChecklistFocusItemId(null)}
+              />
             </div>
           )}
           {showStatusEditor && (

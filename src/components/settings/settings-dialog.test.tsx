@@ -296,6 +296,13 @@ describe("SettingsDialog", () => {
       position: 0,
       statusMessage: "blocked",
     });
+    collections.boardChecklist.insert({
+      id: "board-check-1",
+      workItemId: 101,
+      text: "real step",
+      checked: false,
+      order: 0,
+    });
     collections.demoChecklist.insert({
       id: "check-1",
       workItemId: 101,
@@ -396,6 +403,13 @@ describe("SettingsDialog", () => {
           position: 0,
           statusMessage: "blocked",
         }],
+        boardChecklist: [{
+          id: "board-check-1",
+          workItemId: 101,
+          text: "real step",
+          checked: false,
+          order: 0,
+        }],
         demoChecklist: [{
           id: "check-1",
           workItemId: 101,
@@ -479,6 +493,13 @@ describe("SettingsDialog", () => {
       mockupUrl: "https://example.com/mockup",
       candidateOptOut: true,
     });
+    backupCollections.boardChecklist.insert({
+      id: "new-board-check",
+      workItemId: 202,
+      text: "Review edge case",
+      checked: true,
+      order: 1,
+    });
     backupCollections.demoChecklist.insert({
       id: "new-check",
       workItemId: 202,
@@ -553,6 +574,7 @@ describe("SettingsDialog", () => {
       "https://example.com/mockup",
     );
     expect(collections.assignments.get("new-assignment")?.candidateOptOut).toBe(true);
+    expect(collections.boardChecklist.get("new-board-check")?.text).toBe("Review edge case");
     expect(collections.demoChecklist.get("new-check")?.text).toBe("Verify flow");
     expect(collections.demoOrder.get("new-demo")?.position).toBe(3);
     expect(collections.customTasks.get("new-task")?.title).toBe("Draft QA notes");
