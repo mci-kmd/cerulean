@@ -36,7 +36,7 @@ import {
   isBoardColumnSplit,
   type CandidateBoardConfig,
 } from "@/lib/ado-board";
-import { isReviewWorkItem, isUiReviewWorkItem } from "@/types/board";
+import { isReviewWorkItem, isUiReviewWorkItem, type WorkItem } from "@/types/board";
 
 function getTargetBoardColumnUpdate(
   boardConfig: CandidateBoardConfig | undefined,
@@ -77,6 +77,7 @@ export function App() {
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [launcherOpen, setLauncherOpen] = useState(false);
   const [isBoardDragging, setIsBoardDragging] = useState(false);
+  const [completedUiReviewWorkItems, setCompletedUiReviewWorkItems] = useState<WorkItem[]>([]);
 
   const client: AdoClient | null = (() => {
     if (!settings?.pat || !settings?.org || !settings?.project) return null;
@@ -203,6 +204,7 @@ export function App() {
       ...reviewWorkItems,
       ...githubReviewWorkItems,
       ...uiReviewWorkItems,
+      ...completedUiReviewWorkItems,
     ],
     [
       adoWorkItems,
@@ -211,6 +213,7 @@ export function App() {
       reviewWorkItems,
       githubReviewWorkItems,
       uiReviewWorkItems,
+      completedUiReviewWorkItems,
     ],
   );
   const boardWorkItems = useMemo(() => {
@@ -245,8 +248,9 @@ export function App() {
         ...completedAdoItems.map((item) => item.id),
         ...reviewCompletedIds,
         ...githubReviewPlacement.completedIds,
+        ...completedUiReviewWorkItems.map((item) => item.id),
       ]),
-    [completedAdoItems, githubReviewPlacement, reviewCompletedIds],
+    [completedAdoItems, githubReviewPlacement, reviewCompletedIds, completedUiReviewWorkItems],
   );
   const reconcileReady = isReconcileReady(
     isSuccess,
@@ -486,7 +490,25 @@ export function App() {
     }
 
     if (isUiReviewWorkItem(boardWorkItem)) {
-      const addTags = movingFromNewWork ? ["UI"] : [];
+      if (movingToCompleted) {
+        setCompletedUiReviewWorkItems((current) => {
+          if (current.some((item) => item.id === boardWorkItem.id)) {
+            return current;
+          }
+          return [...current, boardWorkItem];
+        });
+      } else if (fromColumnId === COMPLETED_COLUMN_ID) {
+        setCompletedUiReviewWorkItems((current) =>
+          current.filter((item) => item.id !== boardWorkItem.id),
+        );
+      }
+
+      const uiReviewCompletedTag = settings?.uiReviewCompletedTag.trim() ?? "";
+      const addTags = movingToCompleted && uiReviewCompletedTag
+        ? [uiReviewCompletedTag]
+        : movingFromNewWork
+          ? ["UI"]
+          : [];
       const removeTags = movingToCompleted ? [boardWorkItem.uiReview.reviewTag] : [];
 
       if (addTags.length === 0 && removeTags.length === 0) {

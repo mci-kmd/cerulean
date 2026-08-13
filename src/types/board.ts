@@ -21,6 +21,7 @@ export interface AdoSettings {
   areaPath: string;
   workItemTypes: string;
   uiReviewTag: string;
+  uiReviewCompletedTag: string;
   pollInterval: number;
 }
 
@@ -47,6 +48,7 @@ export const DEFAULT_SETTINGS: AdoSettings = {
   areaPath: "",
   workItemTypes: "",
   uiReviewTag: "",
+  uiReviewCompletedTag: "",
   pollInterval: 30,
 };
 

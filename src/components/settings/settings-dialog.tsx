@@ -78,6 +78,7 @@ function buildSavedSettings(draft: AdoSettings): AdoSettings {
     areaPath: draft.areaPath,
     workItemTypes: draft.workItemTypes,
     uiReviewTag: draft.uiReviewTag.trim(),
+    uiReviewCompletedTag: draft.uiReviewCompletedTag.trim(),
     pollInterval: draft.pollInterval,
   };
 }
@@ -262,6 +263,7 @@ function SettingsDialogContent({
             areaPath={draft.areaPath}
             workItemTypes={draft.workItemTypes}
             uiReviewTag={draft.uiReviewTag}
+            uiReviewCompletedTag={draft.uiReviewCompletedTag}
             pollInterval={draft.pollInterval}
             onChange={handleFieldChange}
           />

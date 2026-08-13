@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   completeMutate: vi.fn(),
   reviewMutate: vi.fn(),
   updateTagsMutate: vi.fn(),
+  lastBoardData: undefined as import("@/hooks/use-board").BoardData | undefined,
   candidateBoardConfig: undefined as
     | {
         boardId: string;
@@ -104,12 +105,15 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/components/board/board", () => ({
   Board: ({
+    data,
     onColumnChange,
     onDragStateChange,
   }: {
+    data: import("@/hooks/use-board").BoardData;
     onColumnChange?: (workItemId: number, fromColumnId: string, toColumnId: string) => void;
     onDragStateChange?: (isDragging: boolean) => void;
   }) => {
+    mocks.lastBoardData = data;
     mocks.boardOnColumnChange = onColumnChange;
     mocks.boardOnDragStateChange = onDragStateChange;
     return <div>Board</div>;
@@ -332,6 +336,7 @@ describe("App column change behavior", () => {
     mocks.reviewMutate.mockReset();
     mocks.updateTagsMutate.mockReset();
     mocks.candidateBoardConfig = createBoardConfig();
+    mocks.lastBoardData = undefined;
     mocks.workItems = [createWorkItem()];
     mocks.reviewWorkItems = [];
     mocks.githubReviewWorkItems = [];
@@ -609,6 +614,86 @@ describe("App column change behavior", () => {
     expect(mocks.startMutate).not.toHaveBeenCalled();
     expect(mocks.returnMutate).not.toHaveBeenCalled();
     expect(mocks.completeMutate).not.toHaveBeenCalled();
+  });
+
+  it("replaces the review tag with completed tag when moving a ui review item to Completed", async () => {
+    mocks.workItems = [];
+    mocks.uiReviewWorkItems = [createUiReviewWorkItem()];
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections, {
+        uiReviewTag: "UI Review",
+        uiReviewCompletedTag: "UI Review Completed",
+      });
+      collections.columns.insert({ id: "col-1", name: "In Progress", order: 0 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    act(() => {
+      mocks.boardOnColumnChange?.(-801, NEW_WORK_COLUMN_ID, COMPLETED_COLUMN_ID);
+    });
+
+    expect(mocks.updateTagsMutate).toHaveBeenCalledWith(
+      {
+        workItemId: 101,
+        addTags: ["UI Review Completed"],
+        removeTags: ["UI Review"],
+      },
+      expect.objectContaining({
+        onError: expect.any(Function),
+      }),
+    );
+    expect(mocks.startMutate).not.toHaveBeenCalled();
+    expect(mocks.returnMutate).not.toHaveBeenCalled();
+    expect(mocks.completeMutate).not.toHaveBeenCalled();
+  });
+
+  it("keeps a completed ui review item visible locally after its source tag disappears", async () => {
+    mocks.workItems = [];
+    const uiReviewItem = createUiReviewWorkItem();
+    mocks.uiReviewWorkItems = [uiReviewItem];
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections, {
+        uiReviewTag: "UI Review",
+        uiReviewCompletedTag: "UI Review Completed",
+      });
+      collections.columns.insert({ id: "col-1", name: "In Progress", order: 0 });
+      collections.assignments.insert({
+        id: "ui-review-assignment",
+        workItemId: uiReviewItem.id,
+        columnId: NEW_WORK_COLUMN_ID,
+        position: 1,
+      });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    act(() => {
+      collections.assignments.update("ui-review-assignment", (draft) => {
+        draft.columnId = COMPLETED_COLUMN_ID;
+      });
+      mocks.boardOnColumnChange?.(uiReviewItem.id, NEW_WORK_COLUMN_ID, COMPLETED_COLUMN_ID);
+    });
+
+    act(() => {
+      mocks.uiReviewWorkItems = [];
+    });
+
+    await waitFor(() => {
+      const completedItems = mocks.lastBoardData?.columnItems.get(COMPLETED_COLUMN_ID) ?? [];
+      expect(completedItems).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            assignment: expect.objectContaining({ workItemId: uiReviewItem.id }),
+            workItem: expect.objectContaining({ id: uiReviewItem.id }),
+          }),
+        ]),
+      );
+    });
   });
 
   it("does not call remote mutations for custom task moved to New Work", async () => {

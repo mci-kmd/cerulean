@@ -1013,7 +1013,7 @@ describe("HttpAdoClient", () => {
     const result = await client.updateWorkItemTags(42, ["UI"], ["UI Review"]);
 
     expect(capturedBody).toEqual([
-      { op: "add", path: "/fields/System.Tags", value: "Existing; UI" },
+      { op: "replace", path: "/fields/System.Tags", value: "Existing; UI" },
     ]);
     expect(result.id).toBe(42);
   });

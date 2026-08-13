@@ -140,6 +140,8 @@ function parseSettings(value: unknown): AdoSettings {
     areaPath: expectString(record, "areaPath", "Area path"),
     workItemTypes: expectString(record, "workItemTypes", "Work item types"),
     uiReviewTag: expectString(record, "uiReviewTag", "UI review tag"),
+    uiReviewCompletedTag:
+      expectOptionalString(record, "uiReviewCompletedTag", "UI review completed tag") ?? "",
     pollInterval: expectNumber(record, "pollInterval", "Poll interval"),
   };
 }

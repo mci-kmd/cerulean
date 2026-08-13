@@ -249,6 +249,23 @@ describe("SettingsDialog", () => {
     expect(settings?.uiReviewTag).toBe("UI Review");
   });
 
+  it("saves UI review completed tag to collection", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderWithProviders(
+      <SettingsDialog open={true} onOpenChange={() => {}} />,
+    );
+
+    await expandSection(user, "Source");
+    await user.type(
+      screen.getByLabelText("UI review completed tag"),
+      "  UI Review Completed  ",
+    );
+    await user.click(screen.getByText("Save"));
+
+    const settings = collections.settings.get("settings");
+    expect(settings?.uiReviewCompletedTag).toBe("UI Review Completed");
+  });
+
   it("clears legacy state query fields on save", async () => {
     const user = userEvent.setup();
     const collections = createTestCollections();

@@ -1032,7 +1032,7 @@ export class HttpAdoClient implements AdoClient {
         headers: this.patchHeaders(),
         body: JSON.stringify([
           {
-            op: "add",
+            op: "replace",
             path: "/fields/System.Tags",
             value: stringifyAdoTags(nextTags),
           },

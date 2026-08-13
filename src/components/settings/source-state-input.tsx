@@ -9,6 +9,7 @@ interface SourceStateInputProps {
   areaPath: string;
   workItemTypes: string;
   uiReviewTag: string;
+  uiReviewCompletedTag: string;
   pollInterval: number;
   onChange: (field: string, value: string | number) => void;
 }
@@ -21,6 +22,7 @@ export function SourceStateInput({
   areaPath,
   workItemTypes,
   uiReviewTag,
+  uiReviewCompletedTag,
   pollInterval,
   onChange,
 }: SourceStateInputProps) {
@@ -116,6 +118,18 @@ export function SourceStateInput({
         />
         <p className="text-xs text-muted-foreground">
           Optional. Matching work items show up as yellow virtual UI review cards in New Work.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="uiReviewCompletedTag">UI review completed tag</Label>
+        <Input
+          id="uiReviewCompletedTag"
+          value={uiReviewCompletedTag}
+          onChange={(e) => onChange("uiReviewCompletedTag", e.target.value)}
+          placeholder="UI Review Completed"
+        />
+        <p className="text-xs text-muted-foreground">
+          Optional. Added to the source work item when its virtual UI review card moves to Completed.
         </p>
       </div>
       <div className="space-y-2">
