@@ -1,6 +1,7 @@
 import type { AdoClient } from "@/api/ado-client";
 
 const REF_HEADS_PREFIX = "refs/heads/";
+const SEMANTIC_FLOW_BRANCH_PREFIX = "semantic-flow/";
 
 export interface AdoPullRequestCreateCandidate {
   repositoryId: string;
@@ -27,6 +28,15 @@ interface OpenAdoPullRequestCreateOptions extends FindAdoPullRequestCreateCandid
 
 export function getShortBranchName(refName: string): string {
   return refName.startsWith(REF_HEADS_PREFIX) ? refName.slice(REF_HEADS_PREFIX.length) : refName;
+}
+
+function matchesWorkItemBranch(branchName: string, workItemId: string): boolean {
+  if (branchName.startsWith(workItemId)) return true;
+
+  const semanticFlowPattern = new RegExp(
+    `^${SEMANTIC_FLOW_BRANCH_PREFIX}[A-Za-z]+${workItemId}-.*$`,
+  );
+  return semanticFlowPattern.test(branchName);
 }
 
 export function buildAdoPullRequestCreateUrl(
@@ -66,29 +76,34 @@ export async function findAdoPullRequestCreateCandidates({
       const targetRefName = repository.defaultBranch?.trim();
       if (!repositoryId || !repositoryName || !targetRefName) return [];
 
-      const refs = await client.listRefs(repositoryId, `heads/${branchPrefix}`);
+      const refs = (
+        await Promise.all([
+          client.listRefs(repositoryId, `heads/${branchPrefix}`),
+          client.listRefs(repositoryId, `heads/${SEMANTIC_FLOW_BRANCH_PREFIX}`),
+        ])
+      ).flat();
       return refs
         .filter((ref) => {
           const refName = ref.name.trim();
           if (!refName.startsWith(REF_HEADS_PREFIX)) return false;
-          return getShortBranchName(refName).startsWith(branchPrefix);
+          return matchesWorkItemBranch(getShortBranchName(refName), branchPrefix);
         })
         .map((ref) => ({
           repositoryId,
           repositoryName,
-           sourceRefName: ref.name.trim(),
-           sourceBranchName: getShortBranchName(ref.name.trim()),
-           targetRefName,
-           targetBranchName: getShortBranchName(targetRefName),
-           url: buildAdoPullRequestCreateUrl(
-             org,
-             project,
-             repositoryId,
-             repositoryName,
-             ref.name.trim(),
-             targetRefName,
-           ),
-         }));
+          sourceRefName: ref.name.trim(),
+          sourceBranchName: getShortBranchName(ref.name.trim()),
+          targetRefName,
+          targetBranchName: getShortBranchName(targetRefName),
+          url: buildAdoPullRequestCreateUrl(
+            org,
+            project,
+            repositoryId,
+            repositoryName,
+            ref.name.trim(),
+            targetRefName,
+          ),
+        }));
     }),
   );
 

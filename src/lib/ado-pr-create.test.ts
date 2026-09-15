@@ -72,6 +72,41 @@ describe("ado-pr-create", () => {
     expect(client.callLog).toContainEqual({ method: "listRepositories", args: [] });
     expect(client.callLog).toContainEqual({ method: "listRefs", args: ["repo-1", "heads/1234"] });
     expect(client.callLog).toContainEqual({ method: "listRefs", args: ["repo-2", "heads/1234"] });
+    expect(client.callLog).toContainEqual({
+      method: "listRefs",
+      args: ["repo-1", "heads/semantic-flow/"],
+    });
+    expect(client.callLog).toContainEqual({
+      method: "listRefs",
+      args: ["repo-2", "heads/semantic-flow/"],
+    });
+  });
+
+  it("finds semantic-flow branches with a letter prefix before the work item id", async () => {
+    const client = new MockAdoClient();
+    client.repositories = [
+      { id: "repo-1", name: "Repo A", defaultBranch: "refs/heads/main" },
+    ];
+    client.refs.set("repo-1", [
+      { name: "refs/heads/semantic-flow/us1234-fix-login" },
+      { name: "refs/heads/semantic-flow/bug1234-" },
+      { name: "refs/heads/semantic-flow/Feature1234/fix-login" },
+      { name: "refs/heads/semantic-flow/1234-missing-letter-prefix" },
+      { name: "refs/heads/semantic-flow/us12345-wrong-id" },
+      { name: "refs/heads/semantic-flow/us1234missing-hyphen" },
+    ]);
+
+    const candidates = await findAdoPullRequestCreateCandidates({
+      client,
+      org: "test-org",
+      project: "test-project",
+      workItemId: 1234,
+    });
+
+    expect(candidates.map((candidate) => candidate.sourceBranchName)).toEqual([
+      "semantic-flow/bug1234-",
+      "semantic-flow/us1234-fix-login",
+    ]);
   });
 
   it("copies the work item id, prompts when multiple branches match, and opens the selected PR page", async () => {
