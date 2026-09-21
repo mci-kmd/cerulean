@@ -1,6 +1,6 @@
 import { Inbox, Plus } from "lucide-react";
 import { useDroppable } from "@dnd-kit/react";
-import { BoardCard } from "./board-card";
+import { BoardColumnItems } from "./board-column-items";
 import { NEW_WORK_COLUMN_ID } from "@/constants/board-columns";
 import type { ColumnAssignment, WorkItem } from "@/types/board";
 
@@ -47,19 +47,7 @@ export function NewWorkColumn({
         </div>
       </div>
       <div ref={ref} className="flex-1 px-2 pb-2 overflow-y-auto space-y-2 min-h-[100px]">
-        {boardCards.map((item, index) => (
-          <BoardCard
-            key={item.assignment.id}
-            workItem={item.workItem}
-            assignmentId={item.assignment.id}
-            statusMessage={item.assignment.statusMessage}
-            mockupUrl={item.assignment.mockupUrl}
-            discussionUrl={item.assignment.discussionUrl}
-            candidateOptOut={item.assignment.candidateOptOut}
-            index={index}
-            columnId={NEW_WORK_COLUMN_ID}
-          />
-        ))}
+        <BoardColumnItems items={boardCards} columnId={NEW_WORK_COLUMN_ID} />
         {isLoadingCandidates && boardCards.length === 0 ? (
           Array.from({ length: 3 }).map((_, i) => (
             <div

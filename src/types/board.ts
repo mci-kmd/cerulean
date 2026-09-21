@@ -108,6 +108,10 @@ export interface PullRequestMergedReleaseDetail {
 export interface UiReviewWorkItem {
   sourceWorkItemId: number;
   reviewTag: string;
+  parentFeature?: {
+    id: number;
+    title: string;
+  };
 }
 
 export interface WorkItem {

@@ -130,6 +130,57 @@ describe("Board drag safety", () => {
     expect(updateSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("rejects same-column drops for UI review cards in a Feature stack", () => {
+    const collections = createTestCollections();
+    const feature = { id: 500, title: "Authentication" };
+    const assignments: ColumnAssignment[] = [
+      { id: "ui-1", workItemId: -1, columnId: "col-1", position: 0 },
+      { id: "ui-2", workItemId: -2, columnId: "col-1", position: 1 },
+    ];
+    const workItems = assignments.map((assignment, index) =>
+      createWorkItem({
+        id: assignment.workItemId,
+        title: `UI review ${index + 1}`,
+        kind: "ui-review",
+        uiReview: {
+          sourceWorkItemId: index + 1,
+          reviewTag: "UI Review",
+          parentFeature: feature,
+        },
+      }),
+    );
+    const data: BoardData = {
+      columns: [{ id: "col-1", name: "First", order: 0 }],
+      assignments,
+      settings: null,
+      columnItems: new Map([
+        [
+          "col-1",
+          assignments.map((assignment, index) => ({
+            assignment,
+            workItem: workItems[index],
+          })),
+        ],
+      ]),
+    };
+    assignments.forEach((assignment) => collections.assignments.insert(assignment));
+    const updateSpy = vi.spyOn(collections.assignments, "update");
+
+    renderWithProviders(<Board data={data} />, { collections });
+    act(() => {
+      dragMocks.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: { id: "ui-1" },
+          target: { id: "ui-2", group: "col-1", index: 1 },
+        },
+      });
+    });
+    vi.runAllTimers();
+
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
   it("does not crash when assignment is removed before deferred update", () => {
     const collections = createTestCollections();
     const { data, assignment } = createData();

@@ -129,6 +129,24 @@ export function Board({
     return map;
   }, [renderColumnItems]);
 
+  const groupedUiReviewAssignmentIds = useMemo(() => {
+    const groupedIds = new Set<string>();
+    for (const items of renderColumnItems.values()) {
+      const assignmentsByFeature = new Map<number, string[]>();
+      for (const item of items) {
+        const featureId = item.workItem?.uiReview?.parentFeature?.id;
+        if (typeof featureId !== "number") continue;
+        const ids = assignmentsByFeature.get(featureId) ?? [];
+        ids.push(item.assignment.id);
+        assignmentsByFeature.set(featureId, ids);
+      }
+      for (const ids of assignmentsByFeature.values()) {
+        if (ids.length > 1) ids.forEach((id) => groupedIds.add(id));
+      }
+    }
+    return groupedIds;
+  }, [renderColumnItems]);
+
   const trackDndRendering = useCallback((_: unknown, manager?: DragEndManager) => {
     setDndRenderSettledResolver(() =>
       resolveDndManagerSettled(manager as DndManagerLike | undefined),
@@ -210,6 +228,12 @@ export function Board({
           assignmentsCol.get(sourceId) ??
           data.assignments.find((a) => a.id === sourceId);
         if (!sourceAssignment) return;
+        if (
+          groupedUiReviewAssignmentIds.has(sourceId) &&
+          sourceAssignment.columnId === targetColumnId
+        ) {
+          return;
+        }
 
         const targetItems = renderColumnItems.get(targetColumnId) ?? [];
         const targetAssignments = targetItems
@@ -290,6 +314,7 @@ export function Board({
     [
       data.assignments,
       renderColumnItems,
+      groupedUiReviewAssignmentIds,
       assignmentsCol,
       onColumnChange,
       trackDndRendering,

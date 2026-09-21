@@ -1241,6 +1241,7 @@ describe("fetchUiReviewWorkItems", () => {
           "System.State": "Active",
           "System.Rev": 2,
           "System.Tags": "Backend; UI Review",
+          "System.Parent": 100,
         },
       }),
       createAdoWorkItem({
@@ -1265,6 +1266,16 @@ describe("fetchUiReviewWorkItems", () => {
           "System.Tags": "UI Review",
         },
       }),
+      createAdoWorkItem({
+        id: 100,
+        fields: {
+          "System.Id": 100,
+          "System.Title": "Authentication",
+          "System.WorkItemType": "Feature",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+      }),
     ];
 
     const result = await fetchUiReviewWorkItems(
@@ -1286,7 +1297,15 @@ describe("fetchUiReviewWorkItems", () => {
       uiReview: {
         sourceWorkItemId: 51,
         reviewTag: "UI Review",
+        parentFeature: {
+          id: 100,
+          title: "Authentication",
+        },
       },
+    });
+    expect(client.callLog).toContainEqual({
+      method: "batchGetWorkItems",
+      args: [[100], ["System.Id", "System.Title", "System.WorkItemType"]],
     });
     expect(result[0]?.id).toBeLessThan(0);
     expect(result[0]?.url).toBe("https://dev.azure.com/test-org/test-project/_workitems/edit/51");

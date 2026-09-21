@@ -1,6 +1,6 @@
 import { CheckCircle2, Plus } from "lucide-react";
 import { useDroppable } from "@dnd-kit/react";
-import { BoardCard } from "./board-card";
+import { BoardColumnItems } from "./board-column-items";
 import type { WorkItem, ColumnAssignment } from "@/types/board";
 
 export type ColumnVariant = "default" | "completed";
@@ -57,21 +57,13 @@ export function BoardColumn({ id, name, items, onAddTask, variant = "default" }:
         </div>
       </div>
       <div ref={ref} className="flex-1 px-2 pb-2 overflow-y-auto space-y-2 min-h-[100px]">
-        {items.map((item, index) =>
-          item.workItem ? (
-            <BoardCard
-              key={item.assignment.id}
-              workItem={item.workItem}
-              assignmentId={item.assignment.id}
-              statusMessage={item.assignment.statusMessage}
-              mockupUrl={item.assignment.mockupUrl}
-              discussionUrl={item.assignment.discussionUrl}
-              candidateOptOut={item.assignment.candidateOptOut}
-              index={index}
-              columnId={id}
-            />
-          ) : null,
-        )}
+        <BoardColumnItems
+          items={items.filter(
+            (item): item is { assignment: ColumnAssignment; workItem: WorkItem } =>
+              item.workItem !== undefined,
+          )}
+          columnId={id}
+        />
       </div>
     </div>
   );

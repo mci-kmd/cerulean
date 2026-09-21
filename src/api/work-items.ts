@@ -147,6 +147,12 @@ const WORK_ITEM_DETAIL_FIELDS = [
   "System.AssignedTo",
   "System.Rev",
 ];
+const UI_REVIEW_WORK_ITEM_FIELDS = [...WORK_ITEM_DETAIL_FIELDS, "System.Parent"];
+const PARENT_WORK_ITEM_FIELDS = [
+  "System.Id",
+  "System.Title",
+  "System.WorkItemType",
+];
 
 function getWorkItemDetailFields(boardConfig?: CandidateBoardConfig): string[] {
   if (!boardConfig) return WORK_ITEM_DETAIL_FIELDS;
@@ -199,6 +205,7 @@ function mapUiReviewWorkItem(
   org: string,
   project: string,
   reviewTag: string,
+  parentFeatures: Map<number, { id: number; title: string }>,
 ): WorkItem | null {
   const mapped = mapAdoWorkItem(item, org, project);
   if (isRemovedState(mapped.state)) {
@@ -209,6 +216,9 @@ function mapUiReviewWorkItem(
   if (!hasAdoTag(tags, reviewTag)) {
     return null;
   }
+  const parentId = item.fields["System.Parent"];
+  const parentFeature =
+    typeof parentId === "number" ? parentFeatures.get(parentId) : undefined;
 
   return {
     id: createUiReviewWorkItemId(mapped.id),
@@ -222,6 +232,7 @@ function mapUiReviewWorkItem(
     uiReview: {
       sourceWorkItemId: mapped.id,
       reviewTag,
+      ...(parentFeature ? { parentFeature } : {}),
     },
   };
 }
@@ -1638,9 +1649,42 @@ export async function fetchUiReviewWorkItems(
     return [];
   }
 
-  const adoItems = await client.batchGetWorkItems(ids, getWorkItemDetailFields());
+  const adoItems = await client.batchGetWorkItems(ids, UI_REVIEW_WORK_ITEM_FIELDS);
+  const parentIds = [
+    ...new Set(
+      adoItems
+        .map((item) => item.fields["System.Parent"])
+        .filter((id): id is number => typeof id === "number"),
+    ),
+  ];
+  const parentItems =
+    parentIds.length > 0
+      ? await client.batchGetWorkItems(parentIds, PARENT_WORK_ITEM_FIELDS)
+      : [];
+  const parentFeatures = new Map(
+    parentItems
+      .filter(
+        (item) =>
+          item.fields["System.WorkItemType"].trim().toLowerCase() === "feature",
+      )
+      .map((item) => [
+        item.fields["System.Id"],
+        {
+          id: item.fields["System.Id"],
+          title: item.fields["System.Title"],
+        },
+      ]),
+  );
   return adoItems
-    .map((item) => mapUiReviewWorkItem(item, org, project, normalizedReviewTag))
+    .map((item) =>
+      mapUiReviewWorkItem(
+        item,
+        org,
+        project,
+        normalizedReviewTag,
+        parentFeatures,
+      ),
+    )
     .filter((item): item is WorkItem => item !== null);
 }
 
