@@ -5,6 +5,12 @@ import { fetchWorkItemsDelta, fetchWorkItemsInitial, type FetchResult } from "@/
 import type { CandidateBoardConfig } from "@/lib/ado-board";
 import type { WorkItem } from "@/types/board";
 
+interface DeltaCache {
+  key: string;
+  revMap: Map<number, { rev: number }>;
+  items: WorkItem[];
+}
+
 interface UseAssignedBoardWorkItemsResult {
   workItems: WorkItem[];
   completedWorkItems: WorkItem[];
@@ -26,19 +32,30 @@ export function useAssignedBoardWorkItems(
   approvalBoardColumn?: string,
   boardConfig?: CandidateBoardConfig,
 ): UseAssignedBoardWorkItemsResult {
-  const revMapRef = useRef<Map<number, { rev: number }>>(new Map());
-  const cachedItemsRef = useRef<WorkItem[]>([]);
-  const initializedRef = useRef(false);
+  const deltaCacheRef = useRef<DeltaCache | null>(null);
   const sourceColumn = sourceBoardColumn?.trim() ?? "";
   const approvalColumn = approvalBoardColumn?.trim() ?? "";
   const hasBoardColumns = sourceColumn.length > 0 || approvalColumn.length > 0;
+  const queryKey = [
+    "work-items",
+    org,
+    project,
+    "assigned-board",
+    sourceColumn,
+    approvalColumn,
+    boardKey(boardConfig),
+    areaPath,
+    workItemTypes,
+  ];
+  const cacheKey = JSON.stringify(queryKey);
 
   const fetchFn = useCallback(async (): Promise<FetchResult> => {
     if (!client) return { workItems: [], revMap: new Map() };
     const boardColumnNames = getBoardColumnNames(sourceColumn, approvalColumn);
+    const cache = deltaCacheRef.current;
 
     let result: FetchResult;
-    if (!initializedRef.current) {
+    if (!cache || cache.key !== cacheKey) {
       result = await fetchWorkItemsInitial(
         client,
         "",
@@ -49,15 +66,14 @@ export function useAssignedBoardWorkItems(
         boardConfig,
         boardColumnNames,
       );
-      initializedRef.current = true;
     } else {
       result = await fetchWorkItemsDelta(
         client,
         "",
         org,
         project,
-        revMapRef.current,
-        cachedItemsRef.current,
+        cache.revMap,
+        cache.items,
         areaPath,
         workItemTypes,
         boardConfig,
@@ -65,25 +81,19 @@ export function useAssignedBoardWorkItems(
       );
     }
 
-    revMapRef.current = result.revMap;
-    cachedItemsRef.current = result.workItems;
+    deltaCacheRef.current = {
+      key: cacheKey,
+      revMap: result.revMap,
+      items: result.workItems,
+    };
     return result;
-  }, [approvalColumn, areaPath, boardConfig, client, org, project, sourceColumn, workItemTypes]);
+  }, [approvalColumn, areaPath, boardConfig, cacheKey, client, org, project, sourceColumn, workItemTypes]);
 
+  const enabled = !!client && !!boardConfig && hasBoardColumns;
   const query = useQuery({
-    queryKey: [
-      "work-items",
-      org,
-      project,
-      "assigned-board",
-      sourceColumn,
-      approvalColumn,
-      boardKey(boardConfig),
-      areaPath,
-      workItemTypes,
-    ],
+    queryKey,
     queryFn: fetchFn,
-    enabled: !!client && !!boardConfig && hasBoardColumns,
+    enabled,
     refetchInterval: pollInterval * 1000,
     refetchIntervalInBackground: false,
   });

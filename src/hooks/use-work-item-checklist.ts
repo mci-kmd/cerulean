@@ -29,12 +29,11 @@ export function useWorkItemChecklist(workItemId: number) {
   }
 
   function toggleItem(id: string) {
-    const item = allItems.find((entry) => entry.id === id);
-    if (!item) return;
+    if (!boardChecklist.get(id)) return;
     scheduleDndMutation(() => {
       if (!boardChecklist.get(id)) return;
       boardChecklist.update(id, (draft) => {
-        draft.checked = !item.checked;
+        draft.checked = !draft.checked;
       });
     });
   }

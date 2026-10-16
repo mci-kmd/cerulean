@@ -509,6 +509,71 @@ describe("fetchWorkItemsInitial", () => {
     ).toHaveLength(1);
   });
 
+  it("ignores releases from other pipelines with the same build number", async () => {
+    const client = new MockAdoClient();
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with ambiguous release",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f127",
+            attributes: { name: "Pull Request" },
+          },
+        ],
+      }),
+    ];
+    client.pullRequests.set("repo-1/127", {
+      pullRequestId: 127,
+      title: "Ambiguous release",
+      status: "completed",
+      mergeStatus: "succeeded",
+      reviewers: [{ isRequired: true, vote: 10 }],
+    });
+    client.builds = [
+      {
+        id: 907,
+        buildNumber: "#20260324.4 • Merged PR 127: Ambiguous release",
+        status: "completed",
+        result: "succeeded",
+        sourceBranch: "refs/heads/master",
+        definition: { id: 13, name: "CI" },
+      },
+    ];
+    client.releases = [
+      {
+        id: 92,
+        name: "Release-92",
+        artifacts: [
+          {
+            type: "Build",
+            definitionReference: {
+              definition: { id: "77", name: "Other pipeline" },
+              version: { id: "5555", name: "20260324.4" },
+            },
+          },
+        ],
+        environments: [{ id: 9, name: "DEV", status: "succeeded" }],
+        webAccessUri: "https://dev.azure.com/org/proj/_release?releaseId=92&_a=release-summary",
+      },
+    ];
+
+    const result = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+
+    const summary = result.workItems[0].relatedPullRequests?.[0].mergedReleaseSummary;
+    expect(summary?.releases).toEqual([
+      { pipeline: "CI", buildId: "20260324.4", status: "No release" },
+    ]);
+  });
+
   it("keeps only the newest merged build status per pipeline when retries exist", async () => {
     const client = new MockAdoClient();
     client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
@@ -1219,6 +1284,89 @@ describe("fetchWorkItemsInitial", () => {
       id: "123",
       label: "PR #123",
     });
+    expect(
+      client.callLog.filter((call) => call.method === "getPullRequest"),
+    ).toHaveLength(1);
+  });
+
+  it("keeps enriching other pull requests when one lookup returns 404", async () => {
+    const client = new MockAdoClient();
+    client.pullRequestErrors.set(
+      "repo-1/123",
+      new Error("ADO get pull request failed: 404"),
+    );
+    client.pullRequests.set("repo-1/456", {
+      pullRequestId: 456,
+      title: "Still visible",
+      status: "active",
+    });
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story with a deleted PR",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f123",
+            attributes: { name: "Pull Request" },
+          },
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f456",
+            attributes: { name: "Pull Request" },
+          },
+        ],
+      }),
+    ];
+
+    const first = await fetchWorkItemsInitial(client, "Active", "org", "proj");
+    await fetchWorkItemsInitial(client, "Active", "org", "proj");
+
+    expect(
+      first.workItems[0].relatedPullRequests?.find((pr) => pr.id === "456"),
+    ).toMatchObject({ title: "Still visible" });
+    expect(
+      client.callLog.filter((call) => call.method === "getPullRequest"),
+    ).toHaveLength(4);
+  });
+
+  it("stops pull request enrichment after an auth failure", async () => {
+    const client = new MockAdoClient();
+    client.pullRequestErrors.set(
+      "repo-1/123",
+      new Error("ADO get pull request failed: 401"),
+    );
+    client.wiqlResult = { workItems: [{ id: 1, url: "" }] };
+    client.workItems = [
+      createAdoWorkItem({
+        id: 1,
+        fields: {
+          "System.Id": 1,
+          "System.Title": "Story without PR access",
+          "System.WorkItemType": "User Story",
+          "System.State": "Active",
+          "System.Rev": 1,
+        },
+        relations: [
+          {
+            rel: "ArtifactLink",
+            url: "vstfs:///Git/PullRequestId/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee%2frepo-1%2f123",
+            attributes: { name: "Pull Request" },
+          },
+        ],
+      }),
+    ];
+
+    await fetchWorkItemsInitial(client, "Active", "org", "proj");
+    await fetchWorkItemsInitial(client, "Active", "org", "proj");
+
     expect(
       client.callLog.filter((call) => call.method === "getPullRequest"),
     ).toHaveLength(1);
@@ -2124,6 +2272,40 @@ describe("fetchReviewWorkItems", () => {
       unresolvedCommentCount: 1,
     });
     expect(result.newWorkIds.has(newReview!.id)).toBe(true);
+  });
+
+  it("treats approve-with-suggestions votes as completed reviews", async () => {
+    const client = new MockAdoClient();
+    client.myEmail = "me@test.com";
+    client.myUserId = "me-id";
+    client.pullRequests.set("repo-1/7101", {
+      pullRequestId: 7101,
+      title: "Suggestions",
+      status: "active",
+      createdBy: { id: "other-id", uniqueName: "other@test.com" },
+      repository: { id: "repo-1", project: { id: "proj-1" } },
+      reviewers: [{ id: "me-id", uniqueName: "me@test.com", vote: 5 }],
+    });
+    client.pullRequestWorkItems.set("repo-1/7101", [{ id: "51", url: "" }]);
+    client.workItems = [
+      createAdoWorkItem({
+        id: 51,
+        fields: {
+          "System.Id": 51,
+          "System.Title": "Suggested item",
+          "System.WorkItemType": "Bug",
+          "System.State": "Active",
+          "System.AreaPath": "Area\\Team",
+          "System.Rev": 1,
+        },
+      }),
+    ];
+
+    const result = await fetchReviewWorkItems(client, "org", "proj", "Area", "Bug");
+
+    expect(result.workItems).toHaveLength(1);
+    expect(result.workItems[0].review?.reviewState).toBe("completed");
+    expect(result.completedIds.has(result.workItems[0].id)).toBe(true);
   });
 
   it("filters review items by area path and configured work item types", async () => {

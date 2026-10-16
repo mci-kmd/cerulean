@@ -161,6 +161,36 @@ describe("DemoView", () => {
     });
   });
 
+  it("keeps an item approved when unapprove has no mapped target state", async () => {
+    const user = userEvent.setup();
+    setupHandlers([
+      createAdoWorkItem({
+        id: 40,
+        fields: {
+          "System.Id": 40,
+          "System.Title": "Unmapped task",
+          "System.WorkItemType": "Task",
+          "System.State": "Resolved",
+          "System.Rev": 1,
+        },
+      }),
+    ]);
+
+    renderWithProviders(<DemoView client={getClient()} {...defaultProps} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Unmapped task")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Unmapped task"));
+    await user.click(screen.getByRole("button", { name: "Approve" }));
+    await user.click(await screen.findByLabelText("Approved: Unmapped task"));
+    await user.click(await screen.findByText("Unapprove"));
+
+    expect(screen.queryByText("Pending Review")).not.toBeInTheDocument();
+    expect(screen.getByText("Approved")).toBeInTheDocument();
+  });
+
   it("closes last pending user story without crashing", async () => {
     const user = userEvent.setup();
     setupHandlers([

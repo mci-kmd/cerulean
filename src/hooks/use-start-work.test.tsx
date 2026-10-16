@@ -191,6 +191,30 @@ describe("useStartWork", () => {
     expect(result.current.error?.message).toBe("No ADO client");
   });
 
+  it("restores candidate queries with longer keys when the mutation fails", async () => {
+    const candidates = [
+      {
+        id: 42,
+        title: "Work Item 42",
+        type: "User Story",
+        state: "New",
+        rev: 1,
+        url: "https://example.test/item/42",
+      },
+    ];
+    queryClient.setQueryData(["candidates", "org", "proj", "New"], candidates);
+    client.shouldFail = true;
+
+    const { result } = renderHook(() => useStartWork(client), { wrapper });
+
+    act(() => {
+      result.current.mutate({ workItemId: 42, targetState: "Active" });
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(queryClient.getQueryData(["candidates", "org", "proj", "New"])).toEqual(candidates);
+  });
+
   it("keeps candidate query data when optimistic removal is disabled", async () => {
     queryClient.setQueryData(["candidates", "org", "proj", "New"], [
       {

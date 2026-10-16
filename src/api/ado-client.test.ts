@@ -380,6 +380,7 @@ describe("HttpAdoClient", () => {
     expect(capturedBodies).toHaveLength(2);
     expect(capturedBodies).toContainEqual({
       ids: [1, 2],
+      errorPolicy: "Omit",
       fields: [
         "System.Id",
         "System.Title",
@@ -392,12 +393,37 @@ describe("HttpAdoClient", () => {
     expect(capturedBodies).toContainEqual({
       ids: [1, 2],
       $expand: "Relations",
+      errorPolicy: "Omit",
     });
   });
 
   it("returns empty array for empty ids", async () => {
     const items = await client.batchGetWorkItems([]);
     expect(items).toEqual([]);
+  });
+
+  it("drops work items omitted by the batch error policy", async () => {
+    server.use(
+      http.post(`${BASE}/_apis/wit/workitemsbatch`, async ({ request }) => {
+        const body = await request.json() as { ids: number[] };
+        return HttpResponse.json({
+          count: body.ids.length,
+          value: body.ids.map((id) =>
+            id === 2
+              ? null
+              : {
+                  id,
+                  rev: 1,
+                  fields: { "System.Id": id, "System.Rev": 1 },
+                  url: `${BASE}/_apis/wit/workItems/${id}`,
+                },
+          ),
+        });
+      }),
+    );
+
+    const items = await client.batchGetWorkItems([1, 2, 3]);
+    expect(items.map((item) => item.id)).toEqual([1, 3]);
   });
 
   it("never sends fields with expand in the same batch request", async () => {
@@ -457,6 +483,7 @@ describe("HttpAdoClient", () => {
     expect(capturedBodies.every((body) => !(body.$expand && body.fields))).toBe(true);
     expect(capturedBodies).toContainEqual({
       ids: [7],
+      errorPolicy: "Omit",
       fields: [
         "System.Id",
         "System.Title",
@@ -469,6 +496,7 @@ describe("HttpAdoClient", () => {
     expect(capturedBodies).toContainEqual({
       ids: [7],
       $expand: "Relations",
+      errorPolicy: "Omit",
     });
   });
 
@@ -1156,6 +1184,49 @@ describe("HttpAdoClient", () => {
       );
 
       await expect(client.startWorkItem(99, "Active")).rejects.toThrow(WorkItemAlreadyAssignedError);
+    });
+
+    it("treats an assignee email differing only by case as the current user", async () => {
+      const freshClient = new HttpAdoClient({
+        pat: "test-pat",
+        org: "test-org",
+        project: "test-project",
+      });
+      let patched = false;
+      server.use(
+        http.get("https://dev.azure.com/test-org/_apis/connectiondata*", () => {
+          return HttpResponse.json({
+            authenticatedUser: {
+              properties: { Account: { $value: "user@test.com" } },
+            },
+          });
+        }),
+        http.post(`${BASE}/_apis/wit/workitemsbatch`, () => {
+          return HttpResponse.json({
+            count: 1,
+            value: [{
+              id: 99, rev: 1,
+              fields: {
+                "System.Id": 99, "System.State": "New", "System.Rev": 1,
+                "System.AssignedTo": { displayName: "Me", uniqueName: "User@Test.com" },
+              },
+              url: `${BASE}/_apis/wit/workItems/99`,
+            }],
+          });
+        }),
+        http.patch(`${BASE}/_apis/wit/workitems/99`, () => {
+          patched = true;
+          return HttpResponse.json({
+            id: 99,
+            rev: 2,
+            fields: { "System.Id": 99, "System.State": "Active" },
+            url: `${BASE}/_apis/wit/workItems/99`,
+          });
+        }),
+      );
+
+      await expect(freshClient.startWorkItem(99, "Active")).resolves.toMatchObject({ id: 99 });
+      expect(patched).toBe(true);
     });
   });
 

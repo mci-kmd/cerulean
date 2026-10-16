@@ -132,6 +132,30 @@ describe("RetroPrepView", () => {
     );
   });
 
+  it("does not keep retrying automatic preparation after a failure", async () => {
+    const client = new MockAdoClient();
+    client.shouldFail = true;
+
+    renderWithProviders(
+      <RetroPrepView
+        client={client}
+        org="test-org"
+        project="test-project"
+        repositoryId="retro-repo"
+        branchName="main"
+        folder="retros"
+        filenamePattern="{date}.md"
+        today={new Date(2026, 2, 23)}
+      />,
+    );
+
+    await waitFor(() => expect(client.callLog.length).toBeGreaterThan(0));
+    const callsAfterFirstAttempt = client.callLog.length;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    expect(client.callLog.length).toBe(callsAfterFirstAttempt);
+  });
+
   it("updates the markdown draft while editing", async () => {
     const user = userEvent.setup();
     const client = new MockAdoClient();

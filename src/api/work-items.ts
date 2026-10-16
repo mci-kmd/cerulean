@@ -42,6 +42,31 @@ const MASTER_BRANCH_NAME = "refs/heads/master";
 const MERGED_PR_BUILD_FETCH_LIMIT = 200;
 const RECENT_RELEASE_FETCH_LIMIT = 100;
 
+/**
+ * Lookups are disabled for the client only on auth failures or network/CORS errors, which
+ * will keep failing. HTTP errors like 404/5xx are specific to one resource or transient.
+ */
+function markLookupUnavailableOnPersistentError(
+  unavailableClients: WeakSet<AdoClient>,
+  client: AdoClient,
+  error: unknown,
+): void {
+  const status = getLookupErrorStatus(error);
+  if (status === undefined || status === 401 || status === 403) {
+    unavailableClients.add(client);
+  }
+}
+
+function getLookupErrorStatus(error: unknown): number | undefined {
+  if (typeof error === "object" && error !== null) {
+    const status = Reflect.get(error, "status");
+    if (typeof status === "number") return status;
+  }
+  const message = error instanceof Error ? error.message : undefined;
+  const match = message?.match(/failed: (\d{3})\b/);
+  return match ? Number(match[1]) : undefined;
+}
+
 function isPullRequestRelation(relation: AdoWorkItemRelation): boolean {
   const name = relation.attributes?.name;
   if (typeof name === "string" && /pull request/i.test(name)) {
@@ -458,8 +483,8 @@ async function getMergedPullRequestBuildData(
     }
 
     return { summaries, successfulBuilds };
-  } catch {
-    prBuildLookupUnavailableClients.add(client);
+  } catch (error) {
+    markLookupUnavailableOnPersistentError(prBuildLookupUnavailableClients, client, error);
     return {
       summaries: new Map(),
       successfulBuilds: new Map(),
@@ -543,7 +568,7 @@ function getBuildReleaseMatchTokens(build: AdoBuild): Set<string> {
   return tokens;
 }
 
-function getReleaseArtifactMatchTokens(release: AdoRelease): Set<string> {
+function getReleaseArtifactMatchTokens(release: AdoRelease, build: AdoBuild): Set<string> {
   const tokens = new Set<string>();
   const addToken = (value?: string) => {
     const trimmed = value?.trim();
@@ -554,12 +579,21 @@ function getReleaseArtifactMatchTokens(release: AdoRelease): Set<string> {
     }
   };
 
+  const buildDefinitionId = build.definition?.id;
   for (const artifact of release.artifacts ?? []) {
     if (artifact.type?.trim().toLowerCase() !== "build") continue;
-    for (const reference of Object.values(artifact.definitionReference ?? {})) {
-      addToken(reference.id);
-      addToken(reference.name);
+    const references = artifact.definitionReference ?? {};
+    // Build numbers are only unique per pipeline, so skip artifacts from other pipelines.
+    const artifactDefinitionId = references.definition?.id?.trim();
+    if (
+      artifactDefinitionId &&
+      buildDefinitionId !== undefined &&
+      artifactDefinitionId !== String(buildDefinitionId)
+    ) {
+      continue;
     }
+    addToken(references.version?.id);
+    addToken(references.version?.name);
   }
 
   return tokens;
@@ -568,7 +602,7 @@ function getReleaseArtifactMatchTokens(release: AdoRelease): Set<string> {
 function isReleaseMatchedToBuild(release: AdoRelease, build: AdoBuild): boolean {
   const buildTokens = getBuildReleaseMatchTokens(build);
   if (buildTokens.size === 0) return false;
-  const releaseTokens = getReleaseArtifactMatchTokens(release);
+  const releaseTokens = getReleaseArtifactMatchTokens(release, build);
   for (const token of buildTokens) {
     if (releaseTokens.has(token)) {
       return true;
@@ -673,8 +707,8 @@ async function getMergedPullRequestReleaseSummaries(
     }
 
     return { summaries, available: true };
-  } catch {
-    prReleaseLookupUnavailableClients.add(client);
+  } catch (error) {
+    markLookupUnavailableOnPersistentError(prReleaseLookupUnavailableClients, client, error);
     return { summaries: new Map(), available: false };
   }
 }
@@ -799,7 +833,7 @@ function getPullRequestReviewState(
       candidate.isContainer !== true && matchesCurrentUserIdentity(candidate, currentUser),
   );
   if (!reviewer) return "new";
-  return reviewer.vote === 10 ? "completed" : "active";
+  return typeof reviewer.vote === "number" && reviewer.vote >= 5 ? "completed" : "active";
 }
 
 function isFailingPolicyStatus(status?: string): boolean {
@@ -860,8 +894,8 @@ async function getPullRequestPoliciesSafe(
   if (prPolicyLookupUnavailableClients.has(client)) return [];
   try {
     return await client.getPullRequestPolicyEvaluations(artifactId);
-  } catch {
-    prPolicyLookupUnavailableClients.add(client);
+  } catch (error) {
+    markLookupUnavailableOnPersistentError(prPolicyLookupUnavailableClients, client, error);
     return [];
   }
 }
@@ -887,8 +921,8 @@ async function getPullRequestUnresolvedCommentCountSafe(
   try {
     const threads = await client.getPullRequestThreads(repositoryId, pullRequestId);
     return getUnresolvedCommentCount(threads);
-  } catch {
-    prThreadsLookupUnavailableClients.add(client);
+  } catch (error) {
+    markLookupUnavailableOnPersistentError(prThreadsLookupUnavailableClients, client, error);
     return undefined;
   }
 }
@@ -1131,9 +1165,9 @@ async function enrichPullRequestDetails(
   try {
     const firstPr = await client.getPullRequest(firstRef.repositoryId, firstRef.pullRequestId);
     detailsByKey.set(firstKey, await loadPullRequestDetails(client, firstRef, firstPr, options));
-  } catch {
-    prLookupUnavailableClients.add(client);
-    return workItems;
+  } catch (error) {
+    markLookupUnavailableOnPersistentError(prLookupUnavailableClients, client, error);
+    if (prLookupUnavailableClients.has(client)) return workItems;
   }
 
   const remaining = refs.slice(1);
@@ -1147,16 +1181,12 @@ async function enrichPullRequestDetails(
         ] as const;
       }),
     );
-    let hadLookupFailure = false;
     for (const result of remainingResults) {
       if (result.status === "rejected") {
-        hadLookupFailure = true;
+        markLookupUnavailableOnPersistentError(prLookupUnavailableClients, client, result.reason);
         continue;
       }
       detailsByKey.set(result.value[0], result.value[1]);
-    }
-    if (hadLookupFailure) {
-      prLookupUnavailableClients.add(client);
     }
   }
 

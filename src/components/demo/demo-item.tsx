@@ -74,7 +74,15 @@ export function DemoItem({
       <div
         className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/30 cursor-pointer hover:bg-muted/50 transition-colors"
         onClick={onSelect}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onSelect();
+          }
+        }}
         role="button"
+        tabIndex={0}
         aria-label={`Approved: ${item.title}`}
       >
         <Check className="h-4 w-4 text-emerald-500 shrink-0" />

@@ -116,6 +116,27 @@ describe("SettingsDialog", () => {
     expect(settings?.org).toBe("my-org");
   });
 
+  it("moves cards from deleted columns into the first remaining column", async () => {
+    const user = userEvent.setup();
+    const collections = createTestCollections();
+    collections.columns.insert({ id: "col-a", name: "Doing", order: 0 });
+    collections.columns.insert({ id: "col-b", name: "Review", order: 1 });
+    collections.assignments.insert({ id: "as-1", workItemId: 1, columnId: "col-a", position: 3 });
+    collections.assignments.insert({ id: "as-2", workItemId: 2, columnId: "col-b", position: 1 });
+    collections.assignments.insert({ id: "as-3", workItemId: 3, columnId: "col-b", position: 2 });
+
+    renderWithProviders(<SettingsDialog open={true} onOpenChange={() => {}} />, { collections });
+
+    await expandSection(user, "Board Columns");
+    await user.click(await screen.findByRole("button", { name: "Remove column Review" }));
+    await user.click(screen.getByText("Save"));
+
+    expect(collections.columns.get("col-b")).toBeUndefined();
+    expect(collections.assignments.get("as-1")).toMatchObject({ columnId: "col-a", position: 3 });
+    expect(collections.assignments.get("as-2")).toMatchObject({ columnId: "col-a", position: 4 });
+    expect(collections.assignments.get("as-3")).toMatchObject({ columnId: "col-a", position: 5 });
+  });
+
   it("saves team to collection", async () => {
     const user = userEvent.setup();
     const { collections } = renderWithProviders(

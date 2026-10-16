@@ -41,6 +41,7 @@ export class MockAdoClient implements AdoClient {
   public releases: AdoRelease[] = [];
   public releasesByBuildId = new Map<string, AdoRelease[]>();
   public pullRequests = new Map<string, AdoPullRequest>();
+  public pullRequestErrors = new Map<string, Error>();
   public pullRequestWorkItems = new Map<string, AdoResourceRef[]>();
   public pullRequestStatuses = new Map<string, AdoPullRequestStatus[]>();
   public pullRequestThreads = new Map<string, AdoPullRequestThread[]>();
@@ -230,6 +231,8 @@ export class MockAdoClient implements AdoClient {
       throw new Error("Mock pull request error");
     }
     const key = `${repositoryId}/${pullRequestId}`;
+    const error = this.pullRequestErrors.get(key);
+    if (error) throw error;
     const found = this.pullRequests.get(key);
     if (found) return found;
     return {

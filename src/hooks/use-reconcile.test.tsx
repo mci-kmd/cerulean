@@ -76,6 +76,40 @@ describe("useReconcile", () => {
     });
   });
 
+  it("keeps stale assignments when removal is not allowed but still adds new ones", async () => {
+    const columns = createDefaultColumns();
+    const stale = createAssignment({
+      id: "stale-2",
+      workItemId: 999,
+      columnId: "col-todo",
+    });
+    collections.assignments.insert(stale);
+    const workItems = [createWorkItem({ id: 100, boardColumnName: "To Do" })];
+
+    renderHook(
+      () =>
+        useReconcile(
+          workItems,
+          [stale],
+          columns,
+          collections,
+          true,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          false,
+        ),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      const ids = collections.assignments.toArray.map((a) => a.workItemId).sort();
+      expect(ids).toEqual([100, 999]);
+    });
+  });
+
   it("preserves assignments until initial load completes", async () => {
     const columns = createDefaultColumns();
     const assignment = createAssignment({

@@ -23,23 +23,22 @@ export function useDemoChecklist(workItemId: number) {
         workItemId,
         text,
         checked: false,
-        order: items.length,
+        order: items.length === 0 ? 0 : Math.max(...items.map((i) => i.order)) + 1,
       };
       demoChecklist.insert(item);
     },
-    [demoChecklist, workItemId, items.length],
+    [demoChecklist, workItemId, items],
   );
 
   const toggleItem = useCallback(
     (id: string) => {
-      const item = allItems.find((i) => i.id === id);
-      if (item) {
+      if (demoChecklist.get(id)) {
         demoChecklist.update(id, (d) => {
-          d.checked = !item.checked;
+          d.checked = !d.checked;
         });
       }
     },
-    [demoChecklist, allItems],
+    [demoChecklist],
   );
 
   const removeItem = useCallback(

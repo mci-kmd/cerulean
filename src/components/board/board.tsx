@@ -236,7 +236,9 @@ export function Board({
         }
 
         const targetItems = renderColumnItems.get(targetColumnId) ?? [];
+        // Sortable indexes only count rendered cards, so skip assignments without a work item.
         const targetAssignments = targetItems
+          .filter((t) => t.workItem !== undefined)
           .map((t) => t.assignment)
           .filter((a) => a.id !== sourceId);
 

@@ -162,6 +162,92 @@ describe("fetchGithubReviewWorkItems", () => {
     expect(result.completedIds.has(completedReview!.id)).toBe(true);
   });
 
+  it("keeps an approval when a later comment-only review is submitted", async () => {
+    server.use(
+      http.get(`${GITHUB_REPO_API}/pulls`, () =>
+        HttpResponse.json([
+          {
+            number: 21,
+            title: "Approved then commented",
+            state: "open",
+            user: { login: "someone-else" },
+            requested_reviewers: [],
+            assignees: [],
+          },
+          {
+            number: 22,
+            title: "Approved then changes requested",
+            state: "open",
+            user: { login: "someone-else" },
+            requested_reviewers: [],
+            assignees: [],
+          },
+        ]),
+      ),
+      http.get(`${GITHUB_REPO_API}/pulls/21/reviews`, () =>
+        HttpResponse.json([
+          { user: { login: "octocat" }, state: "APPROVED", submitted_at: "2026-03-20T08:30:00Z" },
+          { user: { login: "octocat" }, state: "COMMENTED", submitted_at: "2026-03-20T09:30:00Z" },
+        ]),
+      ),
+      http.get(`${GITHUB_REPO_API}/pulls/22/reviews`, () =>
+        HttpResponse.json([
+          { user: { login: "octocat" }, state: "APPROVED", submitted_at: "2026-03-20T08:30:00Z" },
+          {
+            user: { login: "octocat" },
+            state: "CHANGES_REQUESTED",
+            submitted_at: "2026-03-20T09:30:00Z",
+          },
+        ]),
+      ),
+    );
+
+    const result = await fetchGithubReviewWorkItems("octocat", "octo-org/widgets");
+
+    expect(result.workItems.find((item) => item.displayId === 21)?.review?.reviewState).toBe(
+      "completed",
+    );
+    expect(result.workItems.find((item) => item.displayId === 22)?.review?.reviewState).toBe(
+      "active",
+    );
+  });
+
+  it("reads reviews beyond the first page", async () => {
+    const commentReviews = Array.from({ length: 100 }, (_, index) => ({
+      user: { login: "someone-else" },
+      state: "COMMENTED",
+      submitted_at: `2026-03-20T08:${String(index % 60).padStart(2, "0")}:00Z`,
+    }));
+    server.use(
+      http.get(`${GITHUB_REPO_API}/pulls`, () =>
+        HttpResponse.json([
+          {
+            number: 31,
+            title: "Busy PR",
+            state: "open",
+            user: { login: "someone-else" },
+            requested_reviewers: [],
+            assignees: [],
+          },
+        ]),
+      ),
+      http.get(`${GITHUB_REPO_API}/pulls/31/reviews`, ({ request }) => {
+        const page = new URL(request.url).searchParams.get("page");
+        if (page === "2") {
+          return HttpResponse.json([
+            { user: { login: "octocat" }, state: "APPROVED", submitted_at: "2026-03-21T08:00:00Z" },
+          ]);
+        }
+        return HttpResponse.json(commentReviews);
+      }),
+    );
+
+    const result = await fetchGithubReviewWorkItems("octocat", "octo-org/widgets");
+
+    expect(result.workItems).toHaveLength(1);
+    expect(result.workItems[0].review?.reviewState).toBe("completed");
+  });
+
   it("returns empty results when GitHub review config is missing", async () => {
     await expect(fetchGithubReviewWorkItems("", "")).resolves.toEqual({
       workItems: [],

@@ -28,6 +28,26 @@ describe("ado-pr-create", () => {
     );
   });
 
+  it("does not match branches for longer work item ids with the same prefix", async () => {
+    const client = new MockAdoClient();
+    client.repositories = [{ id: "repo-1", name: "Repo A", defaultBranch: "refs/heads/main" }];
+    client.refs.set("repo-1", [
+      { name: "refs/heads/1234-other-item" },
+      { name: "refs/heads/12345" },
+      { name: "refs/heads/123-fix" },
+      { name: "refs/heads/123" },
+    ]);
+
+    const candidates = await findAdoPullRequestCreateCandidates({
+      client,
+      org: "test-org",
+      project: "proj",
+      workItemId: 123,
+    });
+
+    expect(candidates.map((candidate) => candidate.sourceBranchName)).toEqual(["123", "123-fix"]);
+  });
+
   it("finds matching source branches across repos using each repo default branch", async () => {
     const client = new MockAdoClient();
     client.repositories = [

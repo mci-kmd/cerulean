@@ -72,6 +72,28 @@ describe("useWorkItemChecklist", () => {
     });
   });
 
+  it("toggles twice in a row back to unchecked", async () => {
+    const { result } = renderHook(() => useWorkItemChecklist(42), { wrapper });
+
+    act(() => {
+      result.current.addItem("Step 1");
+    });
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(1);
+    });
+
+    const id = result.current.items[0].id;
+    act(() => {
+      result.current.toggleItem(id);
+      result.current.toggleItem(id);
+    });
+
+    await waitFor(() => {
+      expect(collections.boardChecklist.get(id)?.checked).toBe(false);
+    });
+  });
+
   it("updates checklist text", async () => {
     const { result } = renderHook(() => useWorkItemChecklist(42), { wrapper });
 

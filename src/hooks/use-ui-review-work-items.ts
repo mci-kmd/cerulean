@@ -39,6 +39,7 @@ export function useUiReviewWorkItems(
   return {
     workItems: query.data ?? [],
     isLoading: query.isLoading,
+    isSettled: !query.isEnabled || query.data !== undefined,
     error: query.error,
     refetch: query.refetch,
   };

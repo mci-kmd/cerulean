@@ -95,11 +95,6 @@ export function DemoView({
 
   const handleUnapprove = useCallback(
     (workItemId: number) => {
-      setApprovedIds((prev) => {
-        const next = new Set(prev);
-        next.delete(workItemId);
-        return next;
-      });
       const workItem = items.find((item) => item.id === workItemId);
       const targetState = getBoardColumnTargetState(
         boardConfig!,
@@ -114,6 +109,11 @@ export function DemoView({
         });
         return;
       }
+      setApprovedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(workItemId);
+        return next;
+      });
       approveMutation.mutate(
         { workItemId, targetState },
         {

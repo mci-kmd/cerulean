@@ -95,4 +95,52 @@ describe("useAssignedBoardWorkItems", () => {
     expect(wiql).toContain("[WEF_FAKE_Kanban.Column] = 'Approved'");
     expect(wiql).toContain("[System.AssignedTo] = @Me");
   });
+
+  it("does a full fetch instead of a delta when the query key changes", async () => {
+    const boardConfig = {
+      team: "My Team",
+      boardId: "board-1",
+      boardName: "Stories",
+      intakeColumnName: "Incoming",
+      intakeColumnIsSplit: false,
+      columnFieldReferenceName: "WEF_FAKE_Kanban.Column",
+      intakeStateMappings: {},
+      boardColumnsByName: {
+        "in progress": { isSplit: false, stateMappings: { Bug: "Active" } },
+        approved: { isSplit: false, stateMappings: { Bug: "Resolved" } },
+      },
+    };
+    const { result, rerender } = renderHook(
+      ({ project }: { project: string }) =>
+        useAssignedBoardWorkItems(
+          client,
+          "org",
+          project,
+          30,
+          undefined,
+          "Bug",
+          "In Progress",
+          "Approved",
+          boardConfig,
+        ),
+      { wrapper, initialProps: { project: "proj" } },
+    );
+
+    await waitFor(() => expect(result.current.workItems).toHaveLength(1));
+    client.callLog = [];
+
+    rerender({ project: "other-proj" });
+
+    await waitFor(() =>
+      expect(client.callLog.some((call) => call.method === "batchGetWorkItems")).toBe(true),
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(result.current.workItems).toHaveLength(1));
+    const revOnlyBatch = client.callLog.find(
+      (call) =>
+        call.method === "batchGetWorkItems" &&
+        JSON.stringify(call.args[1]) === JSON.stringify(["System.Id", "System.Rev"]),
+    );
+    expect(revOnlyBatch).toBeUndefined();
+  });
 });

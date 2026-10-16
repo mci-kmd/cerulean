@@ -113,17 +113,20 @@ function getGithubReviewState(
   reviews: GithubPullRequestReview[],
   username: string,
 ): GithubReviewState {
-  const latestReview = reviews
+  const userReviews = reviews
     .filter((review) => matchesGithubUser(review.user?.login, username))
-    .sort((a, b) => {
-      const left = a.submitted_at ? Date.parse(a.submitted_at) : 0;
-      const right = b.submitted_at ? Date.parse(b.submitted_at) : 0;
-      return right - left;
-    })[0];
+    .map((review) => ({
+      state: review.state?.trim().toUpperCase(),
+      submittedAt: review.submitted_at ? Date.parse(review.submitted_at) : 0,
+    }))
+    .filter((review) => review.state && review.state !== "PENDING")
+    .sort((a, b) => b.submittedAt - a.submittedAt);
 
-  const state = latestReview?.state?.trim().toUpperCase();
+  // Like GitHub, later comment-only reviews don't override an earlier verdict.
+  const latestVerdict = userReviews.find((review) => review.state !== "COMMENTED");
+  const state = latestVerdict?.state ?? userReviews[0]?.state;
   if (state === "APPROVED") return "completed";
-  if (state && state !== "PENDING") return "active";
+  if (state) return "active";
   return "new";
 }
 
@@ -169,9 +172,19 @@ async function listPullRequestReviews(
   repo: string,
   pullRequestNumber: number,
 ): Promise<GithubPullRequestReview[]> {
-  return githubFetch<GithubPullRequestReview[]>(
-    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${pullRequestNumber}/reviews?per_page=${GITHUB_MAX_PAGE_SIZE}`,
-  );
+  const reviews: GithubPullRequestReview[] = [];
+
+  for (let page = 1; page <= GITHUB_MAX_PAGES; page += 1) {
+    const pageResults = await githubFetch<GithubPullRequestReview[]>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${pullRequestNumber}/reviews?per_page=${GITHUB_MAX_PAGE_SIZE}&page=${page}`,
+    );
+    reviews.push(...pageResults);
+    if (pageResults.length < GITHUB_MAX_PAGE_SIZE) {
+      break;
+    }
+  }
+
+  return reviews;
 }
 
 function createGithubReviewWorkItemId(repository: string, pullRequestNumber: number): number {

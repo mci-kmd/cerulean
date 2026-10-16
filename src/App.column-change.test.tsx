@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   completeMutate: vi.fn(),
   reviewMutate: vi.fn(),
   updateTagsMutate: vi.fn(),
+  refetchCandidates: vi.fn(),
+  refetchReviewWorkItems: vi.fn(),
   lastBoardData: undefined as import("@/hooks/use-board").BoardData | undefined,
   candidateBoardConfig: undefined as
     | {
@@ -137,6 +139,8 @@ vi.mock("@/hooks/use-candidates", () => ({
     candidates: [],
     isLoading: false,
     error: null,
+    isSettled: true,
+    refetch: mocks.refetchCandidates,
   }),
 }));
 
@@ -163,6 +167,8 @@ vi.mock("@/hooks/use-review-work-items", () => ({
     ),
     isLoading: false,
     error: null,
+    isSettled: true,
+    refetch: mocks.refetchReviewWorkItems,
   }),
 }));
 
@@ -182,6 +188,7 @@ vi.mock("@/hooks/use-github-review-work-items", () => ({
     isLoading: false,
     error: null,
     refetch: vi.fn(),
+    isSettled: true,
   }),
 }));
 
@@ -191,6 +198,7 @@ vi.mock("@/hooks/use-ui-review-work-items", () => ({
     isLoading: false,
     error: null,
     refetch: vi.fn(),
+    isSettled: true,
   }),
 }));
 
@@ -694,6 +702,89 @@ describe("App column change behavior", () => {
         ]),
       );
     });
+  });
+
+  it("restores the review tag and keeps the card until tags update when moving a ui review item out of Completed", async () => {
+    mocks.workItems = [];
+    const uiReviewItem = createUiReviewWorkItem();
+    mocks.uiReviewWorkItems = [uiReviewItem];
+    const { collections } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections, {
+        uiReviewTag: "UI Review",
+        uiReviewCompletedTag: "UI Review Completed",
+      });
+      collections.columns.insert({ id: "col-1", name: "In Progress", order: 0 });
+      collections.assignments.insert({
+        id: "ui-review-assignment",
+        workItemId: uiReviewItem.id,
+        columnId: COMPLETED_COLUMN_ID,
+        position: 1,
+      });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+
+    act(() => {
+      mocks.boardOnColumnChange?.(uiReviewItem.id, NEW_WORK_COLUMN_ID, COMPLETED_COLUMN_ID);
+    });
+    act(() => {
+      mocks.uiReviewWorkItems = [];
+    });
+    mocks.updateTagsMutate.mockReset();
+
+    act(() => {
+      collections.assignments.update("ui-review-assignment", (draft) => {
+        draft.columnId = "col-1";
+      });
+      mocks.boardOnColumnChange?.(uiReviewItem.id, COMPLETED_COLUMN_ID, "col-1");
+    });
+
+    expect(mocks.updateTagsMutate).toHaveBeenCalledWith(
+      {
+        workItemId: 101,
+        addTags: ["UI Review"],
+        removeTags: ["UI Review Completed"],
+      },
+      expect.objectContaining({
+        onSuccess: expect.any(Function),
+        onError: expect.any(Function),
+      }),
+    );
+
+    const findInColumn = () =>
+      (mocks.lastBoardData?.columnItems.get("col-1") ?? []).find(
+        (item) => item.workItem?.id === uiReviewItem.id,
+      );
+    await waitFor(() => expect(findInColumn()).toBeDefined());
+
+    const options = mocks.updateTagsMutate.mock.calls[0][1] as { onSuccess: () => void };
+    act(() => {
+      options.onSuccess();
+    });
+
+    await waitFor(() => expect(findInColumn()?.workItem).toBeUndefined());
+  });
+
+  it("refreshes every board data source from the header", async () => {
+    const { collections, getByRole } = renderWithProviders(<App />);
+
+    act(() => {
+      insertSettings(collections);
+      collections.columns.insert({ id: "col-1", name: "In Progress", order: 0 });
+    });
+
+    await waitFor(() => expect(mocks.boardOnColumnChange).toBeTypeOf("function"));
+    mocks.refetchCandidates.mockReset();
+    mocks.refetchReviewWorkItems.mockReset();
+
+    act(() => {
+      getByRole("button", { name: "Refresh" }).click();
+    });
+
+    expect(mocks.refetchCandidates).toHaveBeenCalled();
+    expect(mocks.refetchReviewWorkItems).toHaveBeenCalled();
   });
 
   it("does not call remote mutations for custom task moved to New Work", async () => {

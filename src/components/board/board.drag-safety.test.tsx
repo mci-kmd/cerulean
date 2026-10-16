@@ -130,6 +130,41 @@ describe("Board drag safety", () => {
     expect(updateSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("ignores assignments without work items when computing drop positions", () => {
+    const collections = createTestCollections();
+    const { data, assignment } = createData();
+    const orphan: ColumnAssignment = { id: "a-orphan", workItemId: 900, columnId: "col-2", position: 1 };
+    const b: ColumnAssignment = { id: "a-b", workItemId: 201, columnId: "col-2", position: 2 };
+    const c: ColumnAssignment = { id: "a-c", workItemId: 202, columnId: "col-2", position: 3 };
+    data.assignments = [assignment, orphan, b, c];
+    data.columnItems.set("col-2", [
+      { assignment: orphan, workItem: undefined },
+      { assignment: b, workItem: createWorkItem({ id: 201, title: "B" }) },
+      { assignment: c, workItem: createWorkItem({ id: 202, title: "C" }) },
+    ]);
+    for (const a of data.assignments) collections.assignments.insert(a);
+
+    renderWithProviders(<Board data={data} />, { collections });
+
+    act(() => {
+      dragMocks.onDragEnd?.({
+        canceled: false,
+        operation: {
+          source: { id: assignment.id },
+          target: { id: "col-2", group: "col-2", index: 1 },
+        },
+      });
+    });
+    act(() => {
+      vi.runAllTimers();
+    });
+
+    expect(collections.assignments.get(assignment.id)).toMatchObject({
+      columnId: "col-2",
+      position: 2.5,
+    });
+  });
+
   it("rejects same-column drops for UI review cards in a Feature stack", () => {
     const collections = createTestCollections();
     const feature = { id: 500, title: "Authentication" };

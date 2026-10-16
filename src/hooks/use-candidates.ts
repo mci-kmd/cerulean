@@ -48,6 +48,8 @@ export function useCandidates(
   return {
     candidates: query.data ?? [],
     isLoading: query.isLoading,
+    isSettled: !query.isEnabled || query.data !== undefined,
     error: query.error,
+    refetch: query.refetch,
   };
 }

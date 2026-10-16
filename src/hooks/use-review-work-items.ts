@@ -29,6 +29,8 @@ export function useReviewWorkItems(
     newWorkIds: query.data?.newWorkIds ?? new Set<number>(),
     completedIds: query.data?.completedIds ?? new Set<number>(),
     isLoading: query.isLoading,
+    isSettled: !query.isEnabled || query.data !== undefined,
     error: query.error,
+    refetch: query.refetch,
   };
 }

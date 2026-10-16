@@ -20,13 +20,16 @@ export function useDemoOrder(items: DemoWorkItem[]) {
 
   // Ensure every item has an order entry; assign positions to new items
   useEffect(() => {
-    const existing = new Set(orderItems.map((o) => o.workItemId));
-    let maxPos = orderItems.length > 0
-      ? Math.max(...orderItems.map((o) => o.position))
+    // Read the collection directly; orderItems may lag behind inserts made by a previous run.
+    const currentOrderItems = demoOrder.toArray;
+    const existing = new Set(currentOrderItems.map((o) => o.workItemId));
+    let maxPos = currentOrderItems.length > 0
+      ? Math.max(...currentOrderItems.map((o) => o.position))
       : -1;
 
     for (const item of items) {
       if (!existing.has(item.id)) {
+        existing.add(item.id);
         maxPos += 1;
         demoOrder.insert({
           id: nanoid(),

@@ -42,7 +42,7 @@ export function useStartWork(client: AdoClient | null) {
         return { prev: undefined, removedOptimistically: false };
       }
       await queryClient.cancelQueries({ queryKey: ["candidates"] });
-      const prev = queryClient.getQueryData<WorkItem[]>(["candidates"]);
+      const prev = queryClient.getQueriesData<WorkItem[]>({ queryKey: ["candidates"] });
       queryClient.setQueriesData<WorkItem[]>(
         { queryKey: ["candidates"] },
         (old) => old?.filter((w) => w.id !== workItemId),
@@ -51,10 +51,9 @@ export function useStartWork(client: AdoClient | null) {
     },
     onError: (_err, _vars, context) => {
       if (context?.removedOptimistically && context.prev) {
-        queryClient.setQueriesData<WorkItem[]>(
-          { queryKey: ["candidates"] },
-          context.prev,
-        );
+        for (const [queryKey, data] of context.prev) {
+          queryClient.setQueryData(queryKey, data);
+        }
       }
     },
     onSettled: () => {

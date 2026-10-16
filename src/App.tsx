@@ -139,7 +139,9 @@ export function App() {
     newWorkIds: reviewNewWorkIds,
     completedIds: reviewCompletedIds,
     isLoading: isLoadingReviewWorkItems,
+    isSettled: isReviewWorkItemsSettled,
     error: reviewWorkItemsError,
+    refetch: refetchReviewWorkItems,
   } = useReviewWorkItems(
     client,
     settings?.org ?? "",
@@ -151,6 +153,7 @@ export function App() {
   const {
     workItems: githubReviewWorkItems,
     isLoading: isLoadingGithubReviewWorkItems,
+    isSettled: isGithubReviewWorkItemsSettled,
     error: githubReviewWorkItemsError,
     refetch: refetchGithubReviewWorkItems,
   } = useGithubReviewWorkItems(
@@ -160,6 +163,7 @@ export function App() {
   const {
     workItems: uiReviewWorkItems,
     isLoading: isLoadingUiReviewWorkItems,
+    isSettled: isUiReviewWorkItemsSettled,
     error: uiReviewWorkItemsError,
     refetch: refetchUiReviewWorkItems,
   } = useUiReviewWorkItems(
@@ -179,7 +183,12 @@ export function App() {
   const updateWorkItemTags = useUpdateWorkItemTags(client);
   const canLoadCandidates =
     canResolveCandidateBoard;
-  const { candidates, isLoading: isLoadingCandidates } = useCandidates(
+  const {
+    candidates,
+    isLoading: isLoadingCandidates,
+    isSettled: isCandidatesSettled,
+    refetch: refetchCandidates,
+  } = useCandidates(
     client,
     "",
     settings?.org ?? "",
@@ -257,6 +266,12 @@ export function App() {
     completedSuccess,
     settings?.approvalBoardColumn,
   );
+  // Removing assignments while another source is still loading would drop that source's cards.
+  const reconcileCanRemove =
+    isReviewWorkItemsSettled &&
+    isGithubReviewWorkItemsSettled &&
+    isUiReviewWorkItemsSettled &&
+    isCandidatesSettled;
 
   useReconcile(
     boardWorkItems,
@@ -269,6 +284,7 @@ export function App() {
     undefined,
     candidateIds,
     completedIds,
+    reconcileCanRemove,
   );
 
   const boardWorkItemMap = useMemo(
@@ -490,6 +506,13 @@ export function App() {
     }
 
     if (isUiReviewWorkItem(boardWorkItem)) {
+      const uiReviewCompletedTag = settings?.uiReviewCompletedTag.trim() ?? "";
+      const { reviewTag, sourceWorkItemId } = boardWorkItem.uiReview;
+      const removeFromCompletedUiReviews = () =>
+        setCompletedUiReviewWorkItems((current) =>
+          current.filter((item) => item.id !== boardWorkItem.id),
+        );
+
       if (movingToCompleted) {
         setCompletedUiReviewWorkItems((current) => {
           if (current.some((item) => item.id === boardWorkItem.id)) {
@@ -497,35 +520,41 @@ export function App() {
           }
           return [...current, boardWorkItem];
         });
-      } else if (fromColumnId === COMPLETED_COLUMN_ID) {
-        setCompletedUiReviewWorkItems((current) =>
-          current.filter((item) => item.id !== boardWorkItem.id),
-        );
       }
 
-      const uiReviewCompletedTag = settings?.uiReviewCompletedTag.trim() ?? "";
       const addTags = movingToCompleted && uiReviewCompletedTag
         ? [uiReviewCompletedTag]
-        : movingFromNewWork
-          ? ["UI"]
+        : movingFromCompleted
+          ? [reviewTag]
+          : movingFromNewWork
+            ? ["UI"]
+            : [];
+      const removeTags = movingToCompleted
+        ? [reviewTag]
+        : movingFromCompleted && uiReviewCompletedTag
+          ? [uiReviewCompletedTag]
           : [];
-      const removeTags = movingToCompleted ? [boardWorkItem.uiReview.reviewTag] : [];
 
       if (addTags.length === 0 && removeTags.length === 0) {
+        if (movingFromCompleted) removeFromCompletedUiReviews();
         return;
       }
 
       updateWorkItemTags.mutate(
         {
-          workItemId: boardWorkItem.uiReview.sourceWorkItemId,
+          workItemId: sourceWorkItemId,
           addTags,
           removeTags,
         },
         {
+          // Keep the card locally until the UI review query returns it again.
+          onSuccess: () => {
+            if (movingFromCompleted) removeFromCompletedUiReviews();
+          },
           onError: (err) =>
             toast.error("Failed to update work item tags", {
               description: err.message,
-              id: `ui-review-tags-error-${boardWorkItem.uiReview.sourceWorkItemId}`,
+              id: `ui-review-tags-error-${sourceWorkItemId}`,
             }),
         },
       );
@@ -660,6 +689,8 @@ export function App() {
         <Header
           onRefresh={() => {
             void refetch();
+            void refetchReviewWorkItems();
+            void refetchCandidates();
             void refetchGithubReviewWorkItems();
             void refetchUiReviewWorkItems();
           }}

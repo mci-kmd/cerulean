@@ -26,6 +26,7 @@ import { useSettings, useColumns } from "@/hooks/use-board";
 import { normalizeAdoClientConfig } from "@/api/ado-client";
 import { normalizeGithubReviewConfig } from "@/api/github-client";
 import { DEFAULT_SETTINGS, type BoardColumn, type AdoSettings } from "@/types/board";
+import { NEW_WORK_COLUMN_ID } from "@/constants/board-columns";
 import {
   BOARD_BACKUP_FILENAME,
   applyBoardBackup,
@@ -147,6 +148,27 @@ function SettingsDialogContent({
     const draftIds = new Set(draftColumns.map((c) => c.id));
 
     const toRemove = currentColumns.filter((c) => !draftIds.has(c.id));
+    const removedIds = new Set(toRemove.map((c) => c.id));
+    if (removedIds.size > 0) {
+      // Move cards from deleted columns so they don't become orphaned and invisible.
+      const fallbackColumnId =
+        [...draftColumns].sort((a, b) => a.order - b.order)[0]?.id ?? NEW_WORK_COLUMN_ID;
+      const allAssignments = collections.assignments.toArray;
+      let nextPosition = allAssignments
+        .filter((a) => a.columnId === fallbackColumnId)
+        .reduce((max, a) => Math.max(max, a.position), 0);
+      const orphaned = allAssignments
+        .filter((a) => removedIds.has(a.columnId))
+        .sort((a, b) => a.position - b.position);
+      for (const assignment of orphaned) {
+        nextPosition += 1;
+        const position = nextPosition;
+        collections.assignments.update(assignment.id, (d) => {
+          d.columnId = fallbackColumnId;
+          d.position = position;
+        });
+      }
+    }
     for (const col of toRemove) {
       if (collections.columns.get(col.id)) {
         collections.columns.delete(col.id);

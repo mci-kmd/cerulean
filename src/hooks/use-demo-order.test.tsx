@@ -72,6 +72,22 @@ describe("useDemoOrder", () => {
     });
   });
 
+  it("does not create duplicate order entries when items change before order data updates", async () => {
+    const { result, rerender } = renderHook(
+      ({ items }: { items: DemoWorkItem[] }) => useDemoOrder(items),
+      { wrapper, initialProps: { items: [makeItem(1), makeItem(2)] } },
+    );
+
+    rerender({ items: [makeItem(1), makeItem(2)] });
+    rerender({ items: [makeItem(1), makeItem(2), makeItem(3)] });
+
+    await waitFor(() => {
+      expect(result.current.sortedItems.map((i) => i.id)).toEqual([1, 2, 3]);
+    });
+    const workItemIds = collections.demoOrder.toArray.map((o) => o.workItemId).sort();
+    expect(workItemIds).toEqual([1, 2, 3]);
+  });
+
   it("reorders items via reorder()", async () => {
     const items = [makeItem(1), makeItem(2), makeItem(3)];
     const { result } = renderHook(() => useDemoOrder(items), { wrapper });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, Copy, ExternalLink, FilePlus2, Loader2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -90,6 +90,7 @@ export function RetroPrepView({
   const [isCreating, setIsCreating] = useState(false);
   const [hasPrepared, setHasPrepared] = useState(false);
   const [targetAlreadyExists, setTargetAlreadyExists] = useState(false);
+  const autoPrepareAttemptedRef = useRef(false);
 
   const trimmedRepositoryId = repositoryId.trim();
   const trimmedBranchName = branchName.trim();
@@ -286,7 +287,8 @@ export function RetroPrepView({
   }
 
   useEffect(() => {
-    if (!isConfigured || hasPrepared || isPreparing) return;
+    if (!isConfigured || hasPrepared || isPreparing || autoPrepareAttemptedRef.current) return;
+    autoPrepareAttemptedRef.current = true;
     void prepareDraftFromTemplate();
   }, [hasPrepared, isConfigured, isPreparing, prepareDraftFromTemplate]);
 

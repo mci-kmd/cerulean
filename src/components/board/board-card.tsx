@@ -295,7 +295,7 @@ export function BoardCard({
     toggleItem: toggleChecklistItem,
     updateText: updateChecklistText,
     removeItem: removeChecklistItem,
-  } = useWorkItemChecklist(displayId);
+  } = useWorkItemChecklist(isGithubReviewCard ? workItem.id : displayId);
   const showUiReviewLinks = isUiReviewCard && showStatusEditor;
   const trimmedMockupUrl = mockupUrlValue.trim();
   const trimmedDiscussionUrl = discussionUrlValue.trim();

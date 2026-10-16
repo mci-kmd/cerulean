@@ -19,8 +19,7 @@ export function useUpdateWorkItemTags(client: AdoClient | null) {
       if (!client) throw new Error("No ADO client");
       return client.updateWorkItemTags(workItemId, addTags, removeTags);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ui-review-work-items"] });
-    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["ui-review-work-items"] }),
   });
 }

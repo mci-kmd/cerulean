@@ -179,6 +179,7 @@ interface WorkItemBatchGetRequest {
   ids: number[];
   fields?: string[];
   $expand?: "Relations";
+  errorPolicy?: "Omit" | "Fail";
 }
 
 interface AdoGitPushCreateRequest {
@@ -391,7 +392,8 @@ export class HttpAdoClient implements AdoClient {
       {
         method: "POST",
         headers: this.jsonHeaders(),
-        body: JSON.stringify(request),
+        // Omit deleted/inaccessible ids instead of failing the whole batch.
+        body: JSON.stringify({ ...request, errorPolicy: "Omit" }),
       },
     );
     if (!res.ok) {
@@ -409,7 +411,11 @@ export class HttpAdoClient implements AdoClient {
       }
       throw new AdoBatchFetchError(res.status, `Batch fetch failed: ${res.status}`);
     }
-    return this.readJson<AdoBatchResponse>(res, "Work items batch fetch");
+    const data = await this.readJson<AdoBatchResponse>(res, "Work items batch fetch");
+    return {
+      ...data,
+      value: (data.value ?? []).filter((item): item is AdoWorkItem => item != null),
+    };
   }
 
   private mergeBatchWithRelations(
@@ -1060,7 +1066,11 @@ export class HttpAdoClient implements AdoClient {
     const [current] = await this.batchGetWorkItems([id]);
     if (current) {
       const assignee = current.fields["System.AssignedTo"];
-      if (assignee && assignee.uniqueName !== email) {
+      if (
+        assignee &&
+        (typeof assignee.uniqueName !== "string" ||
+          assignee.uniqueName.localeCompare(email, undefined, { sensitivity: "accent" }) !== 0)
+      ) {
         throw new WorkItemAlreadyAssignedError(id, assignee.displayName);
       }
     }

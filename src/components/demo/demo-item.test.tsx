@@ -58,6 +58,21 @@ describe("DemoItem", () => {
     });
   });
 
+  it("selects an approved minimized item with the keyboard", async () => {
+    const onSelect = vi.fn();
+    renderWithProviders(
+      <DemoItem {...defaultProps} isApproved onSelect={onSelect} />,
+    );
+
+    const row = screen.getByRole("button", { name: "Approved: Add login page" });
+    row.focus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+
+    expect(row).toHaveAttribute("tabindex", "0");
+    expect(onSelect).toHaveBeenCalledTimes(2);
+  });
+
   it("calls onSelect when collapsed card is clicked", async () => {
     const onSelect = vi.fn();
     renderWithProviders(

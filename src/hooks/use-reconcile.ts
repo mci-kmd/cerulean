@@ -14,6 +14,7 @@ export function useReconcile(
   _candidateStatesByType?: string,
   candidateIds?: Set<number>,
   completedIds?: Set<number>,
+  canRemove = true,
 ) {
   useEffect(() => {
     if (!isReady) return;
@@ -37,7 +38,7 @@ export function useReconcile(
       }
     }
 
-    if (removed.length > 0) {
+    if (removed.length > 0 && canRemove) {
       const existing = removed.filter((id) => collections.assignments.get(id));
       if (existing.length > 0) {
         collections.assignments.delete(existing);
@@ -54,5 +55,6 @@ export function useReconcile(
     _candidateStatesByType,
     candidateIds,
     completedIds,
+    canRemove,
   ]);
 }

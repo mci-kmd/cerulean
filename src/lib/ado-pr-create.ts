@@ -31,7 +31,9 @@ export function getShortBranchName(refName: string): string {
 }
 
 function matchesWorkItemBranch(branchName: string, workItemId: string): boolean {
-  if (branchName.startsWith(workItemId)) return true;
+  if (branchName.startsWith(workItemId) && !/^\d/.test(branchName.slice(workItemId.length))) {
+    return true;
+  }
 
   const semanticFlowPattern = new RegExp(
     `^${SEMANTIC_FLOW_BRANCH_PREFIX}[A-Za-z]+${workItemId}-.*$`,

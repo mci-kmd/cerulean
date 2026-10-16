@@ -146,6 +146,7 @@ export function Header({
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8"
+                aria-label="Refresh"
                 onClick={onRefresh}
                 disabled={isRefreshing}
               >

@@ -529,6 +529,42 @@ describe("BoardCard checklist", () => {
     });
   });
 
+  it("keys GitHub review card checklists by card id so PR numbers don't collide with ADO ids", async () => {
+    const user = userEvent.setup();
+    const { collections } = renderCard({
+      workItemOverrides: {
+        id: -501,
+        displayId: 12,
+        kind: "review",
+        review: {
+          provider: "github",
+          repositoryId: "octo-org/widgets",
+          pullRequestId: 12,
+          reviewState: "new",
+        },
+      },
+    });
+    act(() => {
+      collections.boardChecklist.insert({
+        id: "ado-12-item",
+        workItemId: 12,
+        text: "ADO item 12 checklist",
+        checked: false,
+        order: 0,
+      });
+    });
+
+    expect(screen.queryByDisplayValue("ADO item 12 checklist")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Add checklist item/ }));
+
+    await waitFor(() => {
+      expect(
+        collections.boardChecklist.toArray.filter((item) => item.workItemId === -501),
+      ).toHaveLength(1);
+    });
+  });
+
   it("adds editable checklist items above the status field and removes them", async () => {
     const user = userEvent.setup();
     renderCard({

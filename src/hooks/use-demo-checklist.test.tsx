@@ -72,6 +72,55 @@ describe("useDemoChecklist", () => {
     });
   });
 
+  it("toggles twice in a row back to unchecked", async () => {
+    const { result } = renderHook(() => useDemoChecklist(42), { wrapper });
+
+    act(() => {
+      result.current.addItem("Step 1");
+    });
+
+    await waitFor(() => {
+      expect(result.current.items).toHaveLength(1);
+    });
+
+    const id = result.current.items[0].id;
+    act(() => {
+      result.current.toggleItem(id);
+      result.current.toggleItem(id);
+    });
+
+    await waitFor(() => {
+      expect(collections.demoChecklist.get(id)?.checked).toBe(false);
+    });
+  });
+
+  it("appends new items after the highest order when earlier items were removed", async () => {
+    const { result } = renderHook(() => useDemoChecklist(42), { wrapper });
+
+    act(() => {
+      result.current.addItem("A");
+    });
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+    act(() => {
+      result.current.addItem("B");
+    });
+    await waitFor(() => expect(result.current.items).toHaveLength(2));
+
+    act(() => {
+      result.current.removeItem(result.current.items[0].id);
+    });
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+
+    act(() => {
+      result.current.addItem("C");
+    });
+
+    await waitFor(() => {
+      expect(result.current.items.map((item) => item.text)).toEqual(["B", "C"]);
+      expect(new Set(result.current.items.map((item) => item.order)).size).toBe(2);
+    });
+  });
+
   it("removes a checklist item", async () => {
     const { result } = renderHook(() => useDemoChecklist(42), { wrapper });
 
