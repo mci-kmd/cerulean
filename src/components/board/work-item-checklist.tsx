@@ -57,6 +57,7 @@ function ChecklistRow({
       <Input
         ref={inputRef}
         value={text}
+        autoComplete="off"
         onChange={(e) => setText(e.target.value)}
         onBlur={commitText}
         onKeyDown={(e) => {

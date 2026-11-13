@@ -496,6 +496,7 @@ export function BoardCard({
           <input
             ref={inputRef}
             value={value}
+            autoComplete="off"
             placeholder={placeholder}
             onChange={(e) => onChange(e.target.value)}
             onBlur={() => saveUiReviewLink(kind)}
@@ -912,6 +913,8 @@ export function BoardCard({
                 ref={statusRef}
                 rows={1}
                 wrap="soft"
+                // Prevent browser form-state restore on reload from injecting another card's status by DOM order.
+                autoComplete="off"
                 spellCheck={false}
                 value={statusValue}
                 placeholder="Set status..."

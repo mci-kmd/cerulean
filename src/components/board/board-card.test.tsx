@@ -267,6 +267,7 @@ describe("BoardCard UI review task", () => {
 
     await user.click(screen.getByRole("button", { name: "Set mockup URL" }));
     const input = screen.getByPlaceholderText("Set mockup URL...");
+    expect(input).toHaveAttribute("autocomplete", "off");
     await user.type(input, "https://www.figma.com/file/mockup-save");
     await user.tab();
 
@@ -579,6 +580,7 @@ describe("BoardCard checklist", () => {
 
     const checklistInput = await screen.findByDisplayValue("New checklist item");
     const statusField = screen.getByPlaceholderText("Set status...");
+    expect(checklistInput).toHaveAttribute("autocomplete", "off");
 
     expect(
       checklistInput.compareDocumentPosition(statusField) & Node.DOCUMENT_POSITION_FOLLOWING,
@@ -810,6 +812,11 @@ describe("BoardCard status message", () => {
       "spellcheck",
       "false",
     );
+  });
+
+  it("disables browser form-state restore on the status editor", () => {
+    renderCard({ statusMessage: "Waiting for Julie" });
+    expect(screen.getByDisplayValue("Waiting for Julie")).toHaveAttribute("autocomplete", "off");
   });
 
   it("recalculates status height when the editor width changes after mount", () => {
